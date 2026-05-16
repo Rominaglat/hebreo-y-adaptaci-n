@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: yt-dlp-service
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: API_KEY
+        generateValue: true

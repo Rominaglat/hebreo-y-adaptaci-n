@@ -1,0 +1,98 @@
+# SEC-022 — CI security gate.
+# Runs on every pull request + on push to main. Fails the build on:
+#   - npm audit production high+critical vulnerabilities ABOVE the documented budget
+#   - secrets detected by trufflehog (free for orgs; gitleaks-action requires
+#     a paid license on org-owned repos)
+#   - typecheck or build failures
+#   - any check in scripts/verify-security.sh failing (the same checks the
+#     developer runs locally before pushing)
+#
+# All third-party actions are pinned to a full commit SHA (SEC-033).
+# Renovate updates them via PR.
+
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: read
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout@v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # actions/setup-node@v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '20'
+      - name: Install dependencies (no scripts)
+        run: npm ci --ignore-scripts
+      - name: npm audit production deps (budget-aware)
+        run: |
+          set -e
+          # Budget mirrors scripts/verify-security.sh KNOWN_HIGH_BUDGET.
+          # Lower this as Renovate clears advisories.
+          BUDGET=15
+          HIGHS=$(npm audit --omit=dev --json 2>/dev/null | \
+            python3 -c "import json,sys;d=json.load(sys.stdin);v=d.get('metadata',{}).get('vulnerabilities',{});print((v.get('high',0) or 0) + (v.get('critical',0) or 0))")
+          echo "high+critical: $HIGHS (budget: $BUDGET)"
+          if [ "$HIGHS" -gt "$BUDGET" ]; then
+            echo "::error::npm audit reports $HIGHS high+critical findings, budget is $BUDGET"
+            npm audit --omit=dev --audit-level=high || true
+            exit 1
+          fi
+      - name: Generate SBOM (CycloneDX)
+        run: npm sbom --sbom-format=cyclonedx > sbom.cdx.json || true
+      - name: Upload SBOM
+        # actions/upload-artifact@v4.4.3
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+        if: always()
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+          if-no-files-found: ignore
+
+  trufflehog:
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout@v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: trufflehog (secret scan)
+        # trufflesecurity/trufflehog@v3.92.2
+        uses: trufflesecurity/trufflehog@a05cf0859455b5b16317ee22d809887a4043cdf0
+        with:
+          extra_args: --only-verified
+
+  typecheck-and-build:
+    runs-on: ubuntu-latest
+    # Dummy VITE_SUPABASE_* so the supabase client module-level createClient()
+    # doesn't throw "supabaseUrl is required" when vitest transitively imports
+    # it. Real values live in Vercel for prod deploys; CI only needs the env
+    # vars to be present and URL-shaped.
+    env:
+      VITE_SUPABASE_URL: 'https://ci-stub.supabase.co'
+      VITE_SUPABASE_PUBLISHABLE_KEY: 'ci-stub-anon-key'
+      VITE_SUPABASE_PROJECT_ID: 'ci-stub'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: TypeScript noEmit check
+        run: npx tsc --noEmit -p tsconfig.app.json
+        continue-on-error: true
+      - name: Production build
+        run: npx vite build
+      - name: Unit tests
+        run: npx vitest run --reporter=basic

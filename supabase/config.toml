@@ -1,0 +1,34 @@
+project_id = "your-project-ref"
+
+[functions.audit-webhook]
+verify_jwt = false
+
+[functions.external-api]
+verify_jwt = false
+
+[functions.cleanup-empty-rooms]
+verify_jwt = false
+
+[functions.sync-google-calendar]
+verify_jwt = false
+
+[functions.get-exam-questions]
+verify_jwt = false
+
+[functions.submit-exam]
+verify_jwt = false
+
+[functions.admin-user-actions]
+verify_jwt = false
+
+[functions.send-push-notification]
+verify_jwt = false
+
+[functions.transcribe-lesson]
+verify_jwt = false
+
+[functions.index-lessons]
+verify_jwt = false
+
+[functions.ai-assistant]
+verify_jwt = false
