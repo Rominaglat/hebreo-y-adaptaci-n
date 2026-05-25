@@ -32,11 +32,11 @@ interface MemberProfileDialogProps {
 }
 
 export function MemberProfileDialog({ member, open, onOpenChange }: MemberProfileDialogProps) {
-  const { language } = useLanguage();
+  const { t } = useLanguage();
 
   if (!member) return null;
 
-  const displayName = member.full_name || (language === 'he' ? 'משתמש' : 'User');
+  const displayName = member.full_name || t('memberDialog.userFallback');
   const phone = member.phone?.trim() || null;
 
   const getInitials = (name: string) => {
@@ -57,7 +57,7 @@ export function MemberProfileDialog({ member, open, onOpenChange }: MemberProfil
 
   const getWhatsAppUrl = (phoneNum: string) => {
     const cleanPhone = phoneNum.replace(/\D/g, '');
-    const message = encodeURIComponent('היי :) הגעתי אליך דרך הקהילה');
+    const message = encodeURIComponent(t('memberDialog.whatsappGreeting'));
     return `https://wa.me/${cleanPhone}?text=${message}`;
   };
 
@@ -89,9 +89,9 @@ export function MemberProfileDialog({ member, open, onOpenChange }: MemberProfil
           {/* Role badge */}
           {member.role && member.role !== 'student' && (
             <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full mb-3">
-              {member.role === 'admin' ? (language === 'he' ? 'מנהל' : 'Admin') :
-               member.role === 'instructor' ? (language === 'he' ? 'מרצה' : 'Instructor') :
-               member.role === 'super_admin' ? (language === 'he' ? 'מנהל ראשי' : 'Super Admin') :
+              {member.role === 'admin' ? t('memberDialog.roleAdmin') :
+               member.role === 'instructor' ? t('memberDialog.roleInstructor') :
+               member.role === 'super_admin' ? t('memberDialog.roleSuperAdmin') :
                member.role}
             </span>
           )}
@@ -174,7 +174,7 @@ export function MemberProfileDialog({ member, open, onOpenChange }: MemberProfil
                 <Button asChild className="flex-1">
                   <a href={`tel:${phone.replace(/\D/g, '')}`}>
                     <Phone className="w-4 h-4 mr-2" />
-                    {language === 'he' ? 'חייג' : 'Call'}
+                    {t('memberDialog.call')}
                   </a>
                 </Button>
               )}
@@ -189,7 +189,7 @@ export function MemberProfileDialog({ member, open, onOpenChange }: MemberProfil
                     rel="noopener noreferrer"
                   >
                     <MessageCircle className="w-4 h-4 mr-2" />
-                    {language === 'he' ? 'ווטסאפ' : 'WhatsApp'}
+                    {t('memberDialog.whatsapp')}
                   </a>
                 </Button>
               )}

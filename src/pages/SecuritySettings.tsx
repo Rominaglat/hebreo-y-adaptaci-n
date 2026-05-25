@@ -32,7 +32,7 @@ type Factor = {
 };
 
 export default function SecuritySettings() {
-  const { language } = useLanguage();
+  const { t } = useLanguage();
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -41,8 +41,6 @@ export default function SecuritySettings() {
   const [enrollData, setEnrollData] = useState<{ factorId: string; qrCode: string; secret: string } | null>(null);
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
-
-  const isHe = language === 'he';
 
   const refresh = async () => {
     setLoading(true);
@@ -56,8 +54,8 @@ export default function SecuritySettings() {
       setFactors(all);
     } catch (e: any) {
       toast({
-        title: isHe ? 'שגיאה' : 'Error',
-        description: e?.message ?? (isHe ? 'טעינת המידע נכשלה' : 'Failed to load MFA factors'),
+        title: t('common.error'),
+        description: e?.message ?? t('securitySettings.loadFailed'),
         variant: 'destructive',
       });
     } finally {
@@ -89,8 +87,8 @@ export default function SecuritySettings() {
       });
     } catch (e: any) {
       toast({
-        title: isHe ? 'שגיאה' : 'Error',
-        description: e?.message ?? (isHe ? 'ההרשמה נכשלה' : 'Enrollment failed'),
+        title: t('common.error'),
+        description: e?.message ?? t('securitySettings.enrollFailed'),
         variant: 'destructive',
       });
     } finally {
@@ -102,8 +100,8 @@ export default function SecuritySettings() {
     if (!enrollData) return;
     if (!/^\d{6}$/.test(code)) {
       toast({
-        title: isHe ? 'קוד לא תקין' : 'Invalid code',
-        description: isHe ? 'יש להזין קוד בן 6 ספרות' : 'Enter a 6-digit code',
+        title: t('securitySettings.invalidCode'),
+        description: t('securitySettings.enter6DigitCode'),
         variant: 'destructive',
       });
       return;
@@ -121,15 +119,15 @@ export default function SecuritySettings() {
       });
       if (vErr) throw vErr;
       toast({
-        title: isHe ? 'אימות דו־שלבי הופעל' : 'Two-factor enabled',
-        description: isHe ? 'הקוד אומת בהצלחה.' : 'Verified successfully.',
+        title: t('securitySettings.twoFactorEnabled'),
+        description: t('securitySettings.verifiedSuccessfully'),
       });
       setEnrollData(null);
       setCode('');
       await refresh();
     } catch (e: any) {
       toast({
-        title: isHe ? 'אימות נכשל' : 'Verification failed',
+        title: t('securitySettings.verificationFailed'),
         description: e?.message ?? '',
         variant: 'destructive',
       });
@@ -140,26 +138,20 @@ export default function SecuritySettings() {
 
   const handleUnenroll = async () => {
     if (!verifiedTotp) return;
-    if (
-      !confirm(
-        isHe
-          ? 'להסיר את האימות הדו־שלבי? פעולה זו פותחת חזרה לסיכון השתלטות חשבון.'
-          : 'Disable two-factor authentication? This re-opens you to account takeover risk.',
-      )
-    ) {
+    if (!confirm(t('securitySettings.disableConfirm'))) {
       return;
     }
     try {
       const { error } = await supabase.auth.mfa.unenroll({ factorId: verifiedTotp.id });
       if (error) throw error;
       toast({
-        title: isHe ? 'הוסר' : 'Removed',
-        description: isHe ? 'האימות הדו־שלבי הוסר.' : 'Two-factor disabled.',
+        title: t('securitySettings.removed'),
+        description: t('securitySettings.twoFactorDisabled'),
       });
       await refresh();
     } catch (e: any) {
       toast({
-        title: isHe ? 'שגיאה' : 'Error',
+        title: t('common.error'),
         description: e?.message ?? '',
         variant: 'destructive',
       });
@@ -179,12 +171,10 @@ export default function SecuritySettings() {
       <header>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Shield className="w-6 h-6" />
-          {isHe ? 'אבטחת חשבון' : 'Account security'}
+          {t('securitySettings.title')}
         </h1>
         <p className="text-muted-foreground mt-1">
-          {isHe
-            ? 'הגדרת אימות דו־שלבי (TOTP) לחיזוק האבטחה של החשבון.'
-            : 'Configure two-factor authentication (TOTP) to harden your account.'}
+          {t('securitySettings.subtitle')}
         </p>
       </header>
 
@@ -194,34 +184,30 @@ export default function SecuritySettings() {
             {verifiedTotp ? (
               <>
                 <ShieldCheck className="w-5 h-5 text-green-500" />
-                {isHe ? 'אימות דו־שלבי פעיל' : 'Two-factor active'}
+                {t('securitySettings.twoFactorActive')}
               </>
             ) : (
               <>
                 <ShieldAlert className="w-5 h-5 text-yellow-500" />
-                {isHe ? 'אימות דו־שלבי כבוי' : 'Two-factor disabled'}
+                {t('securitySettings.twoFactorOff')}
               </>
             )}
           </CardTitle>
           <CardDescription>
-            {isHe
-              ? 'אפליקציית TOTP כמו Authy, 1Password או Google Authenticator תייצר קוד בן 6 ספרות שמתחדש כל 30 שניות.'
-              : 'A TOTP app such as Authy, 1Password, or Google Authenticator will generate a 6-digit code every 30 seconds.'}
+            {t('securitySettings.totpAppDesc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {verifiedTotp ? (
             <Button variant="destructive" onClick={handleUnenroll}>
               <Trash2 className="w-4 h-4 mx-2" />
-              {isHe ? 'הסר אימות דו־שלבי' : 'Disable two-factor'}
+              {t('securitySettings.disableTwoFactor')}
             </Button>
           ) : enrollData ? (
             <div className="space-y-4">
               <Alert>
                 <AlertDescription>
-                  {isHe
-                    ? 'יש לסרוק את ה־QR באפליקציית האימות, ואז להזין את הקוד בן 6 הספרות שמופיע.'
-                    : 'Scan the QR with your authenticator app, then enter the 6-digit code it displays.'}
+                  {t('securitySettings.scanQrInstruction')}
                 </AlertDescription>
               </Alert>
               {enrollData.qrCode && (
@@ -236,7 +222,7 @@ export default function SecuritySettings() {
               {enrollData.secret && (
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground mb-1">
-                    {isHe ? 'או הזנה ידנית של הסוד:' : 'Or enter manually:'}
+                    {t('securitySettings.orEnterManually')}
                   </p>
                   <code className="text-sm bg-muted px-2 py-1 rounded">
                     {enrollData.secret}
@@ -245,7 +231,7 @@ export default function SecuritySettings() {
               )}
               <div className="space-y-2">
                 <Label htmlFor="totp-code">
-                  {isHe ? 'קוד מהאפליקציה' : 'Code from your app'}
+                  {t('securitySettings.codeFromApp')}
                 </Label>
                 <Input
                   id="totp-code"
@@ -263,7 +249,7 @@ export default function SecuritySettings() {
                   ) : (
                     <ShieldCheck className="w-4 h-4 mx-2" />
                   )}
-                  {isHe ? 'אימות והפעלה' : 'Verify & enable'}
+                  {t('securitySettings.verifyAndEnable')}
                 </Button>
                 <Button
                   variant="outline"
@@ -276,7 +262,7 @@ export default function SecuritySettings() {
                     await refresh();
                   }}
                 >
-                  {isHe ? 'ביטול' : 'Cancel'}
+                  {t('common.cancel')}
                 </Button>
               </div>
             </div>
@@ -287,7 +273,7 @@ export default function SecuritySettings() {
               ) : (
                 <Shield className="w-4 h-4 mx-2" />
               )}
-              {isHe ? 'הפעלת אימות דו־שלבי' : 'Enable two-factor'}
+              {t('securitySettings.enableTwoFactor')}
             </Button>
           )}
         </CardContent>

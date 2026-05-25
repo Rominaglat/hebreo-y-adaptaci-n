@@ -20,11 +20,8 @@ const RESEND_API = "https://api.resend.com/emails";
 const FROM_EMAIL = Deno.env.get("INVITE_FROM_EMAIL") ?? "Learning Portal <noreply@example.com>";
 const SITE_URL = Deno.env.get("INVITE_SITE_URL") ?? "https://app.example.com";
 const REPLY_TO = Deno.env.get("INVITE_REPLY_TO") ?? null;
-// Brand logo (gold-on-transparent with swirls). Served by Vercel from
-// the Portal's public/ folder; URL stable as long as the site is up.
-// Override via INVITE_LOGO_URL env if you want a per-deploy logo.
-const DEFAULT_LOGO_URL = Deno.env.get("INVITE_LOGO_URL")
-  ?? "https://app.example.com/logo-email.png";
+// Brand logo for the invite email. Set INVITE_LOGO_URL to a public PNG/SVG URL.
+const DEFAULT_LOGO_URL = Deno.env.get("INVITE_LOGO_URL") ?? "";
 
 // HTML escape — user-controlled values go through this before being embedded
 // in the email body.

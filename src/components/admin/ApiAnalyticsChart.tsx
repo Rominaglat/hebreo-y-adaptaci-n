@@ -16,7 +16,7 @@ interface ApiStats {
 }
 
 export function ApiAnalyticsChart() {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ApiStats | null>(null);
 
@@ -59,7 +59,7 @@ export function ApiAnalyticsChart() {
         // Group by day
         const dayCounts: Record<string, { total: number; success: number; failed: number }> = {};
         logs.forEach((l: any) => {
-          const date = new Date(l.created_at).toLocaleDateString(language === 'he' ? 'he-IL' : 'en-US', { 
+          const date = new Date(l.created_at).toLocaleDateString(language === 'he' ? 'he-IL' : language === 'es' ? 'es-ES' : 'en-US', {
             month: 'short', 
             day: 'numeric' 
           });
@@ -132,10 +132,10 @@ export function ApiAnalyticsChart() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Activity className="w-5 h-5" />
-          {language === 'he' ? 'אנליטיקס API' : 'API Analytics'}
+          {t('developerSettings.apiAnalytics')}
         </CardTitle>
         <CardDescription>
-          {language === 'he' ? 'סטטיסטיקות שימוש ב-API ב-30 הימים האחרונים' : 'API usage statistics for the last 30 days'}
+          {t('developerSettings.apiAnalyticsDesc')}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -145,7 +145,7 @@ export function ApiAnalyticsChart() {
             <div className="flex items-center justify-center gap-2 mb-2">
               <TrendingUp className="w-4 h-4 text-primary" />
               <span className="text-sm text-muted-foreground">
-                {language === 'he' ? 'סה"כ בקשות' : 'Total Requests'}
+                {t('developerSettings.totalRequests')}
               </span>
             </div>
             <p className="text-2xl font-bold">{stats.totalRequests.toLocaleString()}</p>
@@ -155,7 +155,7 @@ export function ApiAnalyticsChart() {
             <div className="flex items-center justify-center gap-2 mb-2">
               <CheckCircle2 className="w-4 h-4 text-success" />
               <span className="text-sm text-muted-foreground">
-                {language === 'he' ? 'אחוז הצלחה' : 'Success Rate'}
+                {t('developerSettings.successRate')}
               </span>
             </div>
             <p className="text-2xl font-bold text-success">{successRate}%</p>
@@ -165,7 +165,7 @@ export function ApiAnalyticsChart() {
             <div className="flex items-center justify-center gap-2 mb-2">
               <AlertTriangle className="w-4 h-4 text-destructive" />
               <span className="text-sm text-muted-foreground">
-                {language === 'he' ? 'שגיאות' : 'Failed'}
+                {t('developerSettings.failed')}
               </span>
             </div>
             <p className="text-2xl font-bold text-destructive">{stats.failedRequests.toLocaleString()}</p>
@@ -175,7 +175,7 @@ export function ApiAnalyticsChart() {
             <div className="flex items-center justify-center gap-2 mb-2">
               <Activity className="w-4 h-4 text-primary" />
               <span className="text-sm text-muted-foreground">
-                {language === 'he' ? 'זמן תגובה ממוצע' : 'Avg Response'}
+                {t('developerSettings.avgResponse')}
               </span>
             </div>
             <p className="text-2xl font-bold text-primary">{stats.avgResponseTime}ms</p>
@@ -187,10 +187,10 @@ export function ApiAnalyticsChart() {
           <Tabs defaultValue="timeline" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="timeline">
-                {language === 'he' ? 'ציר זמן' : 'Timeline'}
+                {t('developerSettings.timeline')}
               </TabsTrigger>
               <TabsTrigger value="actions">
-                {language === 'he' ? 'לפי פעולה' : 'By Action'}
+                {t('developerSettings.byAction')}
               </TabsTrigger>
             </TabsList>
             
@@ -224,14 +224,14 @@ export function ApiAnalyticsChart() {
                     dataKey="success" 
                     stroke="hsl(var(--primary))" 
                     strokeWidth={2}
-                    name={language === 'he' ? 'הצלחה' : 'Success'}
+                    name={t('developerSettings.success')}
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="failed" 
-                    stroke="hsl(var(--destructive))" 
+                  <Line
+                    type="monotone"
+                    dataKey="failed"
+                    stroke="hsl(var(--destructive))"
                     strokeWidth={2}
-                    name={language === 'he' ? 'שגיאה' : 'Failed'}
+                    name={t('developerSettings.error')}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -269,7 +269,7 @@ export function ApiAnalyticsChart() {
                     dataKey="count" 
                     fill="hsl(var(--primary))" 
                     radius={[0, 4, 4, 0]}
-                    name={language === 'he' ? 'בקשות' : 'Requests'}
+                    name={t('developerSettings.requests')}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -279,7 +279,7 @@ export function ApiAnalyticsChart() {
 
         {stats.totalRequests === 0 && (
           <div className="text-center py-8 text-muted-foreground">
-            {language === 'he' ? 'אין נתונים להצגה עדיין' : 'No data to display yet'}
+            {t('developerSettings.noData')}
           </div>
         )}
       </CardContent>

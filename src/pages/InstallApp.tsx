@@ -25,7 +25,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export default function InstallApp() {
-  const { language } = useLanguage();
+  const { t } = useLanguage();
   const { isSupported, isSubscribed, isLoading, isPWA, subscribe } = usePushNotifications();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -81,20 +81,15 @@ export default function InstallApp() {
     setDeferredPrompt(null);
   };
 
-  const isHebrew = language === 'he';
-
   return (
       <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold">
-            {isHebrew ? 'התקנת האפליקציה' : 'Install App'}
+            {t('installApp.title')}
           </h1>
           <p className="text-muted-foreground">
-            {isHebrew 
-              ? 'התקנת האפליקציה וקבלת התראות על הודעות חדשות'
-              : 'Install the app and get notifications for new announcements'
-            }
+            {t('installApp.subtitle')}
           </p>
         </div>
 
@@ -104,26 +99,23 @@ export default function InstallApp() {
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Download className="w-5 h-5" />
-                {isHebrew ? 'התקנה' : 'Installation'}
+                {t('installApp.installation')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isInstalled ? (
                 <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
                   <Check className="w-5 h-5" />
-                  <span>{isHebrew ? 'האפליקציה מותקנת' : 'App installed'}</span>
+                  <span>{t('installApp.appInstalled')}</span>
                 </div>
               ) : deferredPrompt ? (
                 <Button onClick={handleInstallClick} className="w-full">
                   <Download className="w-4 h-4 mx-2" />
-                  {isHebrew ? 'התקן עכשיו' : 'Install Now'}
+                  {t('installApp.installNow')}
                 </Button>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {isHebrew 
-                    ? 'יש לעקוב אחרי ההוראות למטה להתקנה'
-                    : 'Follow the instructions below to install'
-                  }
+                  {t('installApp.followInstructions')}
                 </p>
               )}
             </CardContent>
@@ -133,26 +125,23 @@ export default function InstallApp() {
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Bell className="w-5 h-5" />
-                {isHebrew ? 'התראות' : 'Notifications'}
+                {t('installApp.notifications')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isSubscribed ? (
                 <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
                   <Check className="w-5 h-5" />
-                  <span>{isHebrew ? 'התראות מופעלות' : 'Notifications enabled'}</span>
+                  <span>{t('installApp.notificationsEnabled')}</span>
                 </div>
               ) : isSupported ? (
                 <Button onClick={subscribe} disabled={isLoading} className="w-full">
                   <Bell className="w-4 h-4 mx-2" />
-                  {isHebrew ? 'הפעל התראות' : 'Enable Notifications'}
+                  {t('notifications.enable')}
                 </Button>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {isHebrew 
-                    ? 'התראות לא נתמכות בדפדפן זה'
-                    : 'Notifications not supported in this browser'
-                  }
+                  {t('installApp.notificationsUnsupported')}
                 </p>
               )}
             </CardContent>
@@ -163,12 +152,9 @@ export default function InstallApp() {
         {!isInstalled && (
           <Card>
             <CardHeader>
-              <CardTitle>{isHebrew ? 'הוראות התקנה' : 'Installation Instructions'}</CardTitle>
+              <CardTitle>{t('installApp.instructionsTitle')}</CardTitle>
               <CardDescription>
-                {isHebrew 
-                  ? 'בחירת פלטפורמה'
-                  : 'Select your platform'
-                }
+                {t('installApp.selectPlatform')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -184,7 +170,7 @@ export default function InstallApp() {
                   </TabsTrigger>
                   <TabsTrigger value="desktop" className="flex items-center gap-2">
                     <Monitor className="w-4 h-4" />
-                    {isHebrew ? 'מחשב' : 'Desktop'}
+                    {t('installApp.desktop')}
                   </TabsTrigger>
                 </TabsList>
 
@@ -194,58 +180,46 @@ export default function InstallApp() {
                       <Badge className="mt-1">1</Badge>
                       <div>
                         <p className="font-medium flex items-center gap-2">
-                          {isHebrew ? 'פתיחה ב-Safari' : 'Open in Safari'}
+                          {t('installApp.iosStep1Title')}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'האפליקציה חייבת להיות פתוחה בדפדפן Safari'
-                            : 'The app must be opened in Safari browser'
-                          }
+                          {t('installApp.iosStep1Desc')}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                       <Badge className="mt-1">2</Badge>
                       <div>
                         <p className="font-medium flex items-center gap-2">
                           <Share className="w-4 h-4" />
-                          {isHebrew ? 'לחיצה על כפתור השיתוף' : 'Tap the Share button'}
+                          {t('installApp.iosStep2Title')}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'הכפתור נמצא בתחתית המסך (ריבוע עם חץ למעלה)'
-                            : 'Located at the bottom of the screen (square with arrow up)'
-                          }
+                          {t('installApp.iosStep2Desc')}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                       <Badge className="mt-1">3</Badge>
                       <div>
                         <p className="font-medium flex items-center gap-2">
                           <PlusSquare className="w-4 h-4" />
-                          {isHebrew ? 'בחירת "הוסף למסך הבית"' : 'Select "Add to Home Screen"'}
+                          {t('installApp.iosStep3Title')}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'יש לגלול למטה בתפריט ולבחור באפשרות זו'
-                            : 'Scroll down in the menu and select this option'
-                          }
+                          {t('installApp.iosStep3Desc')}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                       <Badge className="mt-1">4</Badge>
                       <div>
-                        <p className="font-medium">{isHebrew ? 'אישור ההתקנה' : 'Confirm Installation'}</p>
+                        <p className="font-medium">{t('installApp.confirmInstall')}</p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'לחיצה על "הוסף" בפינה הימנית העליונה'
-                            : 'Tap "Add" in the top right corner'
-                          }
+                          {t('installApp.iosStep4Desc')}
                         </p>
                       </div>
                     </div>
@@ -255,25 +229,19 @@ export default function InstallApp() {
                       <div>
                         <p className="font-medium flex items-center gap-2">
                           <Bell className="w-4 h-4" />
-                          {isHebrew ? 'הפעלת התראות' : 'Enable Notifications'}
+                          {t('installApp.enableNotifications')}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'יש לפתוח את האפליקציה מהמסך הבית וללחוץ על "הפעלת התראות". כשתופיע בקשת ההרשאה של iOS - יש ללחוץ "אפשר"'
-                            : 'Open the app from home screen and tap "Enable Notifications". When iOS permission request appears - tap "Allow"'
-                          }
+                          {t('installApp.iosStep5Desc')}
                         </p>
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="p-4 rounded-lg bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800">
                     <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                      <strong>{isHebrew ? 'חשוב!' : 'Important!'}</strong>{' '}
-                      {isHebrew 
-                        ? 'התראות פוש יעבדו רק אם האפליקציה מותקנת במסך הבית ונפתחת משם. סימניה רגילה לא תתמוך בהתראות.'
-                        : 'Push notifications will only work if you install the app to home screen and open it from there. A regular bookmark will not support notifications.'
-                      }
+                      <strong>{t('installApp.important')}</strong>{' '}
+                      {t('installApp.pushOnlyHomeScreen')}
                     </p>
                   </div>
 
@@ -281,7 +249,7 @@ export default function InstallApp() {
                   {isInstalled && !isSubscribed && isSupported && (
                     <Button onClick={subscribe} disabled={isLoading} className="w-full" size="lg">
                       <Bell className="w-5 h-5 mx-2" />
-                      {isHebrew ? 'הפעלת התראות עכשיו' : 'Enable Notifications Now'}
+                      {t('installApp.enableNotificationsNow')}
                     </Button>
                   )}
                 </TabsContent>
@@ -293,58 +261,46 @@ export default function InstallApp() {
                       <div>
                         <p className="font-medium flex items-center gap-2">
                           <Chrome className="w-4 h-4" />
-                          {isHebrew ? 'פתיחה ב-Chrome' : 'Open in Chrome'}
+                          {t('installApp.androidStep1Title')}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'מומלץ להשתמש בדפדפן Chrome'
-                            : 'Chrome browser is recommended'
-                          }
+                          {t('installApp.androidStep1Desc')}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                       <Badge className="mt-1">2</Badge>
                       <div>
                         <p className="font-medium flex items-center gap-2">
                           <MoreVertical className="w-4 h-4" />
-                          {isHebrew ? 'לחיצה על תפריט שלוש הנקודות' : 'Tap the three-dot menu'}
+                          {t('installApp.androidStep2Title')}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'בפינה הימנית העליונה של הדפדפן'
-                            : 'In the top right corner of the browser'
-                          }
+                          {t('installApp.androidStep2Desc')}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                       <Badge className="mt-1">3</Badge>
                       <div>
                         <p className="font-medium flex items-center gap-2">
                           <Download className="w-4 h-4" />
-                          {isHebrew ? 'בחירת "התקן אפליקציה"' : 'Select "Install app"'}
+                          {t('installApp.androidStep3Title')}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'או "הוספה למסך הבית"'
-                            : 'Or "Add to Home screen"'
-                          }
+                          {t('installApp.androidStep3Desc')}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                       <Badge className="mt-1">4</Badge>
                       <div>
-                        <p className="font-medium">{isHebrew ? 'אישור ההתקנה' : 'Confirm Installation'}</p>
+                        <p className="font-medium">{t('installApp.confirmInstall')}</p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'לחיצה על "התקן" בחלון הקופץ'
-                            : 'Tap "Install" in the popup'
-                          }
+                          {t('installApp.androidStep4Desc')}
                         </p>
                       </div>
                     </div>
@@ -353,7 +309,7 @@ export default function InstallApp() {
                   {deferredPrompt && (
                     <Button onClick={handleInstallClick} className="w-full" size="lg">
                       <Download className="w-5 h-5 mx-2" />
-                      {isHebrew ? 'התקנה עכשיו' : 'Install Now'}
+                      {t('installApp.installNow')}
                     </Button>
                   )}
                 </TabsContent>
@@ -365,42 +321,33 @@ export default function InstallApp() {
                       <div>
                         <p className="font-medium flex items-center gap-2">
                           <Chrome className="w-4 h-4" />
-                          {isHebrew ? 'פתיחה ב-Chrome או Edge' : 'Open in Chrome or Edge'}
+                          {t('installApp.desktopStep1Title')}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'דפדפנים אלה תומכים בהתקנת אפליקציות'
-                            : 'These browsers support app installation'
-                          }
+                          {t('installApp.desktopStep1Desc')}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                       <Badge className="mt-1">2</Badge>
                       <div>
                         <p className="font-medium flex items-center gap-2">
                           <ArrowDown className="w-4 h-4" />
-                          {isHebrew ? 'לחיצה על אייקון ההתקנה' : 'Click the install icon'}
+                          {t('installApp.desktopStep2Title')}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'בצד ימין של שורת הכתובת (אייקון מחשב עם חץ)'
-                            : 'On the right side of the address bar (computer icon with arrow)'
-                          }
+                          {t('installApp.desktopStep2Desc')}
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
                       <Badge className="mt-1">3</Badge>
                       <div>
-                        <p className="font-medium">{isHebrew ? 'אישור ההתקנה' : 'Confirm Installation'}</p>
+                        <p className="font-medium">{t('installApp.confirmInstall')}</p>
                         <p className="text-sm text-muted-foreground">
-                          {isHebrew 
-                            ? 'לחיצה על "התקן" בחלון הקופץ'
-                            : 'Click "Install" in the popup'
-                          }
+                          {t('installApp.desktopStep3Desc')}
                         </p>
                       </div>
                     </div>
@@ -409,7 +356,7 @@ export default function InstallApp() {
                   {deferredPrompt && (
                     <Button onClick={handleInstallClick} className="w-full" size="lg">
                       <Download className="w-5 h-5 mx-2" />
-                      {isHebrew ? 'התקנה עכשיו' : 'Install Now'}
+                      {t('installApp.installNow')}
                     </Button>
                   )}
                 </TabsContent>
@@ -421,7 +368,7 @@ export default function InstallApp() {
         {/* Benefits */}
         <Card>
           <CardHeader>
-            <CardTitle>{isHebrew ? 'למה להתקין?' : 'Why Install?'}</CardTitle>
+            <CardTitle>{t('installApp.whyInstall')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -430,57 +377,45 @@ export default function InstallApp() {
                   <Bell className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-medium">{isHebrew ? 'התראות פוש' : 'Push Notifications'}</p>
+                  <p className="font-medium">{t('installApp.benefitPushTitle')}</p>
                   <p className="text-sm text-muted-foreground">
-                    {isHebrew 
-                      ? 'קבל התראות על הודעות חדשות'
-                      : 'Get notified about new announcements'
-                    }
+                    {t('installApp.benefitPushDesc')}
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-primary/10 text-primary">
                   <Download className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-medium">{isHebrew ? 'גישה מהירה' : 'Quick Access'}</p>
+                  <p className="font-medium">{t('installApp.benefitQuickAccessTitle')}</p>
                   <p className="text-sm text-muted-foreground">
-                    {isHebrew 
-                      ? 'פתיחת האפליקציה ישירות ממסך הבית'
-                      : 'Open the app directly from home screen'
-                    }
+                    {t('installApp.benefitQuickAccessDesc')}
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-primary/10 text-primary">
                   <Smartphone className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-medium">{isHebrew ? 'חוויית אפליקציה' : 'App Experience'}</p>
+                  <p className="font-medium">{t('installApp.benefitAppExperienceTitle')}</p>
                   <p className="text-sm text-muted-foreground">
-                    {isHebrew 
-                      ? 'ממשק מסך מלא ללא סרגלי דפדפן'
-                      : 'Full screen interface without browser bars'
-                    }
+                    {t('installApp.benefitAppExperienceDesc')}
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-primary/10 text-primary">
                   <Check className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-medium">{isHebrew ? 'עדכונים אוטומטיים' : 'Auto Updates'}</p>
+                  <p className="font-medium">{t('installApp.benefitAutoUpdatesTitle')}</p>
                   <p className="text-sm text-muted-foreground">
-                    {isHebrew 
-                      ? 'תמיד הגרסה העדכנית ביותר'
-                      : 'Always the latest version'
-                    }
+                    {t('installApp.benefitAutoUpdatesDesc')}
                   </p>
                 </div>
               </div>

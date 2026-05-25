@@ -77,38 +77,42 @@ interface Category {
   value: string;
   label_he: string;
   label_en: string;
+  label_es?: string | null;
   color: string;
   order_index: number;
 }
 
 // Default categories for fallback
 const defaultCategories: Category[] = [
-  { id: '1', value: 'marketing', label_he: 'שיווק', label_en: 'Marketing', color: 'pink', order_index: 0 },
-  { id: '2', value: 'sales', label_he: 'מכירות', label_en: 'Sales', color: 'green', order_index: 1 },
-  { id: '3', value: 'finance', label_he: 'פיננסים', label_en: 'Finance', color: 'blue', order_index: 2 },
-  { id: '4', value: 'logistics', label_he: 'לוגיסטיקה', label_en: 'Logistics', color: 'orange', order_index: 3 },
-  { id: '5', value: 'technology', label_he: 'טכנולוגיה', label_en: 'Technology', color: 'purple', order_index: 4 },
-  { id: '6', value: 'legal', label_he: 'משפטים', label_en: 'Legal', color: 'amber', order_index: 5 },
+  { id: '1', value: 'marketing', label_he: 'שיווק', label_en: 'Marketing', label_es: 'Marketing', color: 'pink', order_index: 0 },
+  { id: '2', value: 'sales', label_he: 'מכירות', label_en: 'Sales', label_es: 'Ventas', color: 'green', order_index: 1 },
+  { id: '3', value: 'finance', label_he: 'פיננסים', label_en: 'Finance', label_es: 'Finanzas', color: 'blue', order_index: 2 },
+  { id: '4', value: 'logistics', label_he: 'לוגיסטיקה', label_en: 'Logistics', label_es: 'Logística', color: 'orange', order_index: 3 },
+  { id: '5', value: 'technology', label_he: 'טכנולוגיה', label_en: 'Technology', label_es: 'Tecnología', color: 'purple', order_index: 4 },
+  { id: '6', value: 'legal', label_he: 'משפטים', label_en: 'Legal', label_es: 'Legal', color: 'amber', order_index: 5 },
 ];
 
 const colorOptions = [
-  { value: 'pink', labelHe: 'ורוד', labelEn: 'Pink' },
-  { value: 'green', labelHe: 'ירוק', labelEn: 'Green' },
-  { value: 'blue', labelHe: 'כחול', labelEn: 'Blue' },
-  { value: 'orange', labelHe: 'כתום', labelEn: 'Orange' },
-  { value: 'purple', labelHe: 'סגול', labelEn: 'Purple' },
-  { value: 'amber', labelHe: 'ענבר', labelEn: 'Amber' },
-  { value: 'red', labelHe: 'אדום', labelEn: 'Red' },
-  { value: 'teal', labelHe: 'טורקיז', labelEn: 'Teal' },
-  { value: 'gray', labelHe: 'אפור', labelEn: 'Gray' },
+  { value: 'pink', labelHe: 'ורוד', labelEn: 'Pink', labelEs: 'Rosa' },
+  { value: 'green', labelHe: 'ירוק', labelEn: 'Green', labelEs: 'Verde' },
+  { value: 'blue', labelHe: 'כחול', labelEn: 'Blue', labelEs: 'Azul' },
+  { value: 'orange', labelHe: 'כתום', labelEn: 'Orange', labelEs: 'Naranja' },
+  { value: 'purple', labelHe: 'סגול', labelEn: 'Purple', labelEs: 'Morado' },
+  { value: 'amber', labelHe: 'ענבר', labelEn: 'Amber', labelEs: 'Ámbar' },
+  { value: 'red', labelHe: 'אדום', labelEn: 'Red', labelEs: 'Rojo' },
+  { value: 'teal', labelHe: 'טורקיז', labelEn: 'Teal', labelEs: 'Verde azulado' },
+  { value: 'gray', labelHe: 'אפור', labelEn: 'Gray', labelEs: 'Gris' },
 ];
 
-const getBenefitSchema = (categoryValues: string[]) => z.object({
-  title: z.string().trim().min(2, 'שם ההטבה חייב להכיל לפחות 2 תווים').max(100),
-  description: z.string().trim().min(10, 'התיאור חייב להכיל לפחות 10 תווים').max(1000),
-  category: z.string().refine(val => categoryValues.includes(val), 'קטגוריה לא תקינה'),
+const getBenefitSchema = (
+  categoryValues: string[],
+  t: (key: string) => string
+) => z.object({
+  title: z.string().trim().min(2, t('benefitsPage.validation.titleMin')).max(100),
+  description: z.string().trim().min(10, t('benefitsPage.validation.descriptionMin')).max(1000),
+  category: z.string().refine(val => categoryValues.includes(val), t('benefitsPage.validation.invalidCategory')),
   phone_number: z.string().trim().max(15).optional().or(z.literal('')),
-  link_url: z.string().url('לינק לא תקין').optional().or(z.literal('')),
+  link_url: z.string().url(t('benefitsPage.validation.invalidLink')).optional().or(z.literal('')),
   logo_url: z.string().url().optional().or(z.literal('')),
   contactType: z.enum(['phone', 'link']),
 }).refine(data => {
@@ -118,13 +122,13 @@ const getBenefitSchema = (categoryValues: string[]) => z.object({
     return data.link_url && data.link_url.length > 0;
   }
 }, {
-  message: 'יש להזין ערך תקין',
+  message: t('benefitsPage.validation.requiredValue'),
   path: ['phone_number'],
 });
 
 export default function CommunityBenefits() {
   const { user, isAdmin } = useAuth();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const { toast } = useToast();
   
   const [benefits, setBenefits] = useState<Benefit[]>([]);
@@ -261,8 +265,8 @@ export default function CommunityBenefits() {
     if (!user) return;
     if (!newCategory.value || !newCategory.label_he || !newCategory.label_en) {
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'יש למלא את כל השדות' : 'All fields are required',
+        title: t('common.error'),
+        description: t('benefitsPage.allFieldsRequired'),
         variant: 'destructive',
       });
       return;
@@ -284,7 +288,7 @@ export default function CommunityBenefits() {
       if (error) throw error;
 
       toast({
-        title: language === 'he' ? 'הקטגוריה נוספה' : 'Category Added',
+        title: t('benefitsPage.categoryAdded'),
       });
 
       setNewCategory({ value: '', label_he: '', label_en: '', color: 'gray' });
@@ -292,10 +296,10 @@ export default function CommunityBenefits() {
     } catch (error: any) {
       console.error('Error adding category:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: error.message?.includes('duplicate') 
-          ? (language === 'he' ? 'קטגוריה עם מזהה זה כבר קיימת' : 'A category with this ID already exists')
-          : (language === 'he' ? 'לא ניתן להוסיף את הקטגוריה' : 'Could not add category'),
+        title: t('common.error'),
+        description: error.message?.includes('duplicate')
+          ? t('benefitsPage.categoryDuplicate')
+          : t('benefitsPage.categoryAddError'),
         variant: 'destructive',
       });
     } finally {
@@ -314,14 +318,14 @@ export default function CommunityBenefits() {
       if (error) throw error;
 
       toast({
-        title: language === 'he' ? 'הקטגוריה נמחקה' : 'Category Deleted',
+        title: t('benefitsPage.categoryDeleted'),
       });
 
       fetchCategories();
     } catch (error) {
       console.error('Error deleting category:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
+        title: t('common.error'),
         variant: 'destructive',
       });
     } finally {
@@ -353,7 +357,7 @@ export default function CommunityBenefits() {
 
     setErrors({});
     const categoryValues = categories.map(c => c.value);
-    const result = getBenefitSchema(categoryValues).safeParse({ ...newBenefit, contactType });
+    const result = getBenefitSchema(categoryValues, t).safeParse({ ...newBenefit, contactType });
 
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
@@ -382,8 +386,8 @@ export default function CommunityBenefits() {
       if (error) throw error;
 
       toast({
-        title: language === 'he' ? 'ההטבה פורסמה' : 'Benefit Published',
-        description: language === 'he' ? 'ההטבה נוספה בהצלחה' : 'The benefit was added successfully',
+        title: t('benefitsPage.benefitPublished'),
+        description: t('benefitsPage.benefitPublishedDesc'),
       });
 
       const resetCategory = categories[0]?.value ?? defaultCategories[0].value;
@@ -393,8 +397,8 @@ export default function CommunityBenefits() {
     } catch (error) {
       console.error('Error creating benefit:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'לא ניתן ליצור את ההטבה' : 'Could not create benefit',
+        title: t('common.error'),
+        description: t('benefitsPage.benefitCreateError'),
         variant: 'destructive',
       });
     } finally {
@@ -412,14 +416,14 @@ export default function CommunityBenefits() {
       if (error) throw error;
 
       toast({
-        title: language === 'he' ? 'ההטבה נמחקה' : 'Benefit Deleted',
+        title: t('benefitsPage.benefitDeleted'),
       });
 
       fetchBenefits();
     } catch (error) {
       console.error('Error deleting benefit:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
+        title: t('common.error'),
         variant: 'destructive',
       });
     }
@@ -445,7 +449,7 @@ export default function CommunityBenefits() {
 
     setErrors({});
     const categoryValues = categories.map(c => c.value);
-    const result = getBenefitSchema(categoryValues).safeParse({ ...newBenefit, contactType });
+    const result = getBenefitSchema(categoryValues, t).safeParse({ ...newBenefit, contactType });
     
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
@@ -474,8 +478,8 @@ export default function CommunityBenefits() {
       if (error) throw error;
 
       toast({
-        title: language === 'he' ? 'ההטבה עודכנה' : 'Benefit Updated',
-        description: language === 'he' ? 'ההטבה עודכנה בהצלחה' : 'The benefit was updated successfully',
+        title: t('benefitsPage.benefitUpdated'),
+        description: t('benefitsPage.benefitUpdatedDesc'),
       });
 
       const resetCategory = categories[0]?.value ?? defaultCategories[0].value;
@@ -486,8 +490,8 @@ export default function CommunityBenefits() {
     } catch (error) {
       console.error('Error updating benefit:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'לא ניתן לעדכן את ההטבה' : 'Could not update benefit',
+        title: t('common.error'),
+        description: t('benefitsPage.benefitUpdateError'),
         variant: 'destructive',
       });
     } finally {
@@ -510,7 +514,7 @@ export default function CommunityBenefits() {
       await supabase.rpc('log_user_activity', {
         p_user_id: user.id,
         p_activity_type: 'benefit_click',
-        p_description: `לחיצה על הטבה "${benefitTitle}" - ${clickType}`,
+        p_description: t('benefitsPage.activityClick').replace('{title}', benefitTitle).replace('{type}', clickType),
         p_entity_type: 'benefit',
         p_entity_id: benefitId,
         p_action: clickType,
@@ -573,13 +577,16 @@ export default function CommunityBenefits() {
 
   const getWhatsAppUrl = (phoneNumber: string) => {
     const cleanPhone = phoneNumber.replace(/\D/g, '');
-    const message = 'היי+%3A%29+הגעתי+אליכם+דרך+קהילת+AI+Agency+School';
+    const message = encodeURIComponent(t('benefitsPage.whatsappMessage'));
     return `https://wa.me/${cleanPhone}?text=${message}`;
   };
 
   const getCategoryLabel = (category: string) => {
     const cat = categories.find(c => c.value === category);
-    return language === 'he' ? cat?.label_he : cat?.label_en;
+    if (!cat) return category;
+    if (language === 'he') return cat.label_he;
+    if (language === 'es') return cat.label_es || cat.label_en;
+    return cat.label_en;
   };
 
   const getCategoryColor = (category: string) => {
@@ -612,10 +619,10 @@ export default function CommunityBenefits() {
 
           <div className="relative">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              {language === 'he' ? 'הטבות לקהילה' : 'Community Benefits'}
+              {t('nav.communityBenefits')}
             </h1>
             <p className="text-muted-foreground mt-1.5">
-              {language === 'he' ? 'שיתופי פעולה והטבות בלעדיות לחברי הקהילה' : 'Exclusive partnerships and benefits for community members'}
+              {t('benefitsPage.headerSubtitle')}
             </p>
           </div>
         </div>
@@ -626,15 +633,15 @@ export default function CommunityBenefits() {
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-full sm:w-[160px]">
                 <Filter className="w-4 h-4 ml-2" />
-                <SelectValue placeholder={language === 'he' ? 'כל הקטגוריות' : 'All Categories'} />
+                <SelectValue placeholder={t('benefitsPage.allCategories')} />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">
-                  {language === 'he' ? 'כל הקטגוריות' : 'All Categories'}
+                  {t('benefitsPage.allCategories')}
                 </SelectItem>
                 {categories.map(cat => (
                   <SelectItem key={cat.value} value={cat.value}>
-                    {language === 'he' ? cat.label_he : cat.label_en}
+                    {language === 'he' ? cat.label_he : language === 'es' ? (cat.label_es || cat.label_en) : cat.label_en}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -649,34 +656,34 @@ export default function CommunityBenefits() {
                   className="flex-1 sm:flex-none"
                 >
                   <Settings className="w-4 h-4 mx-2" />
-                  <span className="hidden sm:inline">{language === 'he' ? 'ניהול קטגוריות' : 'Manage Categories'}</span>
-                  <span className="sm:hidden">{language === 'he' ? 'קטגוריות' : 'Categories'}</span>
+                  <span className="hidden sm:inline">{t('benefitsPage.manageCategories')}</span>
+                  <span className="sm:hidden">{t('benefitsPage.categoriesShort')}</span>
                 </Button>
 
                 <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                   <DialogTrigger asChild>
                     <Button className="flex-1 sm:flex-none">
                       <Plus className="w-4 h-4 mx-2" />
-                      {language === 'he' ? 'הוספת הטבה' : 'Add Benefit'}
+                      {t('benefitsPage.addBenefit')}
                     </Button>
                   </DialogTrigger>
                 <DialogContent className="max-w-md">
                   <DialogHeader>
                     <DialogTitle>
-                      {language === 'he' ? 'הוספת הטבה חדשה' : 'Add New Benefit'}
+                      {t('benefitsPage.addNewBenefit')}
                     </DialogTitle>
                     <DialogDescription>
-                      {language === 'he' ? 'פרסום שיתוף פעולה חדש לחברי הקהילה' : 'Publish a new partnership for community members'}
+                      {t('benefitsPage.addNewBenefitDesc')}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4 pt-4">
                     <div className="space-y-2">
                       <Label htmlFor="title">
-                        {language === 'he' ? 'שם ההטבה / נותן השירות' : 'Benefit / Provider Name'}
+                        {t('benefitsPage.benefitName')}
                       </Label>
                       <Input
                         id="title"
-                        placeholder={language === 'he' ? 'לדוגמה: 20% הנחה על שירותי עיצוב' : 'e.g., 20% off design services'}
+                        placeholder={t('benefitsPage.benefitNamePlaceholder')}
                         value={newBenefit.title}
                         onChange={(e) => setNewBenefit({ ...newBenefit, title: e.target.value })}
                       />
@@ -685,11 +692,11 @@ export default function CommunityBenefits() {
 
                     <div className="space-y-2">
                       <Label htmlFor="description">
-                        {language === 'he' ? 'תיאור ההטבה' : 'Benefit Description'}
+                        {t('benefitsPage.benefitDescription')}
                       </Label>
                       <Textarea
                         id="description"
-                        placeholder={language === 'he' ? 'תיאור ההטבה ונותן השירות...' : 'Describe the benefit and provider...'}
+                        placeholder={t('benefitsPage.benefitDescriptionPlaceholder')}
                         className="min-h-[100px]"
                         value={newBenefit.description}
                         onChange={(e) => setNewBenefit({ ...newBenefit, description: e.target.value })}
@@ -699,19 +706,19 @@ export default function CommunityBenefits() {
 
                     <div className="space-y-2">
                       <Label htmlFor="category">
-                        {language === 'he' ? 'קטגוריה' : 'Category'}
+                        {t('studyRooms.category')}
                       </Label>
                       <Select 
                         value={newBenefit.category} 
                         onValueChange={(v) => setNewBenefit({ ...newBenefit, category: v })}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder={language === 'he' ? 'בחירת קטגוריה' : 'Choose a category'} />
+                          <SelectValue placeholder={t('benefitsPage.chooseCategory')} />
                         </SelectTrigger>
                         <SelectContent>
                           {categories.map(cat => (
                             <SelectItem key={cat.value} value={cat.value}>
-                              {language === 'he' ? cat.label_he : cat.label_en}
+                              {language === 'he' ? cat.label_he : language === 'es' ? (cat.label_es || cat.label_en) : cat.label_en}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -721,7 +728,7 @@ export default function CommunityBenefits() {
 
                     <div className="space-y-2">
                       <Label>
-                        {language === 'he' ? 'סוג מימוש' : 'Contact Type'}
+                        {t('benefitsPage.contactType')}
                       </Label>
                       <Select 
                         value={contactType} 
@@ -735,10 +742,10 @@ export default function CommunityBenefits() {
                         </SelectTrigger>
                         <SelectContent className="bg-background z-50">
                           <SelectItem value="phone">
-                            {language === 'he' ? 'טלפון / ווטסאפ' : 'Phone / WhatsApp'}
+                            {t('benefitsPage.phoneWhatsapp')}
                           </SelectItem>
                           <SelectItem value="link">
-                            {language === 'he' ? 'לינק' : 'Link'}
+                            {t('benefitsPage.link')}
                           </SelectItem>
                         </SelectContent>
                       </Select>
@@ -747,7 +754,7 @@ export default function CommunityBenefits() {
                     {contactType === 'phone' && (
                       <div className="space-y-2">
                         <Label htmlFor="phone">
-                          {language === 'he' ? 'מספר טלפון' : 'Phone Number'}
+                          {t('profile.phoneNumber')}
                         </Label>
                         <Input
                           id="phone"
@@ -758,7 +765,7 @@ export default function CommunityBenefits() {
                         />
                         {errors.phone_number && <p className="text-sm text-destructive">{errors.phone_number}</p>}
                         <p className="text-xs text-muted-foreground">
-                          {language === 'he' ? 'יש להזין מספר בפורמט בינלאומי (ללא + או מקפים)' : 'Enter number in international format (without + or dashes)'}
+                          {t('benefitsPage.phoneFormatHint')}
                         </p>
                       </div>
                     )}
@@ -766,7 +773,7 @@ export default function CommunityBenefits() {
                     {contactType === 'link' && (
                       <div className="space-y-2">
                         <Label htmlFor="link">
-                          {language === 'he' ? 'לינק' : 'Link'}
+                          {t('benefitsPage.link')}
                         </Label>
                         <Input
                           id="link"
@@ -781,7 +788,7 @@ export default function CommunityBenefits() {
 
                     <div className="space-y-2">
                       <Label htmlFor="logo">
-                        {language === 'he' ? 'לוגו (אופציונלי)' : 'Logo (optional)'}
+                        {t('benefitsPage.logoOptional')}
                       </Label>
                       <Input
                         id="logo"
@@ -800,10 +807,10 @@ export default function CommunityBenefits() {
                       {isCreating ? (
                         <>
                           <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                          {language === 'he' ? 'מפרסם...' : 'Publishing...'}
+                          {t('benefitsPage.publishing')}
                         </>
                       ) : (
-                        language === 'he' ? 'פרסום הטבה' : 'Publish Benefit'
+                        t('benefitsPage.publishBenefit')
                       )}
                     </Button>
                   </div>
@@ -824,12 +831,12 @@ export default function CommunityBenefits() {
             <CardContent className="py-12 text-center">
               <Gift className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">
-                {language === 'he' ? 'אין הטבות עדיין' : 'No Benefits Yet'}
+                {t('benefitsPage.noBenefits')}
               </h3>
               <p className="text-muted-foreground">
-                {categoryFilter !== 'all' 
-                  ? (language === 'he' ? 'אין הטבות בקטגוריה זו' : 'No benefits in this category')
-                  : (language === 'he' ? 'הטבות חדשות יפורסמו כאן בקרוב' : 'New benefits will be published here soon')}
+                {categoryFilter !== 'all'
+                  ? t('benefitsPage.noBenefitsInCategory')
+                  : t('benefitsPage.noBenefitsDesc')}
               </p>
             </CardContent>
           </Card>
@@ -860,21 +867,21 @@ export default function CommunityBenefits() {
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>
-                            {language === 'he' ? 'מחיקת הטבה' : 'Delete Benefit'}
+                            {t('benefitsPage.deleteBenefit')}
                           </AlertDialogTitle>
                           <AlertDialogDescription>
-                            {language === 'he' ? 'האם למחוק את ההטבה?' : 'Are you sure you want to delete this benefit?'}
+                            {t('benefitsPage.deleteBenefitConfirm')}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter className="flex-row-reverse gap-2">
                           <AlertDialogCancel>
-                            {language === 'he' ? 'ביטול' : 'Cancel'}
+                            {t('common.cancel')}
                           </AlertDialogCancel>
                           <AlertDialogAction
                             onClick={() => handleDeleteBenefit(benefit.id)}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           >
-                            {language === 'he' ? 'מחיקה' : 'Delete'}
+                            {t('common.delete')}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
@@ -928,7 +935,7 @@ export default function CommunityBenefits() {
                         className="flex items-center justify-center gap-2 w-full py-2.5 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground font-medium transition-colors"
                       >
                         <ExternalLink className="w-4 h-4" />
-                        {language === 'he' ? 'לפרטים' : 'View Details'}
+                        {t('benefitsPage.viewDetails')}
                       </a>
                     )}
 
@@ -941,7 +948,7 @@ export default function CommunityBenefits() {
                           className="flex items-center justify-center gap-2 w-full sm:flex-1 py-2.5 rounded-md bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors"
                         >
                           <Phone className="w-4 h-4" />
-                          {language === 'he' ? 'חייג' : 'Call'}
+                          {t('benefitsPage.call')}
                         </a>
                         <a
                           href={getWhatsAppUrl(benefit.phone_number)}
@@ -951,7 +958,7 @@ export default function CommunityBenefits() {
                           className="flex items-center justify-center gap-2 w-full sm:flex-1 py-2.5 rounded-md bg-[#25D366] hover:bg-[#20BD5A] text-white font-medium transition-colors"
                         >
                           <MessageCircle className="w-4 h-4" />
-                          {language === 'he' ? 'ווטסאפ' : 'WhatsApp'}
+                          {t('benefitsPage.whatsapp')}
                         </a>
                       </div>
                     )}
@@ -975,20 +982,20 @@ export default function CommunityBenefits() {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>
-                {language === 'he' ? 'עריכת הטבה' : 'Edit Benefit'}
+                {t('benefitsPage.editBenefit')}
               </DialogTitle>
               <DialogDescription>
-                {language === 'he' ? 'עדכון פרטי ההטבה' : 'Update benefit details'}
+                {t('benefitsPage.editBenefitDesc')}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-title">
-                  {language === 'he' ? 'שם ההטבה / נותן השירות' : 'Benefit / Provider Name'}
+                  {t('benefitsPage.benefitName')}
                 </Label>
                 <Input
                   id="edit-title"
-                  placeholder={language === 'he' ? 'לדוגמה: 20% הנחה על שירותי עיצוב' : 'e.g., 20% off design services'}
+                  placeholder={t('benefitsPage.benefitNamePlaceholder')}
                   value={newBenefit.title}
                   onChange={(e) => setNewBenefit({ ...newBenefit, title: e.target.value })}
                 />
@@ -997,11 +1004,11 @@ export default function CommunityBenefits() {
 
               <div className="space-y-2">
                 <Label htmlFor="edit-description">
-                  {language === 'he' ? 'תיאור ההטבה' : 'Benefit Description'}
+                  {t('benefitsPage.benefitDescription')}
                 </Label>
                 <Textarea
                   id="edit-description"
-                  placeholder={language === 'he' ? 'תיאור ההטבה ונותן השירות...' : 'Describe the benefit and provider...'}
+                  placeholder={t('benefitsPage.benefitDescriptionPlaceholder')}
                   className="min-h-[100px]"
                   value={newBenefit.description}
                   onChange={(e) => setNewBenefit({ ...newBenefit, description: e.target.value })}
@@ -1011,19 +1018,19 @@ export default function CommunityBenefits() {
 
               <div className="space-y-2">
                 <Label htmlFor="edit-category">
-                  {language === 'he' ? 'קטגוריה' : 'Category'}
+                  {t('studyRooms.category')}
                 </Label>
                 <Select 
                   value={newBenefit.category} 
                   onValueChange={(v) => setNewBenefit({ ...newBenefit, category: v })}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={language === 'he' ? 'בחירת קטגוריה' : 'Choose a category'} />
+                    <SelectValue placeholder={t('benefitsPage.chooseCategory')} />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map(cat => (
                       <SelectItem key={cat.value} value={cat.value}>
-                        {language === 'he' ? cat.label_he : cat.label_en}
+                        {language === 'he' ? cat.label_he : language === 'es' ? (cat.label_es || cat.label_en) : cat.label_en}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1033,7 +1040,7 @@ export default function CommunityBenefits() {
 
               <div className="space-y-2">
                 <Label>
-                  {language === 'he' ? 'סוג מימוש' : 'Contact Type'}
+                  {t('benefitsPage.contactType')}
                 </Label>
                 <Select 
                   value={contactType} 
@@ -1047,10 +1054,10 @@ export default function CommunityBenefits() {
                   </SelectTrigger>
                   <SelectContent className="bg-background z-50">
                     <SelectItem value="phone">
-                      {language === 'he' ? 'טלפון / ווטסאפ' : 'Phone / WhatsApp'}
+                      {t('benefitsPage.phoneWhatsapp')}
                     </SelectItem>
                     <SelectItem value="link">
-                      {language === 'he' ? 'לינק' : 'Link'}
+                      {t('benefitsPage.link')}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -1059,7 +1066,7 @@ export default function CommunityBenefits() {
               {contactType === 'phone' && (
                 <div className="space-y-2">
                   <Label htmlFor="edit-phone">
-                    {language === 'he' ? 'מספר טלפון' : 'Phone Number'}
+                    {t('profile.phoneNumber')}
                   </Label>
                   <Input
                     id="edit-phone"
@@ -1070,7 +1077,7 @@ export default function CommunityBenefits() {
                   />
                   {errors.phone_number && <p className="text-sm text-destructive">{errors.phone_number}</p>}
                   <p className="text-xs text-muted-foreground">
-                    {language === 'he' ? 'יש להזין מספר בפורמט בינלאומי (ללא + או מקפים)' : 'Enter number in international format (without + or dashes)'}
+                    {t('benefitsPage.phoneFormatHint')}
                   </p>
                 </div>
               )}
@@ -1078,7 +1085,7 @@ export default function CommunityBenefits() {
               {contactType === 'link' && (
                 <div className="space-y-2">
                   <Label htmlFor="edit-link">
-                    {language === 'he' ? 'לינק' : 'Link'}
+                    {t('benefitsPage.link')}
                   </Label>
                   <Input
                     id="edit-link"
@@ -1093,7 +1100,7 @@ export default function CommunityBenefits() {
 
               <div className="space-y-2">
                 <Label htmlFor="edit-logo">
-                  {language === 'he' ? 'לוגו (אופציונלי)' : 'Logo (optional)'}
+                  {t('benefitsPage.logoOptional')}
                 </Label>
                 <Input
                   id="edit-logo"
@@ -1112,10 +1119,10 @@ export default function CommunityBenefits() {
                 {isUpdating ? (
                   <>
                     <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                    {language === 'he' ? 'מעדכן...' : 'Updating...'}
+                    {t('benefitsPage.updating')}
                   </>
                 ) : (
-                  language === 'he' ? 'עדכון הטבה' : 'Update Benefit'
+                  t('benefitsPage.updateBenefit')
                 )}
               </Button>
             </div>
@@ -1127,10 +1134,10 @@ export default function CommunityBenefits() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>
-                {language === 'he' ? 'סטטיסטיקת לחיצות' : 'Click Statistics'}
+                {t('benefitsPage.clickStatistics')}
               </DialogTitle>
               <DialogDescription>
-                {selectedBenefitForAnalytics?.title} - {language === 'he' ? '30 ימים אחרונים' : 'Last 30 days'}
+                {selectedBenefitForAnalytics?.title} - {t('benefitsPage.last30Days')}
               </DialogDescription>
             </DialogHeader>
             <div className="pt-4">
@@ -1170,17 +1177,14 @@ export default function CommunityBenefits() {
                         dataKey="clicks" 
                         fill="hsl(var(--primary))" 
                         radius={[4, 4, 0, 0]}
-                        name={language === 'he' ? 'לחיצות' : 'Clicks'}
+                        name={t('benefitsPage.clicks')}
                       />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               )}
               <div className="mt-4 text-center text-sm text-muted-foreground">
-                {language === 'he' 
-                  ? `סה"כ לחיצות: ${clicksData.reduce((sum, d) => sum + d.clicks, 0)}`
-                  : `Total clicks: ${clicksData.reduce((sum, d) => sum + d.clicks, 0)}`
-                }
+                {t('benefitsPage.totalClicks').replace('{count}', String(clicksData.reduce((sum, d) => sum + d.clicks, 0)))}
               </div>
             </div>
           </DialogContent>
@@ -1191,23 +1195,23 @@ export default function CommunityBenefits() {
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>
-                {language === 'he' ? 'ניהול קטגוריות' : 'Manage Categories'}
+                {t('benefitsPage.manageCategories')}
               </DialogTitle>
               <DialogDescription>
-                {language === 'he' ? 'הוספה, עריכה או מחיקה של קטגוריות הטבות' : 'Add, edit or delete benefit categories'}
+                {t('benefitsPage.manageCategoriesDesc')}
               </DialogDescription>
             </DialogHeader>
             
             <div className="space-y-4 pt-4">
               {/* Existing Categories */}
               <div className="space-y-2">
-                <Label>{language === 'he' ? 'קטגוריות קיימות' : 'Existing Categories'}</Label>
+                <Label>{t('benefitsPage.existingCategories')}</Label>
                 <div className="space-y-2 max-h-[200px] overflow-y-auto">
                   {categories.map(cat => (
                     <div key={cat.id} className="flex items-center justify-between p-2 rounded-md bg-muted/50">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className={getCategoryColor(cat.value)}>
-                          {language === 'he' ? cat.label_he : cat.label_en}
+                          {language === 'he' ? cat.label_he : language === 'es' ? (cat.label_es || cat.label_en) : cat.label_en}
                         </Badge>
                         <span className="text-xs text-muted-foreground">({cat.value})</span>
                       </div>
@@ -1229,23 +1233,21 @@ export default function CommunityBenefits() {
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>
-                              {language === 'he' ? 'מחיקת קטגוריה' : 'Delete Category'}
+                              {t('benefitsPage.deleteCategory')}
                             </AlertDialogTitle>
                             <AlertDialogDescription>
-                              {language === 'he' 
-                                ? 'האם לאשר? הטבות עם קטגוריה זו לא ימחקו אך הקטגוריה לא תוצג.'
-                                : 'Are you sure? Benefits with this category will not be deleted but the category will not be displayed.'}
+                              {t('benefitsPage.deleteCategoryConfirm')}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter className="flex-row-reverse gap-2">
                             <AlertDialogCancel>
-                              {language === 'he' ? 'ביטול' : 'Cancel'}
+                              {t('common.cancel')}
                             </AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => handleDeleteCategory(cat.id)}
                               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
-                              {language === 'he' ? 'מחיקה' : 'Delete'}
+                              {t('common.delete')}
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
@@ -1257,11 +1259,11 @@ export default function CommunityBenefits() {
 
               {/* Add New Category */}
               <div className="border-t pt-4 space-y-3">
-                <Label>{language === 'he' ? 'הוספת קטגוריה חדשה' : 'Add New Category'}</Label>
+                <Label>{t('benefitsPage.addNewCategory')}</Label>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">{language === 'he' ? 'מזהה (באנגלית)' : 'ID (English)'}</Label>
+                    <Label className="text-xs text-muted-foreground">{t('benefitsPage.idEnglish')}</Label>
                     <Input
                       placeholder="e.g., real_estate"
                       value={newCategory.value}
@@ -1269,7 +1271,7 @@ export default function CommunityBenefits() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">{language === 'he' ? 'צבע' : 'Color'}</Label>
+                    <Label className="text-xs text-muted-foreground">{t('benefitsPage.color')}</Label>
                     <Select 
                       value={newCategory.color} 
                       onValueChange={(v) => setNewCategory({ ...newCategory, color: v })}
@@ -1282,7 +1284,7 @@ export default function CommunityBenefits() {
                           <SelectItem key={color.value} value={color.value}>
                             <div className="flex items-center gap-2">
                               <div className={`w-3 h-3 rounded-full bg-${color.value}-500`} />
-                              {language === 'he' ? color.labelHe : color.labelEn}
+                              {language === 'he' ? color.labelHe : language === 'es' ? color.labelEs : color.labelEn}
                             </div>
                           </SelectItem>
                         ))}
@@ -1293,15 +1295,15 @@ export default function CommunityBenefits() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">{language === 'he' ? 'שם בעברית' : 'Hebrew Name'}</Label>
+                    <Label className="text-xs text-muted-foreground">{t('benefitsPage.hebrewName')}</Label>
                     <Input
-                      placeholder="נדל״ן"
+                      placeholder={t('benefitsPage.hebrewNamePlaceholder')}
                       value={newCategory.label_he}
                       onChange={(e) => setNewCategory({ ...newCategory, label_he: e.target.value })}
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">{language === 'he' ? 'שם באנגלית' : 'English Name'}</Label>
+                    <Label className="text-xs text-muted-foreground">{t('benefitsPage.englishName')}</Label>
                     <Input
                       placeholder="Real Estate"
                       value={newCategory.label_en}
@@ -1318,12 +1320,12 @@ export default function CommunityBenefits() {
                   {isAddingCategory ? (
                     <>
                       <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                      {language === 'he' ? 'בהוספה...' : 'Adding...'}
+                      {t('benefitsPage.adding')}
                     </>
                   ) : (
                     <>
                       <Plus className="w-4 h-4 mx-2" />
-                      {language === 'he' ? 'הוספת קטגוריה' : 'Add Category'}
+                      {t('benefitsPage.addCategory')}
                     </>
                   )}
                 </Button>

@@ -42,132 +42,132 @@ body {
 
 @layer base {
   :root {
-    --background: 280 30% 99%;
-    --foreground: 263 25% 12%;
+    /* Warm Terracotta — Hebreo y Adaptación brand */
+    --background: 46 77% 93%;          /* #FBF4DE warm cream */
+    --foreground: 24 47% 11%;          /* #2A1A0F deep brown */
 
-    --card: 0 0% 100%;
-    --card-foreground: 263 25% 12%;
+    --card: 45 70% 96%;                /* slightly lighter than bg */
+    --card-foreground: 24 47% 11%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 263 25% 12%;
+    --popover: 45 70% 96%;
+    --popover-foreground: 24 47% 11%;
 
-    --primary: 263 70% 55%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 18 65% 47%;             /* #C4582A terracotta */
+    --primary-foreground: 46 77% 95%;  /* near-cream */
 
-    --secondary: 280 20% 96%;
-    --secondary-foreground: 263 25% 15%;
+    --secondary: 40 69% 87%;           /* #F5E6C8 sandy tan */
+    --secondary-foreground: 24 47% 11%;
 
-    --muted: 280 20% 96%;
-    --muted-foreground: 263 10% 45%;
+    --muted: 40 50% 90%;
+    --muted-foreground: 24 20% 35%;
 
-    --accent: 280 75% 60%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 226 71% 40%;             /* #1E40AF cobalt blue */
+    --accent-foreground: 46 77% 95%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 45%;
+    --success: 142 55% 38%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
+    --warning: 32 90% 48%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 280 15% 90%;
-    --input: 280 15% 90%;
-    --ring: 263 70% 55%;
+    --border: 40 35% 80%;
+    --input: 40 35% 80%;
+    --ring: 18 65% 47%;
 
     --radius: 0.75rem;
 
-    /* Premium tokens — purple-based brand */
-    --gradient-primary: linear-gradient(135deg, hsl(263 70% 55%), hsl(280 75% 60%));
-    --gradient-accent: linear-gradient(135deg, hsl(280 75% 60%), hsl(295 70% 65%));
-    --gradient-subtle: linear-gradient(180deg, hsl(280 30% 99%), hsl(280 20% 97%));
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(280 20% 99%));
-    --gradient-hero: linear-gradient(135deg, hsl(263 70% 55%) 0%, hsl(280 75% 60%) 50%, hsl(295 70% 65%) 100%);
+    /* Premium tokens — Warm Terracotta brand */
+    --gradient-primary: linear-gradient(135deg, hsl(18 65% 47%), hsl(14 60% 38%));
+    --gradient-accent: linear-gradient(135deg, hsl(18 65% 47%), hsl(34 75% 55%));
+    --gradient-subtle: linear-gradient(180deg, hsl(46 77% 93%), hsl(40 69% 89%));
+    --gradient-card: linear-gradient(145deg, hsl(45 70% 96%), hsl(40 60% 92%));
+    --gradient-hero: linear-gradient(135deg, hsl(18 65% 47%) 0%, hsl(14 55% 38%) 60%, hsl(226 71% 40%) 100%);
 
-    --shadow-xs: 0 1px 2px hsl(263 30% 20% / 0.04);
-    --shadow-sm: 0 1px 3px hsl(263 30% 20% / 0.06), 0 1px 2px hsl(263 30% 20% / 0.04);
-    --shadow-md: 0 4px 12px -2px hsl(263 30% 20% / 0.08), 0 2px 6px -2px hsl(263 30% 20% / 0.05);
-    --shadow-lg: 0 12px 24px -6px hsl(263 30% 20% / 0.10), 0 4px 10px -4px hsl(263 30% 20% / 0.06);
-    --shadow-xl: 0 20px 40px -8px hsl(263 30% 20% / 0.12), 0 8px 16px -6px hsl(263 30% 20% / 0.06);
-    --shadow-glow: 0 0 24px hsl(263 70% 55% / 0.25);
-    --shadow-glow-lg: 0 0 40px hsl(263 70% 55% / 0.35);
+    --shadow-xs: 0 1px 2px hsl(24 47% 11% / 0.04);
+    --shadow-sm: 0 1px 3px hsl(24 47% 11% / 0.06), 0 1px 2px hsl(24 47% 11% / 0.04);
+    --shadow-md: 0 4px 12px -2px hsl(24 47% 11% / 0.08), 0 2px 6px -2px hsl(24 47% 11% / 0.05);
+    --shadow-lg: 0 12px 24px -6px hsl(24 47% 11% / 0.10), 0 4px 10px -4px hsl(24 47% 11% / 0.06);
+    --shadow-xl: 0 20px 40px -8px hsl(24 47% 11% / 0.12), 0 8px 16px -6px hsl(24 47% 11% / 0.06);
+    --shadow-glow: 0 0 24px hsl(18 65% 47% / 0.25);
+    --shadow-glow-lg: 0 0 40px hsl(18 65% 47% / 0.35);
 
-    --sidebar-background: 263 65% 18%;
-    --sidebar-foreground: 280 20% 95%;
-    --sidebar-primary: 280 75% 65%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 263 50% 25%;
-    --sidebar-accent-foreground: 280 20% 95%;
-    --sidebar-border: 263 40% 28%;
-    --sidebar-ring: 280 75% 65%;
+    --sidebar-background: 24 47% 11%;        /* deep brown */
+    --sidebar-foreground: 46 77% 93%;        /* cream */
+    --sidebar-primary: 18 65% 55%;           /* terracotta highlight */
+    --sidebar-primary-foreground: 46 77% 95%;
+    --sidebar-accent: 24 35% 18%;            /* slightly lighter brown */
+    --sidebar-accent-foreground: 46 77% 93%;
+    --sidebar-border: 24 25% 22%;
+    --sidebar-ring: 18 65% 55%;
   }
 
   .dark {
-    --background: 263 30% 6%;
-    --foreground: 280 15% 96%;
+    --background: 24 25% 8%;             /* very dark brown */
+    --foreground: 46 50% 92%;            /* warm cream */
 
-    --card: 263 25% 10%;
-    --card-foreground: 280 15% 96%;
+    --card: 24 22% 11%;
+    --card-foreground: 46 50% 92%;
 
-    --popover: 263 25% 11%;
-    --popover-foreground: 280 15% 96%;
+    --popover: 24 22% 11%;
+    --popover-foreground: 46 50% 92%;
 
-    --primary: 280 75% 65%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 18 70% 58%;               /* brighter terracotta for dark bg */
+    --primary-foreground: 24 30% 8%;
 
-    --secondary: 263 20% 16%;
-    --secondary-foreground: 280 15% 94%;
+    --secondary: 24 20% 18%;
+    --secondary-foreground: 46 50% 92%;
 
-    --muted: 263 20% 14%;
-    --muted-foreground: 280 8% 65%;
+    --muted: 24 18% 16%;
+    --muted-foreground: 40 15% 65%;
 
-    --accent: 280 75% 65%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 226 70% 60%;               /* lighter cobalt on dark */
+    --accent-foreground: 24 30% 8%;
 
-    --destructive: 0 80% 60%;
+    --destructive: 0 70% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 50%;
+    --success: 142 60% 48%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 55%;
+    --warning: 32 90% 55%;
     --warning-foreground: 0 0% 100%;
 
-    --border: 263 20% 20%;
-    --input: 263 20% 20%;
-    --ring: 280 75% 65%;
+    --border: 24 18% 22%;
+    --input: 24 18% 22%;
+    --ring: 18 70% 58%;
 
     /* Dark mode gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(280 75% 65%), hsl(295 70% 70%));
-    --gradient-accent: linear-gradient(135deg, hsl(280 75% 65%), hsl(295 70% 70%));
-    --gradient-subtle: linear-gradient(180deg, hsl(263 30% 6%), hsl(263 25% 8%));
-    --gradient-card: linear-gradient(145deg, hsl(263 25% 10%), hsl(263 22% 12%));
-    --gradient-hero: linear-gradient(135deg, hsl(263 50% 25%) 0%, hsl(280 60% 35%) 50%, hsl(295 55% 40%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(18 70% 58%), hsl(14 60% 45%));
+    --gradient-accent: linear-gradient(135deg, hsl(18 70% 58%), hsl(34 75% 60%));
+    --gradient-subtle: linear-gradient(180deg, hsl(24 25% 8%), hsl(24 22% 10%));
+    --gradient-card: linear-gradient(145deg, hsl(24 22% 11%), hsl(24 20% 13%));
+    --gradient-hero: linear-gradient(135deg, hsl(18 55% 30%) 0%, hsl(14 50% 25%) 50%, hsl(226 60% 35%) 100%);
 
     --shadow-xs: 0 1px 2px hsl(0 0% 0% / 0.20);
     --shadow-sm: 0 1px 3px hsl(0 0% 0% / 0.30), 0 1px 2px hsl(0 0% 0% / 0.20);
     --shadow-md: 0 4px 12px -2px hsl(0 0% 0% / 0.35), 0 2px 6px -2px hsl(0 0% 0% / 0.25);
     --shadow-lg: 0 12px 24px -6px hsl(0 0% 0% / 0.40), 0 4px 10px -4px hsl(0 0% 0% / 0.30);
     --shadow-xl: 0 20px 40px -8px hsl(0 0% 0% / 0.50), 0 8px 16px -6px hsl(0 0% 0% / 0.35);
-    --shadow-glow: 0 0 24px hsl(280 75% 65% / 0.35);
-    --shadow-glow-lg: 0 0 40px hsl(280 75% 65% / 0.45);
+    --shadow-glow: 0 0 24px hsl(18 70% 58% / 0.35);
+    --shadow-glow-lg: 0 0 40px hsl(18 70% 58% / 0.45);
 
-    --sidebar-background: 263 35% 9%;
-    --sidebar-foreground: 280 15% 94%;
-    --sidebar-primary: 280 75% 65%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 263 25% 16%;
-    --sidebar-accent-foreground: 280 15% 94%;
-    --sidebar-border: 263 22% 18%;
-    --sidebar-ring: 280 75% 65%;
+    --sidebar-background: 24 30% 6%;
+    --sidebar-foreground: 46 50% 92%;
+    --sidebar-primary: 18 70% 58%;
+    --sidebar-primary-foreground: 24 30% 8%;
+    --sidebar-accent: 24 22% 14%;
+    --sidebar-accent-foreground: 46 50% 92%;
+    --sidebar-border: 24 20% 18%;
+    --sidebar-ring: 18 70% 58%;
   }
 }
 
 @layer base {
   html {
     color-scheme: light dark;
-    direction: rtl;
   }
 
   * {
@@ -177,10 +177,16 @@ body {
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Heebo', system-ui, sans-serif;
-    direction: rtl;
-    text-align: right;
     /* Improve mobile tap responsiveness */
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Direction-aware base: RTL applies only when html[dir="rtl"] (Hebrew). */
+  html[dir="rtl"] body {
+    text-align: right;
+  }
+  html[dir="ltr"] body {
+    text-align: left;
   }
 
   /* Premium focus ring for keyboard navigation (a11y) */
@@ -207,30 +213,34 @@ body {
 
   #root {
     width: 100%;
-    direction: rtl;
+  }
+  html[dir="rtl"] #root {
     text-align: right;
   }
+  html[dir="ltr"] #root {
+    text-align: left;
+  }
 
-  /* Fix mixed Hebrew/English text alignment */
+  /* Fix mixed-script text alignment */
   p, span, div, h1, h2, h3, h4, h5, h6, label, li, td, th {
     unicode-bidi: plaintext;
     text-align: inherit;
   }
 
-  /* Inputs should maintain RTL but allow LTR content */
-  input, textarea {
+  /* Inputs inherit direction from html — RTL for Hebrew, LTR for Spanish/English */
+  html[dir="rtl"] input,
+  html[dir="rtl"] textarea {
     text-align: right;
-    direction: rtl;
   }
-
-  input[type="email"], input[type="url"], input[type="tel"] {
-    direction: ltr;
+  html[dir="ltr"] input,
+  html[dir="ltr"] textarea {
     text-align: left;
   }
 
-  /* Tables maintain structure */
-  table {
-    direction: rtl;
+  /* Email/URL/tel inputs are always LTR regardless of UI language */
+  input[type="email"], input[type="url"], input[type="tel"] {
+    direction: ltr;
+    text-align: left;
   }
 
   /* Buttons text alignment */

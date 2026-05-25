@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Check, X, ChevronUp, Sparkles, Trophy } from 'lucide-react';
+import { Check, X, ChevronUp, Sparkles } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useOnboarding, type OnboardingStep } from '@/hooks/useOnboarding';
 import { useTenant } from '@/contexts/TenantContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 
 const STEP_LINKS: Record<OnboardingStep, string> = {
@@ -28,19 +28,20 @@ export function OnboardingChecklist() {
     dismissChecklist,
   } = useOnboarding();
   const { tenantSettings } = useTenant();
-  const assistantName = tenantSettings?.ai_assistant_name?.trim() || 'ג\u0027ייסון';
-  // Default collapsed on mobile to avoid taking up too much screen real estate.
+  const { t } = useLanguage();
+  const assistantName = tenantSettings?.ai_assistant_name?.trim() || 'Aria';
   const [expanded, setExpanded] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 768 : true
   );
 
-  // Resolve dynamic step labels (currently only the assistant chat step needs the assistant name)
   const getStepLabel = (step: typeof steps[number]): string => {
-    if (step.id === 'aria_chat') return `ניסיון של ${assistantName}`;
-    return step.label;
+    const base = t(step.labelKey);
+    if (step.id === 'aria_chat') return base.replace('{name}', assistantName);
+    return base;
   };
 
-  // Don't show until onboarding flow is finished, until dismissed, or if all done
+  const getStepDescription = (step: typeof steps[number]): string => t(step.descriptionKey);
+
   if (!state.completed) return null;
   if (state.dismissedChecklist) return null;
   if (allDone) return null;
@@ -53,22 +54,21 @@ export function OnboardingChecklist() {
       className="fixed bottom-6 start-6 z-[60] max-w-[calc(100vw-3rem)] w-[340px]"
     >
       <Card className="overflow-hidden border-border/60 shadow-2xl shadow-primary/10 backdrop-blur-xl bg-card/95">
-        {/* Header */}
         <div className="w-full flex items-center gap-3 p-4 hover:bg-muted/40 transition-colors">
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            aria-label={expanded ? 'כווץ את רשימת המסע' : 'הרחב את רשימת המסע'}
-            className="flex flex-1 items-center gap-3 text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
+            aria-label={expanded ? t('onboardingChecklist.collapseAria') : t('onboardingChecklist.expandAria')}
+            className="flex flex-1 items-center gap-3 text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md"
           >
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md shadow-primary/20 flex-shrink-0">
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold tracking-tight">המסע שלך</p>
+              <p className="text-sm font-semibold tracking-tight">{t('onboardingChecklist.title')}</p>
               <p className="text-xs text-muted-foreground">
-                {completedCount} מתוך {totalSteps} הושלמו
+                {t('onboardingChecklist.progress').replace('{done}', String(completedCount)).replace('{total}', String(totalSteps))}
               </p>
             </div>
             <motion.div animate={{ rotate: expanded ? 0 : 180 }} transition={{ duration: 0.2 }}>
@@ -79,18 +79,16 @@ export function OnboardingChecklist() {
             type="button"
             onClick={dismissChecklist}
             className="w-7 h-7 rounded-md hover:bg-muted flex items-center justify-center transition-colors flex-shrink-0"
-            aria-label="סגור"
+            aria-label={t('common.close')}
           >
             <X className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
         </div>
 
-        {/* Progress bar */}
         <div className="px-4 -mt-1 pb-3">
           <Progress value={progress} className="h-1.5" />
         </div>
 
-        {/* Steps */}
         <AnimatePresence>
           {expanded && (
             <motion.div
@@ -109,9 +107,7 @@ export function OnboardingChecklist() {
                       to={STEP_LINKS[step.id]}
                       className={cn(
                         'flex items-center gap-3 p-2.5 rounded-lg transition-colors group',
-                        done
-                          ? 'opacity-60'
-                          : 'hover:bg-primary/5'
+                        done ? 'opacity-60' : 'hover:bg-primary/5'
                       )}
                     >
                       <div
@@ -138,7 +134,7 @@ export function OnboardingChecklist() {
                           {getStepLabel(step)}
                         </p>
                         {!done && (
-                          <p className="text-xs text-muted-foreground truncate">{step.description}</p>
+                          <p className="text-xs text-muted-foreground truncate">{getStepDescription(step)}</p>
                         )}
                       </div>
                     </Link>

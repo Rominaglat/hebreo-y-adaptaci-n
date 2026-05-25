@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { MicOff, VideoOff, Monitor, Hand, Crown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface VideoTileProps {
   stream: MediaStream | null;
@@ -27,6 +28,7 @@ const VideoTile = ({
   isHandRaised = false,
   isHost = false,
 }: VideoTileProps) => {
+  const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Callback ref so the stream is attached the moment the <video> element
@@ -101,13 +103,13 @@ const VideoTile = ({
         {isHandRaised && (
           <div className="px-2.5 py-1.5 rounded-full bg-amber-400/95 text-amber-950 flex items-center gap-1.5 shadow-lg animate-bounce">
             <Hand className="w-4 h-4" />
-            <span className="text-xs font-semibold">יד מורמת</span>
+            <span className="text-xs font-semibold">{t('videoTile.handRaised')}</span>
           </div>
         )}
         {isScreenSharing && (
           <div className="px-3 py-1.5 rounded-full glass flex items-center gap-2">
             <Monitor className="w-4 h-4 text-primary" />
-            <span className="text-xs font-medium text-foreground">שיתוף מסך</span>
+            <span className="text-xs font-medium text-foreground">{t('videoTile.screenShare')}</span>
           </div>
         )}
       </div>
@@ -116,7 +118,7 @@ const VideoTile = ({
       {isHost && (
         <div className="absolute top-3 left-3 px-2 py-1 rounded-full glass flex items-center gap-1.5">
           <Crown className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-[11px] font-medium text-foreground">מארח</span>
+          <span className="text-[11px] font-medium text-foreground">{t('videoTile.host')}</span>
         </div>
       )}
 
@@ -124,7 +126,7 @@ const VideoTile = ({
       <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
         <div className="flex items-center gap-2 glass px-3 py-1.5 rounded-full">
           <span className="text-sm font-medium text-foreground">
-            {name} {isLocal && '(את/ה)'}
+            {name} {isLocal && `(${t('videoTile.you')})`}
           </span>
           {isMuted && <MicOff className="w-3 h-3 text-destructive" />}
           {!isVideoOn && !isScreenSharing && <VideoOff className="w-3 h-3 text-muted-foreground" />}

@@ -26,7 +26,7 @@ interface TenantSettingsData {
 }
 
 export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -84,14 +84,14 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
       if (error) throw error;
 
       toast({
-        title: language === 'he' ? 'הגדרות נשמרו' : 'Settings Saved',
-        description: language === 'he' ? 'הגדרות המפתחים עודכנו בהצלחה' : 'Developer settings updated successfully',
+        title: t('platformSettings.settingsSaved'),
+        description: t('developerSettings.settingsUpdated'),
       });
     } catch (error) {
       console.error('Error saving developer settings:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'שגיאה בשמירת ההגדרות' : 'Error saving settings',
+        title: t('common.error'),
+        description: t('platformSettings.errorSaving'),
         variant: 'destructive',
       });
     } finally {
@@ -122,14 +122,14 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
       setSettings(prev => prev ? { ...prev, api_key: newApiKey, api_key_created_at: new Date().toISOString() } : null);
       
       toast({
-        title: language === 'he' ? 'מפתח חדש נוצר' : 'New Key Generated',
-        description: language === 'he' ? 'מפתח ה-API החדש נוצר בהצלחה' : 'New API key generated successfully',
+        title: t('developerSettings.newKeyGenerated'),
+        description: t('developerSettings.newKeyGeneratedDesc'),
       });
     } catch (error) {
       console.error('Error regenerating API key:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'שגיאה ביצירת מפתח חדש' : 'Error generating new key',
+        title: t('common.error'),
+        description: t('developerSettings.errorGeneratingKey'),
         variant: 'destructive',
       });
     } finally {
@@ -143,8 +143,8 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       toast({
-        title: language === 'he' ? 'הועתק' : 'Copied',
-        description: language === 'he' ? 'הועתק ללוח' : 'Copied to clipboard',
+        title: t('developerSettings.copied'),
+        description: t('developerSettings.copiedToClipboard'),
       });
     } catch (error) {
       console.error('Failed to copy:', error);
@@ -166,7 +166,7 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
       <Card>
         <CardContent className="flex items-center justify-center h-32">
           <p className="text-muted-foreground">
-            {language === 'he' ? 'לא נמצאו הגדרות לארגון זה' : 'No settings found for this organization'}
+            {t('developerSettings.noSettingsFound')}
           </p>
         </CardContent>
       </Card>
@@ -183,12 +183,10 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Code className="w-5 h-5" />
-            {language === 'he' ? 'הגדרות מפתחים' : 'Developer Settings'}
+            {t('developerSettings.title')}
           </CardTitle>
           <CardDescription>
-            {language === 'he' 
-              ? 'הגדרות API ו-Webhook לאינטגרציות חיצוניות' 
-              : 'API and Webhook settings for external integrations'}
+            {t('developerSettings.subtitle')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -197,13 +195,11 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
           <div className="flex items-center gap-2">
             <Key className="w-4 h-4 text-muted-foreground" />
             <Label className="text-base font-medium">
-              {language === 'he' ? 'מפתח API' : 'API Key'}
+              {t('developerSettings.apiKey')}
             </Label>
           </div>
           <p className="text-sm text-muted-foreground">
-            {language === 'he' 
-              ? 'יש להשתמש במפתח זה לאימות בקשות API ולשמור אותו במקום בטוח.'
-              : 'Use this key to authenticate API requests. Keep it secure.'}
+            {t('developerSettings.apiKeyDesc')}
           </p>
           
           <div className="flex items-center gap-2">
@@ -242,8 +238,8 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
           
           {settings?.api_key_created_at && (
             <p className="text-xs text-muted-foreground">
-              {language === 'he' ? 'נוצר ב: ' : 'Created: '}
-              {new Date(settings.api_key_created_at).toLocaleDateString(language === 'he' ? 'he-IL' : 'en-US')}
+              {t('developerSettings.createdAt')}
+              {new Date(settings.api_key_created_at).toLocaleDateString(language === 'he' ? 'he-IL' : language === 'es' ? 'es-ES' : 'en-US')}
             </p>
           )}
         </div>
@@ -255,18 +251,16 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
           <div className="flex items-center gap-2">
             <Webhook className="w-4 h-4 text-muted-foreground" />
             <Label className="text-base font-medium">
-              {language === 'he' ? 'Webhook לאירועי Audit' : 'Audit Events Webhook'}
+              {t('developerSettings.webhookLabel')}
             </Label>
           </div>
           <p className="text-sm text-muted-foreground">
-            {language === 'he' 
-              ? 'קבל עדכונים בזמן אמת על כל אירועי הפעילות במערכת.'
-              : 'Receive real-time updates about all activity events in the system.'}
+            {t('developerSettings.webhookDesc')}
           </p>
 
           <div className="flex items-center justify-between">
             <Label htmlFor="webhook-enabled">
-              {language === 'he' ? 'הפעל Webhook' : 'Enable Webhook'}
+              {t('developerSettings.enableWebhook')}
             </Label>
             <Switch
               id="webhook-enabled"
@@ -277,7 +271,7 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
 
           <div className="space-y-2">
             <Label htmlFor="webhook-url">
-              {language === 'he' ? 'כתובת Webhook' : 'Webhook URL'}
+              {t('developerSettings.webhookUrl')}
             </Label>
             <Input
               id="webhook-url"
@@ -295,7 +289,7 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
             ) : (
               <Save className="w-4 h-4 mx-2" />
             )}
-            {language === 'he' ? 'שמירת הגדרות' : 'Save Settings'}
+            {t('platformSettings.saveSettings')}
           </Button>
         </div>
 
@@ -306,7 +300,7 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-muted-foreground" />
             <Label className="text-base font-medium">
-              {language === 'he' ? 'תיעוד API' : 'API Documentation'}
+              {t('developerSettings.apiDocs')}
             </Label>
           </div>
 
@@ -314,14 +308,12 @@ export function DeveloperSettings({ tenantId }: DeveloperSettingsProps) {
             {/* API Endpoint */}
             <AccordionItem value="api-endpoint">
               <AccordionTrigger>
-                {language === 'he' ? 'כתובת ה-API' : 'API Endpoint'}
+                {t('developerSettings.apiEndpoint')}
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    {language === 'he' 
-                      ? 'יש לשלוח בקשות POST לכתובת הבאה:'
-                      : 'Send POST requests to the following URL:'}
+                    {t('developerSettings.sendPost')}
                   </p>
                   <pre className="bg-muted p-4 rounded-lg text-xs overflow-x-auto" dir="ltr">
 {`POST ${supabaseUrl}/functions/v1/external-api
@@ -343,13 +335,13 @@ Body:
             {/* Users API */}
             <AccordionItem value="users-api">
               <AccordionTrigger>
-                {language === 'he' ? 'משתמשים (Users)' : 'Users API'}
+                {t('developerSettings.usersApi')}
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 text-sm">
                   <div className="space-y-2">
                     <h4 className="font-medium">users.list</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת רשימת משתמשים' : 'Get list of users'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.usersList')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "users.list", 
@@ -362,7 +354,7 @@ Body:
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">users.get</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת פרטי משתמש' : 'Get user details'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.usersGet')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "users.get", 
@@ -375,79 +367,79 @@ Body:
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">users.create</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'יצירת משתמש חדש עם אפשרות להגדיר קורסים' : 'Create new user with optional course enrollments'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.usersCreate')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
-{`{ 
-  "action": "users.create", 
-  "data": { 
+{`{
+  "action": "users.create",
+  "data": {
     "email": "user@example.com",
     "password": "securePassword123",
-    "full_name": "ישראל ישראלי",
+    "full_name": "${t('developerSettings.sampleFullName')}",
     "phone": "0501234567",
     "role": "student",
     "courses": "all"
-  } 
+  }
 }
 
 // Or with specific courses:
-{ 
-  "action": "users.create", 
-  "data": { 
+{
+  "action": "users.create",
+  "data": {
     "email": "user@example.com",
     "password": "securePassword123",
-    "full_name": "ישראל ישראלי",
+    "full_name": "${t('developerSettings.sampleFullName')}",
     "phone": "0501234567",
     "role": "student",
     "courses": [
       "course-uuid-1",
       "course-uuid-2"
     ]
-  } 
+  }
 }`}
                     </pre>
                     <div className="bg-muted/50 p-3 rounded-lg text-xs mt-2">
-                      <p className="font-medium mb-1">{language === 'he' ? 'פרמטרים:' : 'Parameters:'}</p>
+                      <p className="font-medium mb-1">{t('developerSettings.parameters')}</p>
                       <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                        <li><code>email</code> - {language === 'he' ? 'כתובת אימייל (חובה)' : 'Email address (required)'}</li>
-                        <li><code>password</code> - {language === 'he' ? 'סיסמה, מינימום 6 תווים (חובה)' : 'Password, minimum 6 characters (required)'}</li>
-                        <li><code>full_name</code> - {language === 'he' ? 'שם מלא' : 'Full name'}</li>
-                        <li><code>phone</code> - {language === 'he' ? 'מספר טלפון' : 'Phone number'}</li>
-                        <li><code>role</code> - {language === 'he' ? 'תפקיד: student, instructor, admin' : 'Role: student, instructor, admin'}</li>
-                        <li><code>courses</code> - {language === 'he' ? '"all" לכל הקורסים או מערך של מזהי קורסים' : '"all" for all courses or array of course IDs'}</li>
+                        <li><code>email</code> - {t('developerSettings.paramEmail')}</li>
+                        <li><code>password</code> - {t('developerSettings.paramPassword')}</li>
+                        <li><code>full_name</code> - {t('developerSettings.paramFullName')}</li>
+                        <li><code>phone</code> - {t('developerSettings.paramPhone')}</li>
+                        <li><code>role</code> - {t('developerSettings.paramRole')}</li>
+                        <li><code>courses</code> - {t('developerSettings.paramCourses')}</li>
                       </ul>
                     </div>
                   </div>
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">users.search</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'חיפוש משתמשים לפי פרמטרים' : 'Search users by parameters'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.usersSearch')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
-{`{ 
-  "action": "users.search", 
-  "data": { 
+{`{
+  "action": "users.search",
+  "data": {
     "email": "user@example.com",
-    "full_name": "ישראל",
+    "full_name": "${t('developerSettings.sampleSearchName')}",
     "phone": "050",
     "limit": 50,
     "offset": 0
-  } 
+  }
 }`}
                     </pre>
                     <div className="bg-muted/50 p-3 rounded-lg text-xs mt-2">
-                      <p className="font-medium mb-1">{language === 'he' ? 'פרמטרים (כולם אופציונליים):' : 'Parameters (all optional):'}</p>
+                      <p className="font-medium mb-1">{t('developerSettings.parametersOptional')}</p>
                       <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                        <li><code>email</code> - {language === 'he' ? 'חיפוש לפי אימייל (חלקי)' : 'Search by email (partial match)'}</li>
-                        <li><code>full_name</code> - {language === 'he' ? 'חיפוש לפי שם (חלקי)' : 'Search by name (partial match)'}</li>
-                        <li><code>phone</code> - {language === 'he' ? 'חיפוש לפי טלפון (חלקי)' : 'Search by phone (partial match)'}</li>
-                        <li><code>limit</code> - {language === 'he' ? 'מספר תוצאות מקסימלי (ברירת מחדל: 100)' : 'Maximum results (default: 100)'}</li>
-                        <li><code>offset</code> - {language === 'he' ? 'דילוג על תוצאות (לעימוד)' : 'Skip results (for pagination)'}</li>
+                        <li><code>email</code> - {t('developerSettings.paramSearchEmail')}</li>
+                        <li><code>full_name</code> - {t('developerSettings.paramSearchName')}</li>
+                        <li><code>phone</code> - {t('developerSettings.paramSearchPhone')}</li>
+                        <li><code>limit</code> - {t('developerSettings.paramLimit')}</li>
+                        <li><code>offset</code> - {t('developerSettings.paramOffset')}</li>
                       </ul>
                     </div>
                   </div>
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">users.getRoles</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת תפקידי משתמש' : 'Get user roles'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.usersGetRoles')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "users.getRoles", 
@@ -460,7 +452,7 @@ Body:
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">users.setRole</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'עדכון תפקיד משתמש' : 'Update user role'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.usersSetRole')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "users.setRole", 
@@ -474,7 +466,7 @@ Body:
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">users.delete</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'מחיקת משתמש' : 'Delete user'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.usersDelete')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "users.delete", 
@@ -491,13 +483,13 @@ Body:
             {/* Courses API */}
             <AccordionItem value="courses-api">
               <AccordionTrigger>
-                {language === 'he' ? 'קורסים (Courses)' : 'Courses API'}
+                {t('developerSettings.coursesApi')}
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 text-sm">
                   <div className="space-y-2">
                     <h4 className="font-medium">courses.list</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת רשימת קורסים' : 'Get list of courses'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.coursesList')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ "action": "courses.list" }`}
                     </pre>
@@ -505,7 +497,7 @@ Body:
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">courses.get</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת פרטי קורס כולל מודולים ושיעורים' : 'Get course details with modules and lessons'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.coursesGet')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "courses.get", 
@@ -518,39 +510,39 @@ Body:
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">courses.create</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'יצירת קורס חדש' : 'Create new course'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.coursesCreate')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
-{`{ 
-  "action": "courses.create", 
-  "data": { 
-    "title": "שם הקורס",
-    "description": "תיאור הקורס",
+{`{
+  "action": "courses.create",
+  "data": {
+    "title": "${t('developerSettings.sampleCourseTitle')}",
+    "description": "${t('developerSettings.sampleCourseDescription')}",
     "is_published": false,
     "thumbnail_url": "https://example.com/image.jpg",
     "payment_url": "https://payment.link/course"
-  } 
+  }
 }`}
                     </pre>
                   </div>
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">courses.update</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'עדכון פרטי קורס' : 'Update course details'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.coursesUpdate')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
-{`{ 
-  "action": "courses.update", 
-  "data": { 
+{`{
+  "action": "courses.update",
+  "data": {
     "course_id": "550e8400-e29b-41d4-a716-446655440000",
-    "title": "שם מעודכן",
+    "title": "${t('developerSettings.sampleUpdatedTitle')}",
     "is_published": true
-  } 
+  }
 }`}
                     </pre>
                   </div>
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">courses.delete</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'מחיקת קורס' : 'Delete course'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.coursesDelete')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "courses.delete", 
@@ -567,13 +559,13 @@ Body:
             {/* Enrollments API */}
             <AccordionItem value="enrollments-api">
               <AccordionTrigger>
-                {language === 'he' ? 'הרשמות (Enrollments)' : 'Enrollments API'}
+                {t('developerSettings.enrollmentsApi')}
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 text-sm">
                   <div className="space-y-2">
                     <h4 className="font-medium">enrollments.list</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת רשימת הרשמות' : 'Get list of enrollments'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.enrollmentsList')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "enrollments.list", 
@@ -584,13 +576,13 @@ Body:
 }`}
                     </pre>
                     <div className="bg-muted/50 p-3 rounded-lg text-xs mt-2">
-                      <p className="text-muted-foreground">{language === 'he' ? 'ניתן לסנן לפי course_id או user_id או שניהם' : 'Can filter by course_id, user_id, or both'}</p>
+                      <p className="text-muted-foreground">{t('developerSettings.enrollmentsListFilter')}</p>
                     </div>
                   </div>
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">enrollments.create</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'הרשמת משתמש לקורס' : 'Enroll user to course'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.enrollmentsCreate')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "enrollments.create", 
@@ -604,7 +596,7 @@ Body:
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">enrollments.delete</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'ביטול הרשמה לקורס' : 'Remove enrollment'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.enrollmentsDelete')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "enrollments.delete", 
@@ -622,13 +614,13 @@ Body:
             {/* Activities API */}
             <AccordionItem value="activities-api">
               <AccordionTrigger>
-                {language === 'he' ? 'פעילויות (Activities)' : 'Activities API'}
+                {t('developerSettings.activitiesApi')}
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 text-sm">
                   <div className="space-y-2">
                     <h4 className="font-medium">activities.list</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת לוג פעילויות' : 'Get activity log'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.activitiesList')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "activities.list", 
@@ -642,13 +634,13 @@ Body:
 }`}
                     </pre>
                     <div className="bg-muted/50 p-3 rounded-lg text-xs mt-2">
-                      <p className="font-medium mb-1">{language === 'he' ? 'פרמטרים (כולם אופציונליים):' : 'Parameters (all optional):'}</p>
+                      <p className="font-medium mb-1">{t('developerSettings.parametersOptional')}</p>
                       <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                        <li><code>user_id</code> - {language === 'he' ? 'סינון לפי משתמש' : 'Filter by user'}</li>
-                        <li><code>activity_type</code> - {language === 'he' ? 'סינון לפי סוג פעילות' : 'Filter by activity type'}</li>
-                        <li><code>from_date</code> - {language === 'he' ? 'תאריך התחלה (ISO 8601)' : 'Start date (ISO 8601)'}</li>
-                        <li><code>to_date</code> - {language === 'he' ? 'תאריך סיום (ISO 8601)' : 'End date (ISO 8601)'}</li>
-                        <li><code>limit</code> - {language === 'he' ? 'מספר תוצאות מקסימלי' : 'Maximum results'}</li>
+                        <li><code>user_id</code> - {t('developerSettings.paramFilterUser')}</li>
+                        <li><code>activity_type</code> - {t('developerSettings.paramFilterActivity')}</li>
+                        <li><code>from_date</code> - {t('developerSettings.paramFromDate')}</li>
+                        <li><code>to_date</code> - {t('developerSettings.paramToDate')}</li>
+                        <li><code>limit</code> - {t('developerSettings.paramMaxResults')}</li>
                       </ul>
                     </div>
                   </div>
@@ -659,18 +651,18 @@ Body:
             {/* Stats API */}
             <AccordionItem value="stats-api">
               <AccordionTrigger>
-                {language === 'he' ? 'סטטיסטיקות (Stats)' : 'Stats API'}
+                {t('developerSettings.statsApi')}
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 text-sm">
                   <div className="space-y-2">
                     <h4 className="font-medium">stats.overview</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת סטטיסטיקות כלליות' : 'Get overview statistics'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.statsOverview')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ "action": "stats.overview" }`}
                     </pre>
                     <div className="bg-muted/50 p-3 rounded-lg text-xs mt-2">
-                      <p className="font-medium mb-1">{language === 'he' ? 'תגובה:' : 'Response:'}</p>
+                      <p className="font-medium mb-1">{t('developerSettings.response')}</p>
                       <pre className="text-muted-foreground">
 {`{
   "stats": {
@@ -689,13 +681,13 @@ Body:
             {/* Announcements API */}
             <AccordionItem value="announcements-api">
               <AccordionTrigger>
-                {language === 'he' ? 'הודעות (Announcements)' : 'Announcements API'}
+                {t('developerSettings.announcementsApi')}
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 text-sm">
                   <div className="space-y-2">
                     <h4 className="font-medium">announcements.list</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת רשימת הודעות' : 'Get list of announcements'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.announcementsList')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ "action": "announcements.list" }`}
                     </pre>
@@ -703,22 +695,22 @@ Body:
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">announcements.create</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'יצירת הודעה חדשה' : 'Create new announcement'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.announcementsCreate')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
-{`{ 
-  "action": "announcements.create", 
-  "data": { 
-    "title": "כותרת ההודעה",
-    "content": "תוכן ההודעה",
+{`{
+  "action": "announcements.create",
+  "data": {
+    "title": "${t('developerSettings.sampleAnnouncementTitle')}",
+    "content": "${t('developerSettings.sampleAnnouncementContent')}",
     "is_pinned": true
-  } 
+  }
 }`}
                     </pre>
                   </div>
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">announcements.delete</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'מחיקת הודעה' : 'Delete announcement'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.announcementsDelete')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ 
   "action": "announcements.delete", 
@@ -735,13 +727,13 @@ Body:
             {/* Events API */}
             <AccordionItem value="events-api">
               <AccordionTrigger>
-                {language === 'he' ? 'אירועים (Events)' : 'Events API'}
+                {t('developerSettings.eventsApi')}
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 text-sm">
                   <div className="space-y-2">
                     <h4 className="font-medium">events.list</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'קבלת רשימת אירועים' : 'Get list of events'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.eventsList')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
 {`{ "action": "events.list" }`}
                     </pre>
@@ -749,18 +741,18 @@ Body:
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">events.create</h4>
-                    <p className="text-muted-foreground">{language === 'he' ? 'יצירת אירוע חדש' : 'Create new event'}</p>
+                    <p className="text-muted-foreground">{t('developerSettings.eventsCreate')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
-{`{ 
-  "action": "events.create", 
-  "data": { 
-    "title": "שם האירוע",
-    "description": "תיאור האירוע",
+{`{
+  "action": "events.create",
+  "data": {
+    "title": "${t('developerSettings.sampleEventTitle')}",
+    "description": "${t('developerSettings.sampleEventDescription')}",
     "start_time": "2024-12-25T10:00:00Z",
     "end_time": "2024-12-25T12:00:00Z",
-    "location": "חדר 101",
+    "location": "${t('developerSettings.sampleEventLocation')}",
     "meeting_url": "https://meet.google.com/abc-defg-hij"
-  } 
+  }
 }`}
                     </pre>
                   </div>

@@ -92,7 +92,8 @@ export default function PlatformSettings() {
     user
   } = useAuth();
   const {
-    language
+    language,
+    t
   } = useLanguage();
   const {
     currentTenant,
@@ -275,8 +276,8 @@ export default function PlatformSettings() {
       }
       console.error('Error fetching tenant settings:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'שגיאה בטעינת ההגדרות' : 'Error loading settings',
+        title: t('common.error'),
+        description: t('platformSettings.errorLoading'),
         variant: 'destructive'
       });
     } finally {
@@ -313,14 +314,14 @@ export default function PlatformSettings() {
       if (error) throw error;
       await refreshTenantSettings();
       toast({
-        title: language === 'he' ? 'הגדרות נשמרו' : 'Settings Saved',
-        description: language === 'he' ? 'הגדרות הטננט עודכנו בהצלחה' : 'Tenant settings updated successfully'
+        title: t('platformSettings.settingsSaved'),
+        description: t('platformSettings.settingsUpdated')
       });
     } catch (error) {
       console.error('Error saving settings:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'שגיאה בשמירת ההגדרות' : 'Error saving settings',
+        title: t('common.error'),
+        description: t('platformSettings.errorSaving'),
         variant: 'destructive'
       });
     } finally {
@@ -340,16 +341,16 @@ export default function PlatformSettings() {
     if (!file || !user || !currentTenant) return;
     if (!file.type.startsWith('image/')) {
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'יש להעלות קובץ תמונה' : 'Please upload an image file',
+        title: t('common.error'),
+        description: t('platformSettings.uploadImageFile'),
         variant: 'destructive'
       });
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'גודל הקובץ לא יכול לעלות על 2MB' : 'File size cannot exceed 2MB',
+        title: t('common.error'),
+        description: t('platformSettings.fileTooLarge2MB'),
         variant: 'destructive'
       });
       return;
@@ -375,14 +376,14 @@ export default function PlatformSettings() {
         logo_url: publicUrl
       }));
       toast({
-        title: language === 'he' ? 'הלוגו הועלה' : 'Logo Uploaded',
-        description: language === 'he' ? 'הלוגו הועלה בהצלחה. יש ללחוץ על שמירה להחלת השינויים' : 'Logo uploaded successfully. Click Save to apply changes'
+        title: t('platformSettings.logoUploaded'),
+        description: t('platformSettings.logoUploadedDesc')
       });
     } catch (error) {
       console.error('Error uploading logo:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'שגיאה בהעלאת הלוגו' : 'Error uploading logo',
+        title: t('common.error'),
+        description: t('platformSettings.logoUploadError'),
         variant: 'destructive'
       });
     } finally {
@@ -400,16 +401,16 @@ export default function PlatformSettings() {
 
     if (!file.type.startsWith('image/')) {
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'יש להעלות קובץ תמונה' : 'Please upload an image file',
+        title: t('common.error'),
+        description: t('platformSettings.uploadImageFile'),
         variant: 'destructive',
       });
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'גודל הקובץ לא יכול לעלות על 5MB' : 'File size cannot exceed 5MB',
+        title: t('common.error'),
+        description: t('platformSettings.fileTooLarge5MB'),
         variant: 'destructive',
       });
       return;
@@ -448,16 +449,14 @@ export default function PlatformSettings() {
       setCropperImageSrc(null);
 
       toast({
-        title: language === 'he' ? 'התמונה הועלתה' : 'Avatar uploaded',
-        description: language === 'he'
-          ? 'חשוב ללחוץ על "שמירת הגדרות"'
-          : 'Don\'t forget to click "Save Settings"',
+        title: t('platformSettings.avatarUploaded'),
+        description: t('platformSettings.avatarUploadedDesc'),
       });
     } catch (error) {
       console.error('Error uploading assistant avatar:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: language === 'he' ? 'שגיאה בהעלאת התמונה' : 'Error uploading avatar',
+        title: t('common.error'),
+        description: t('platformSettings.avatarUploadError'),
         variant: 'destructive',
       });
     } finally {
@@ -474,10 +473,10 @@ export default function PlatformSettings() {
         <div className="text-center py-12">
           <Shield className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">
-            {language === 'he' ? 'אין הרשאה' : 'Access Denied'}
+            {t('admin.accessDenied')}
           </h2>
           <p className="text-muted-foreground">
-            {language === 'he' ? 'רק מנהלים יכולים לגשת לעמוד זה' : 'Only admins can access this page'}
+            {t('platformSettings.adminOnly')}
           </p>
         </div>
     );
@@ -487,10 +486,10 @@ export default function PlatformSettings() {
         <div className="text-center py-12">
           <Building2 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">
-            {language === 'he' ? 'לא נבחר ארגון' : 'No Organization Selected'}
+            {t('platformSettings.noOrgSelected')}
           </h2>
           <p className="text-muted-foreground">
-            {language === 'he' ? 'יש לבחור ארגון מהתפריט כדי לערוך את ההגדרות שלו' : 'Select an organization from the menu to edit its settings'}
+            {t('platformSettings.selectOrg')}
           </p>
         </div>
     );
@@ -512,14 +511,14 @@ export default function PlatformSettings() {
           <div className="relative">
             <div className="flex items-center gap-2 flex-wrap mb-1.5">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                {language === 'he' ? 'הגדרות ארגון' : 'Organization Settings'}
+                {t('platformSettings.title')}
               </h1>
               <Badge variant="outline" className="text-xs border-border/60 bg-card/60 backdrop-blur-sm">
                 {currentTenant.name}
               </Badge>
             </div>
             <p className="text-muted-foreground">
-              {language === 'he' ? 'התאמת המראה והמיתוג של הארגון' : 'Customize the appearance and branding of the organization'}
+              {t('platformSettings.subtitle')}
             </p>
           </div>
         </div>
@@ -529,15 +528,15 @@ export default function PlatformSettings() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Type className="w-5 h-5" />
-              {language === 'he' ? 'לוגו הארגון' : 'Organization Logo'}
+              {t('platformSettings.orgLogo')}
             </CardTitle>
             <CardDescription>
-              {language === 'he' ? 'הגדרת הלוגו של הארגון' : 'Set the organization logo'}
+              {t('platformSettings.orgLogoDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label>{language === 'he' ? 'לוגו' : 'Logo'}</Label>
+              <Label>{t('platformSettings.logo')}</Label>
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 {settings.logo_url ? <div className="w-20 h-20 rounded-lg border bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                     <img src={settings.logo_url} alt="Organization logo" className="w-full h-full object-contain" />
@@ -548,10 +547,10 @@ export default function PlatformSettings() {
                   <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
                   <Button variant="outline" onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo} className="w-full sm:w-auto">
                     {uploadingLogo ? <Loader2 className="w-4 h-4 mx-2 animate-spin" /> : <Upload className="w-4 h-4 mx-2" />}
-                    {language === 'he' ? 'העלאת לוגו' : 'Upload Logo'}
+                    {t('platformSettings.uploadLogo')}
                   </Button>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {language === 'he' ? 'PNG, JPG עד 2MB' : 'PNG, JPG up to 2MB'}
+                    {t('platformSettings.logoSizeHint')}
                   </p>
                 </div>
               </div>
@@ -564,10 +563,10 @@ export default function PlatformSettings() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Palette className="w-5 h-5" />
-              {language === 'he' ? 'צבעי הארגון' : 'Organization Colors'}
+              {t('platformSettings.orgColors')}
             </CardTitle>
             <CardDescription>
-              {language === 'he' ? 'בחירת 3 צבעים והמערכת תיצור אוטומטית עיצוב מותאם לכל מצב תצוגה' : 'Choose 3 colors and the system will automatically generate a matching design for all display modes'}
+              {t('platformSettings.orgColorsDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -576,15 +575,15 @@ export default function PlatformSettings() {
 
             {/* 3 Simple Color Pickers */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              <ColorField id="primary-color" label={language === 'he' ? 'צבע ראשי' : 'Primary Color'} value={settings.primary_color} onChange={value => setSettings(prev => ({
+              <ColorField id="primary-color" label={t('platformSettings.primaryColor')} value={settings.primary_color} onChange={value => setSettings(prev => ({
               ...prev,
               primary_color: value
             }))} />
-              <ColorField id="secondary-color" label={language === 'he' ? 'צבע משני' : 'Secondary Color'} value={settings.secondary_color} onChange={value => setSettings(prev => ({
+              <ColorField id="secondary-color" label={t('platformSettings.secondaryColor')} value={settings.secondary_color} onChange={value => setSettings(prev => ({
               ...prev,
               secondary_color: value
             }))} />
-              <ColorField id="background-color" label={language === 'he' ? 'צבע רקע' : 'Background Color'} value={settings.background_color} onChange={value => setSettings(prev => ({
+              <ColorField id="background-color" label={t('platformSettings.backgroundColor')} value={settings.background_color} onChange={value => setSettings(prev => ({
               ...prev,
               background_color: value
             }))} />
@@ -595,7 +594,7 @@ export default function PlatformSettings() {
 
             <Button variant="outline" onClick={handleResetColors} size="sm">
               <RotateCcw className="w-4 h-4 mx-2" />
-              {language === 'he' ? 'איפוס צבעים' : 'Reset Colors'}
+              {t('platformSettings.resetColors')}
             </Button>
           </CardContent>
         </Card>
@@ -608,19 +607,17 @@ export default function PlatformSettings() {
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md shadow-primary/20">
                 <Bot className="w-5 h-5 text-primary-foreground" />
               </div>
-              {language === 'he' ? 'העוזר הדיגיטלי' : 'AI Assistant'}
+              {t('platformSettings.aiAssistant')}
             </CardTitle>
             <CardDescription>
-              {language === 'he'
-                ? 'התאם אישית את שם העוזר, התמונה והנחיות מותאמות'
-                : 'Customize your assistant name, avatar, and instructions'}
+              {t('platformSettings.aiAssistantDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 relative">
             {/* Avatar */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">
-                {language === 'he' ? 'תמונת פרופיל' : 'Avatar'}
+                {t('platformSettings.assistantAvatar')}
               </Label>
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <div className="relative flex-shrink-0">
@@ -662,8 +659,8 @@ export default function PlatformSettings() {
                         <Upload className="w-4 h-4" />
                       )}
                       {settings.ai_assistant_avatar_url
-                        ? language === 'he' ? 'החלף תמונה' : 'Replace image'
-                        : language === 'he' ? 'העלה תמונה' : 'Upload image'}
+                        ? t('platformSettings.replaceImage')
+                        : t('platformSettings.uploadImage')}
                     </Button>
                     {settings.ai_assistant_avatar_url && (
                       <Button
@@ -673,14 +670,12 @@ export default function PlatformSettings() {
                         className="gap-1.5 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
-                        {language === 'he' ? 'הסר' : 'Remove'}
+                        {t('platformSettings.remove')}
                       </Button>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {language === 'he'
-                      ? 'PNG/JPG עד 5MB. אפשר לחתוך ולמרכז את התמונה לפני שמירה.'
-                      : 'PNG/JPG up to 5MB. You can crop the image before saving.'}
+                    {t('platformSettings.avatarSizeHint')}
                   </p>
                 </div>
               </div>
@@ -691,19 +686,17 @@ export default function PlatformSettings() {
             {/* Name */}
             <div className="space-y-2">
               <Label htmlFor="assistant-name" className="text-sm font-medium">
-                {language === 'he' ? 'שם העוזר' : 'Assistant name'}
+                {t('platformSettings.assistantName')}
               </Label>
               <Input
                 id="assistant-name"
                 value={settings.ai_assistant_name || ''}
                 onChange={(e) => setSettings(prev => ({ ...prev, ai_assistant_name: e.target.value || null }))}
-                placeholder={language === 'he' ? 'לדוגמה: ג׳ייסון' : 'e.g., Jason'}
+                placeholder={t('platformSettings.assistantNamePlaceholder')}
                 className="max-w-md"
               />
               <p className="text-xs text-muted-foreground">
-                {language === 'he'
-                  ? 'השם שיופיע בכרטיס הצ׳אט. אם תשאיר ריק — יוצג שם ברירת המחדל.'
-                  : 'The name shown in the chat widget. Leave empty to use the default.'}
+                {t('platformSettings.assistantNameHint')}
               </p>
             </div>
 
@@ -713,21 +706,17 @@ export default function PlatformSettings() {
             <div className="space-y-2">
               <Label htmlFor="assistant-prompt" className="text-sm font-medium flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-primary" />
-                {language === 'he' ? 'הנחיית מערכת (אופציונלי)' : 'System prompt (optional)'}
+                {t('platformSettings.systemPrompt')}
               </Label>
               <Textarea
                 id="assistant-prompt"
                 value={settings.ai_assistant_system_prompt || ''}
                 onChange={(e) => setSettings(prev => ({ ...prev, ai_assistant_system_prompt: e.target.value || null }))}
-                placeholder={language === 'he'
-                  ? 'לדוגמה: עוזר מקצועי בנושא AI ושיווק. יש לענות בעברית, בנימוס, ובאופן ממוקד...'
-                  : 'e.g., You are a professional assistant for AI and marketing. Reply in Hebrew, politely and concisely...'}
+                placeholder={t('platformSettings.systemPromptPlaceholder')}
                 className="min-h-[140px] font-mono text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                {language === 'he'
-                  ? 'הנחיה זו מתווספת לתחילת כל שיחה ומשפיעה על האופן בו העוזר מגיב.'
-                  : 'This is prepended to every conversation and influences how the assistant responds.'}
+                {t('platformSettings.systemPromptHint')}
               </p>
             </div>
 
@@ -750,15 +739,15 @@ export default function PlatformSettings() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Video className="w-5 h-5" />
-              {language === 'he' ? 'חיבור Vimeo' : 'Vimeo Connection'}
+              {t('platformSettings.vimeoConnection')}
               <Badge variant={settings.vimeo_access_token ? 'default' : 'destructive'} className="text-xs">
                 {settings.vimeo_access_token
-                  ? (language === 'he' ? 'מחובר' : 'Connected')
-                  : (language === 'he' ? 'לא מחובר' : 'Not Connected')}
+                  ? t('platformSettings.connected')
+                  : t('platformSettings.notConnected')}
               </Badge>
             </CardTitle>
             <CardDescription>
-              {language === 'he' ? 'חיבור חשבון Vimeo לאפשר סיכום אוטומטי של שיעורי וידאו' : 'Connect your Vimeo account to enable automatic video lesson summaries'}
+              {t('platformSettings.vimeoDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -772,17 +761,17 @@ export default function PlatformSettings() {
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-sm text-sm leading-relaxed" dir={language === 'he' ? 'rtl' : 'ltr'}>
                       <p className="font-semibold mb-2">
-                        {language === 'he' ? 'איך משיגים טוקן:' : 'How to get a token:'}
+                        {t('platformSettings.howToGetToken')}
                       </p>
                       <ol className="list-decimal list-inside space-y-1">
-                        <li>{language === 'he' ? 'יש להיכנס ל-developer.vimeo.com/apps' : 'Go to developer.vimeo.com/apps'}</li>
-                        <li>{language === 'he' ? 'יש ללחוץ על "Create App" (או לבחור אפליקציה קיימת)' : 'Click "Create App" (or select existing)'}</li>
-                        <li>{language === 'he' ? 'יש למלא שם ותיאור כלשהם וללחוץ "Create"' : 'Fill in any name/description and click "Create"'}</li>
-                        <li>{language === 'he' ? 'בדף האפליקציה, יש לגלול למטה ל-"Personal Access Tokens"' : 'On the app page, scroll down to "Personal Access Tokens"'}</li>
-                        <li>{language === 'he' ? 'יש לבחור "Authenticated (you)" בשדה הראשון' : 'Select "Authenticated (you)" in the first field'}</li>
-                        <li>{language === 'he' ? 'בהרשאות, יש לבחור "Private" ו-"Video Files"' : 'In scopes, select "Private" and "Video Files"'}</li>
-                        <li>{language === 'he' ? 'יש ללחוץ "Generate" ולהעתיק את הטוקן שנוצר' : 'Click "Generate" and copy the generated token'}</li>
-                        <li>{language === 'he' ? 'יש להדביק אותו כאן וללחוץ "שמירת הגדרות"' : 'Paste it here and click "Save Settings"'}</li>
+                        <li>{t('platformSettings.vimeoStep1')}</li>
+                        <li>{t('platformSettings.vimeoStep2')}</li>
+                        <li>{t('platformSettings.vimeoStep3')}</li>
+                        <li>{t('platformSettings.vimeoStep4')}</li>
+                        <li>{t('platformSettings.vimeoStep5')}</li>
+                        <li>{t('platformSettings.vimeoStep6')}</li>
+                        <li>{t('platformSettings.vimeoStep7')}</li>
+                        <li>{t('platformSettings.vimeoStep8')}</li>
                       </ol>
                     </TooltipContent>
                   </Tooltip>
@@ -793,7 +782,7 @@ export default function PlatformSettings() {
                   type={showVimeoToken ? 'text' : 'password'}
                   value={settings.vimeo_access_token || ''}
                   onChange={(e) => setSettings(prev => ({ ...prev, vimeo_access_token: e.target.value || null }))}
-                  placeholder={language === 'he' ? 'יש להדביק את הטוקן כאן...' : 'Paste your token here...'}
+                  placeholder={t('platformSettings.tokenPlaceholder')}
                   dir="ltr"
                   className="flex-1"
                 />
@@ -817,7 +806,7 @@ export default function PlatformSettings() {
         <div className="flex justify-end sticky bottom-4 pb-4">
           <Button onClick={handleSaveSettings} disabled={saving} size="lg" className="shadow-lg">
             {saving ? <Loader2 className="w-4 h-4 mx-2 animate-spin" /> : <Save className="w-4 h-4 mx-2" />}
-            {language === 'he' ? 'שמירת הגדרות' : 'Save Settings'}
+            {t('platformSettings.saveSettings')}
           </Button>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Play, Pause, X, Volume2, VolumeX, SkipBack, SkipForward } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Slider } from '@/components/ui/slider';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // Max amplification via Web Audio GainNode. 1.0 = native, 2.0 = 200%.
 const MAX_VOLUME = 2;
@@ -31,6 +32,7 @@ const SyncedVideoPlayer = ({
   canClose = true,
   videoState,
 }: SyncedVideoPlayerProps) => {
+  const { t } = useLanguage();
   const [isPlaying, setIsPlaying] = useState(videoState.playing);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -333,7 +335,7 @@ const SyncedVideoPlayer = ({
                 size="icon"
                 className="w-8 h-8 sm:w-10 sm:h-10 text-white hover:bg-white/20"
                 onClick={() => setIsMuted(!isMuted)}
-                title={isMuted ? 'הפעלת שמע' : 'השתקה'}
+                title={isMuted ? t('videoPlayer.unmute') : t('videoPlayer.mute')}
               >
                 {isMuted ? (
                   <VolumeX className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -352,7 +354,7 @@ const SyncedVideoPlayer = ({
                   if (next > 0 && isMuted) setIsMuted(false);
                 }}
                 className="w-20 sm:w-28"
-                aria-label="עוצמת שמע"
+                aria-label={t('videoPlayer.volume')}
               />
               <span className="text-[10px] sm:text-xs text-white/70 min-w-[32px] tabular-nums">
                 {Math.round((isMuted ? 0 : volume) * 100)}%
@@ -363,7 +365,7 @@ const SyncedVideoPlayer = ({
           {/* Sync indicator */}
           <div className="flex items-center justify-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs text-white/70">מסונכרן עם כל המשתתפים</span>
+            <span className="text-xs text-white/70">{t('videoPlayer.syncedWithAll')}</span>
           </div>
         </div>
       </div>

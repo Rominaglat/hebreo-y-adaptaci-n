@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Mic, MicOff, Video, VideoOff, AlertTriangle, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const DEVICE_PREF_KEY = "study-rooms:device-prefs:v1";
 
@@ -54,6 +55,7 @@ interface PreJoinScreenProps {
 }
 
 export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScreenProps) {
+  const { t } = useLanguage();
   const initialPrefs = loadPrefs();
   const [permission, setPermission] = useState<PermissionState>("unknown");
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -210,15 +212,13 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
 
         setPermission("denied");
         if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-          setPermissionError(
-            "הדפדפן חסם גישה למצלמה/מיקרופון. יש להפעיל את ההרשאות בהגדרות האתר ולנסות שוב.",
-          );
+          setPermissionError(t('preJoinScreen.errorNotAllowed'));
         } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-          setPermissionError("לא נמצאו התקני מצלמה או מיקרופון פעילים במחשב זה.");
+          setPermissionError(t('preJoinScreen.errorNotFound'));
         } else if (name === "NotReadableError") {
-          setPermissionError("המצלמה או המיקרופון בשימוש על-ידי תוכנה אחרת. יש לסגור אותה ולנסות שוב.");
+          setPermissionError(t('preJoinScreen.errorNotReadable'));
         } else {
-          setPermissionError(`שגיאה בגישה למצלמה או למיקרופון (${name || "לא ידוע"}).`);
+          setPermissionError(t('preJoinScreen.errorGeneric').replace('{name}', name || t('preJoinScreen.errorUnknown')));
         }
       }
     })();
@@ -259,7 +259,7 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
       <Card className="w-full max-w-3xl">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">{roomName}</CardTitle>
-          <CardDescription>בדיקת מצלמה ומיקרופון לפני הכניסה</CardDescription>
+          <CardDescription>{t('preJoinScreen.checkDevices')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {/* Preview */}
@@ -284,7 +284,11 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
               <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground gap-2">
                 <VideoOff className="w-12 h-12" />
                 <p className="text-sm">
-                  {permission === "denied" ? "אין גישה למצלמה" : permission === "prompting" ? "מאתחל מצלמה…" : "המצלמה כבויה"}
+                  {permission === "denied"
+                    ? t('preJoinScreen.cameraNoAccess')
+                    : permission === "prompting"
+                      ? t('preJoinScreen.cameraInitializing')
+                      : t('preJoinScreen.cameraOff')}
                 </p>
               </div>
             )}
@@ -310,11 +314,11 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
           {permission === "denied" && permissionError && (
             <Alert variant="destructive">
               <AlertTriangle className="w-4 h-4" />
-              <AlertTitle>אין גישה למצלמה/מיקרופון</AlertTitle>
+              <AlertTitle>{t('preJoinScreen.noAccessTitle')}</AlertTitle>
               <AlertDescription className="space-y-2">
                 <p>{permissionError}</p>
                 <p className="text-xs">
-                  בכרום: יש ללחוץ על סמל המנעול ליד הכתובת ולאפשר מצלמה ומיקרופון, ואז לרענן את הדף.
+                  {t('preJoinScreen.chromeHelp')}
                 </p>
               </AlertDescription>
             </Alert>
@@ -323,14 +327,14 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
           {/* Controls */}
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">מצלמה</label>
+              <label className="text-sm font-medium">{t('preJoinScreen.camera')}</label>
               <div className="flex gap-2">
                 <Button
                   type="button"
                   variant={videoOn ? "default" : "outline"}
                   size="icon"
                   onClick={() => setVideoOn((v) => !v)}
-                  aria-label={videoOn ? "כיבוי מצלמה" : "הפעלת מצלמה"}
+                  aria-label={videoOn ? t('preJoinScreen.cameraTurnOff') : t('preJoinScreen.cameraTurnOn')}
                 >
                   {videoOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
                 </Button>
@@ -340,12 +344,12 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
                   disabled={!videoOn || permission !== "granted"}
                 >
                   <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="בחירת מצלמה" />
+                    <SelectValue placeholder={t('preJoinScreen.cameraSelect')} />
                   </SelectTrigger>
                   <SelectContent>
                     {cameras.map((c) => (
                       <SelectItem key={c.deviceId} value={c.deviceId}>
-                        {c.label || `מצלמה ${c.deviceId.slice(0, 6)}`}
+                        {c.label || t('preJoinScreen.cameraFallback').replace('{id}', c.deviceId.slice(0, 6))}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -354,14 +358,14 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">מיקרופון</label>
+              <label className="text-sm font-medium">{t('preJoinScreen.microphone')}</label>
               <div className="flex gap-2">
                 <Button
                   type="button"
                   variant={micOn ? "default" : "outline"}
                   size="icon"
                   onClick={() => setMicOn((v) => !v)}
-                  aria-label={micOn ? "השתקת מיקרופון" : "ביטול השתקה"}
+                  aria-label={micOn ? t('preJoinScreen.micMute') : t('preJoinScreen.micUnmute')}
                 >
                   {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
                 </Button>
@@ -371,12 +375,12 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
                   disabled={!micOn || permission !== "granted"}
                 >
                   <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="בחירת מיקרופון" />
+                    <SelectValue placeholder={t('preJoinScreen.micSelect')} />
                   </SelectTrigger>
                   <SelectContent>
                     {mics.map((m) => (
                       <SelectItem key={m.deviceId} value={m.deviceId}>
-                        {m.label || `מיקרופון ${m.deviceId.slice(0, 6)}`}
+                        {m.label || t('preJoinScreen.micFallback').replace('{id}', m.deviceId.slice(0, 6))}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -388,7 +392,7 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
           {/* Actions */}
           <div className="flex gap-3 justify-end pt-2">
             <Button type="button" variant="outline" onClick={onCancel}>
-              ביטול
+              {t('common.cancel')}
             </Button>
             <Button
               type="button"
@@ -396,7 +400,7 @@ export default function PreJoinScreen({ roomName, onJoin, onCancel }: PreJoinScr
               disabled={permission === "prompting"}
               className="min-w-[140px]"
             >
-              {permission === "denied" ? "כניסה בלי גישה" : "כניסה לחדר"}
+              {permission === "denied" ? t('preJoinScreen.joinWithoutAccess') : t('preJoinScreen.joinRoom')}
               <ArrowRight className="w-4 h-4 ms-2 rtl:rotate-180" />
             </Button>
           </div>

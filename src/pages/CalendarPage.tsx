@@ -13,7 +13,7 @@ import {
   Settings
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, isToday, addMonths, subMonths, isPast } from 'date-fns';
-import { he, enUS } from 'date-fns/locale';
+import { he, enUS, es } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -92,7 +92,8 @@ export default function CalendarPage() {
 
   const hebrewDays = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
   const englishDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-  const weekDays = language === 'he' ? hebrewDays : englishDays;
+  const spanishDays = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+  const weekDays = language === 'he' ? hebrewDays : language === 'es' ? spanishDays : englishDays;
 
   // NOTE: `platform_settings` was dropped along with the multi-tenancy DB layer.
   // The Google Calendar iCal URL now lives as a constant; if you need to change
@@ -155,11 +156,8 @@ export default function CalendarPage() {
       setCalendarUrl(icalUrl);
 
       toast({
-        title: language === 'he' ? 'ההגדרה לא נשמרת בשרת' : 'Setting not persisted',
-        description:
-          language === 'he'
-            ? 'שמירה לשרת מושבתת כרגע. הערך יישמר עד לרענון.'
-            : 'Server-side persistence is currently disabled. The value will hold until refresh.',
+        title: t('calendarPage.settingNotPersisted'),
+        description: t('calendarPage.settingNotPersistedDesc'),
       });
       setSettingsOpen(false);
       syncGoogleCalendar({ toastOnSuccess: true, focusOnSyncedEvents: true });
@@ -228,17 +226,13 @@ export default function CalendarPage() {
       if (toastOnSuccess) {
         const total = (data as any)?.total ?? (data as any)?.synced ?? loadedEvents.length;
         toast({
-          title: language === 'he' ? 'הסנכרון הושלם' : 'Sync complete',
-          description:
-            language === 'he'
-              ? `סונכרנו ${total} אירועים מהיומן.`
-              : `Synced ${total} events from the calendar.`,
+          title: t('calendarPage.syncComplete'),
+          description: t('calendarPage.syncCompleteDesc').replace('{count}', String(total)),
         });
       }
     } catch (error: any) {
       console.error('Error syncing calendar:', error);
-      const errorMessage =
-        language === 'he' ? 'שגיאה בסנכרון היומן. יש לנסות שוב.' : 'Error syncing calendar. Please try again.';
+      const errorMessage = t('calendarPage.syncError');
       setSyncError(errorMessage);
       toast({
         title: t('common.error'),
@@ -487,7 +481,11 @@ export default function CalendarPage() {
     return `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`;
   };
 
-  const dateLocale = language === 'he' ? he : enUS;
+  const dateLocale = language === 'he' ? he : language === 'es' ? es : enUS;
+  // Hebrew uses "d בMMMM" while latin scripts read better with "d MMMM"
+  const weekdayDayMonthFormat = language === 'he' ? 'EEEE, d בMMMM' : 'EEEE, d MMMM';
+  const fullDateFormat = language === 'he' ? 'EEEE, d בMMMM yyyy' : 'EEEE, d MMMM yyyy';
+  const longDateFormat = language === 'he' ? 'd בMMMM yyyy' : 'd MMMM yyyy';
 
   return (
 
@@ -501,7 +499,7 @@ export default function CalendarPage() {
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('calendar.title')}</h1>
               <p className="text-muted-foreground mt-1.5">
-                {language === 'he' ? 'אירועים, מפגשים ופגישות בקרוב' : 'Upcoming events, sessions and meetings'}
+                {t('calendarPage.headerSubtitle')}
               </p>
             </div>
 
@@ -525,19 +523,19 @@ export default function CalendarPage() {
                   <DialogTrigger asChild>
                     <Button variant="outline" size="sm">
                       <Settings className="w-4 h-4 mx-1" />
-                      <span className="hidden sm:inline">{language === 'he' ? 'הגדרות' : 'Settings'}</span>
+                      <span className="hidden sm:inline">{t('nav.settings')}</span>
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-md">
                     <DialogHeader>
-                      <DialogTitle>{language === 'he' ? 'הגדרות יומן' : 'Calendar Settings'}</DialogTitle>
+                      <DialogTitle>{t('calendarPage.calendarSettings')}</DialogTitle>
                       <DialogDescription>
-                        {language === 'he' ? 'הגדרת לינק הסנכרון ליומן גוגל' : 'Configure the Google Calendar sync link'}
+                        {t('calendarPage.calendarSettingsDesc')}
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 pt-4">
                       <div className="space-y-2">
-                        <Label htmlFor="calendar-url">{language === 'he' ? 'לינק iCal של יומן גוגל' : 'Google Calendar iCal URL'}</Label>
+                        <Label htmlFor="calendar-url">{t('calendarPage.icalUrlLabel')}</Label>
                         <Input
                           id="calendar-url"
                           placeholder="https://calendar.google.com/calendar/ical/..."
@@ -546,23 +544,21 @@ export default function CalendarPage() {
                           dir="ltr"
                         />
                         <p className="text-xs text-muted-foreground">
-                          {language === 'he' 
-                            ? 'העתק את כתובת ה-iCal מהגדרות היומן בגוגל (יומן ציבורי)' 
-                            : 'Copy the iCal address from Google Calendar settings (public calendar)'}
+                          {t('calendarPage.icalUrlHint')}
                         </p>
                       </div>
-                      <Button 
-                        className="w-full" 
+                      <Button
+                        className="w-full"
                         onClick={saveCalendarSettings}
                         disabled={!calendarUrl.trim() || savingSettings}
                       >
                         {savingSettings ? (
                           <>
                             <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                            {language === 'he' ? 'שומר...' : 'Saving...'}
+                            {t('profile.saving')}
                           </>
                         ) : (
-                          language === 'he' ? 'שמור' : 'Save'
+                          t('common.save')
                         )}
                       </Button>
                     </div>
@@ -749,7 +745,7 @@ export default function CalendarPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm sm:text-base">
-                {format(selectedDate, 'EEEE, d בMMMM', { locale: dateLocale })}
+                {format(selectedDate, weekdayDayMonthFormat, { locale: dateLocale })}
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
                 {selectedDateEvents.length} {t('calendar.events')}
@@ -783,7 +779,7 @@ export default function CalendarPage() {
                         <h4 className="font-medium text-sm sm:text-base truncate flex-1">{event.title}</h4>
                         {isEventPast && (
                           <span className="text-[10px] sm:text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded shrink-0">
-                            {language === 'he' ? 'עבר' : 'Past'}
+                            {t('calendarPage.past')}
                           </span>
                         )}
                       </div>
@@ -882,7 +878,7 @@ export default function CalendarPage() {
                       <div className="space-y-1 text-xs sm:text-sm text-muted-foreground">
                         <div className="flex items-center gap-2 min-w-0">
                           <CalendarIcon className="w-3 h-3 flex-shrink-0" />
-                          <span className="truncate">{format(new Date(event.start_time), 'd בMMMM yyyy', { locale: dateLocale })}</span>
+                          <span className="truncate">{format(new Date(event.start_time), longDateFormat, { locale: dateLocale })}</span>
                         </div>
                         <div className="flex items-center gap-2 min-w-0">
                           <Clock className="w-3 h-3 flex-shrink-0" />
@@ -948,7 +944,7 @@ export default function CalendarPage() {
                 <DialogHeader className="flex-shrink-0">
                   <DialogTitle className="text-xl break-words leading-tight pr-6">{selectedEvent.title}</DialogTitle>
                   <DialogDescription>
-                    {format(new Date(selectedEvent.start_time), 'EEEE, d בMMMM yyyy', { locale: dateLocale })}
+                    {format(new Date(selectedEvent.start_time), fullDateFormat, { locale: dateLocale })}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 pt-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0">
@@ -1048,7 +1044,7 @@ export default function CalendarPage() {
           <DialogContent className="max-w-sm overflow-x-hidden">
             <DialogHeader>
               <DialogTitle>
-                {language === 'he' ? 'רשימת נרשמים' : 'Attendee List'}
+                {t('calendarPage.attendeeList')}
               </DialogTitle>
               {attendeesEvent && (
                 <DialogDescription className="truncate">
@@ -1063,7 +1059,7 @@ export default function CalendarPage() {
                 </div>
               ) : rsvpAttendees.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  {language === 'he' ? 'אין נרשמים' : 'No attendees'}
+                  {t('calendarPage.noAttendees')}
                 </p>
               ) : (
                 <ul className="space-y-2 max-h-64 overflow-y-auto">
@@ -1082,7 +1078,7 @@ export default function CalendarPage() {
                         </AvatarFallback>
                       </Avatar>
                       <span className="text-sm truncate hover:text-primary transition-colors">
-                        {att.profile?.full_name || (language === 'he' ? 'משתמש' : 'User')}
+                        {att.profile?.full_name || t('commandPalette.userFallback')}
                       </span>
                     </li>
                   ))}

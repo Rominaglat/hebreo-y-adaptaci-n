@@ -11,21 +11,21 @@ interface NewBadgeProps {
  * Shows a "New" badge if the item was created within the last 7 days
  */
 export function NewBadge({ createdAt, className }: NewBadgeProps) {
-  const { language } = useLanguage();
-  
+  const { t } = useLanguage();
+
   const createdDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
   const daysSinceCreation = differenceInDays(new Date(), createdDate);
-  
+
   if (daysSinceCreation > 7) {
     return null;
   }
-  
+
   return (
-    <Badge 
-      variant="default" 
+    <Badge
+      variant="default"
       className={`bg-success hover:bg-success text-success-foreground text-[10px] px-1.5 py-0 h-4 ${className}`}
     >
-      {language === 'he' ? 'חדש' : 'New'}
+      {t('badge.new')}
     </Badge>
   );
 }

@@ -105,7 +105,7 @@ function SortableCourseCard({
 
 export default function Courses() {
   const { user, isAdmin, isInstructor, isAdminOrInstructor } = useAuth();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const { completeStep } = useOnboarding();
   const [allCourses, setAllCourses] = useState<Course[]>([]);
@@ -365,7 +365,7 @@ export default function Courses() {
             .update({ order_index: i })
             .eq('id', newOrder[i].id);
         }
-        toast.success('סדר הקורסים נשמר בהצלחה');
+        toast.success(t('coursesPage.orderSaved'));
       } catch (error) {
         console.error('Error saving order:', error);
         toast.error(t('common.error'));
@@ -406,7 +406,7 @@ export default function Courses() {
                 {t('courses.title')}
               </h1>
               <p className="text-muted-foreground mt-1.5">
-                גלה, למד והתקדם עם הקורסים שלנו
+                {t('coursesPage.headerSubtitle')}
               </p>
             </div>
             {isAdmin && (
@@ -736,7 +736,7 @@ export default function Courses() {
                             <Lock className="w-5 h-5 text-muted-foreground" strokeWidth={2.5} />
                           </div>
                           <span className="text-xs font-semibold text-muted-foreground">
-                            {language === 'he' ? 'דרושה גישה' : 'Access required'}
+                            {t('coursesPage.accessRequired')}
                           </span>
                         </div>
                       </div>

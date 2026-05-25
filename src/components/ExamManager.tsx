@@ -83,7 +83,7 @@ function SortableQuestion({ id, children }: { id: string; children: React.ReactN
 }
 
 export default function ExamManager({ courseId }: ExamManagerProps) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { user } = useAuth();
   const [exams, setExams] = useState<Exam[]>([]);
   const [generatingAi, setGeneratingAi] = useState(false);
@@ -204,21 +204,13 @@ export default function ExamManager({ courseId }: ExamManagerProps) {
       if (Array.isArray(data?.questions) && data.questions.length > 0) {
         // Append generated questions to existing ones
         setQuestions((prev) => [...prev, ...data.questions]);
-        toast.success(
-          language === 'he'
-            ? `נוצרו ${data.questions.length} שאלות חדשות 🎉`
-            : `Generated ${data.questions.length} new questions 🎉`
-        );
+        toast.success(`${t('exams.aiQuestionsGenerated')} (${data.questions.length}) 🎉`);
       } else {
-        toast.error(
-          language === 'he' ? 'לא נוצרו שאלות' : 'No questions generated'
-        );
+        toast.error(t('exams.aiNoQuestions'));
       }
     } catch (e) {
       console.error('AI quiz generation failed', e);
-      toast.error(
-        language === 'he' ? 'יצירת שאלות נכשלה' : 'Failed to generate questions'
-      );
+      toast.error(t('exams.aiGenerateFailed'));
     } finally {
       setGeneratingAi(false);
     }
@@ -533,7 +525,7 @@ export default function ExamManager({ courseId }: ExamManagerProps) {
                         value={aiQuestionCount}
                         onChange={(e) => setAiQuestionCount(parseInt(e.target.value) || 5)}
                         className="h-9 w-16"
-                        title={language === 'he' ? 'מספר שאלות לייצור' : 'Number of questions to generate'}
+                        title={t('exams.aiNumberOfQuestions')}
                       />
                       <Button
                         type="button"
@@ -548,7 +540,7 @@ export default function ExamManager({ courseId }: ExamManagerProps) {
                         ) : (
                           <Sparkles className="w-4 h-4" />
                         )}
-                        {language === 'he' ? 'יצירה עם AI' : 'Generate with AI'}
+                        {t('exams.generateWithAi')}
                       </Button>
                       <Button type="button" variant="outline" size="sm" onClick={addQuestion}>
                         <Plus className="w-4 h-4 ml-1" />

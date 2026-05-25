@@ -14,7 +14,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { he, enUS } from 'date-fns/locale';
+import { he, enUS, es } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -142,7 +142,7 @@ export default function Announcements() {
             const profile = profileMap.get(a.author_id);
             return {
               ...a,
-              author_name: profile?.full_name || (language === 'he' ? 'מנהל' : 'Admin'),
+              author_name: profile?.full_name || t('profile.admin'),
               author_avatar: profile?.avatar_url || null
             };
           })
@@ -211,29 +211,23 @@ export default function Announcements() {
       const failed = Number((data as any)?.failed ?? 0);
 
       if (sent > 0) {
+        const failedSuffix = failed ? t('announcementsPage.testFailedSuffix').replace('{failed}', String(failed)) : '';
         toast({
-          title: language === 'he' ? 'נשלח בהצלחה' : 'Test Sent',
-          description:
-            language === 'he'
-              ? `הודעת הבדיקה נשלחה (נשלח: ${sent}${failed ? `, נכשל: ${failed}` : ''})`
-              : `Test notification sent (sent: ${sent}${failed ? `, failed: ${failed}` : ''})`,
+          title: t('announcementsPage.testSent'),
+          description: t('announcementsPage.testSentDesc')
+            .replace('{sent}', String(sent))
+            .replace('{failedSuffix}', failedSuffix),
         });
       } else if (failed > 0) {
         toast({
-          title: language === 'he' ? 'השליחה נכשלה' : 'Send Failed',
-          description:
-            language === 'he'
-              ? `השרת ניסה לשלוח אבל נכשל (נכשל: ${failed}). בדרך כלל זה אומר שהמכשיר לא רשום/המנוי לא תקין.`
-              : `Server attempted to send but failed (failed: ${failed}).`,
+          title: t('announcementsPage.sendFailed'),
+          description: t('announcementsPage.sendFailedDesc').replace('{failed}', String(failed)),
           variant: 'destructive',
         });
       } else {
         toast({
-          title: language === 'he' ? 'אין מנויים להתראות' : 'No Subscriptions',
-          description:
-            language === 'he'
-              ? 'למשתמש הזה אין מנוי פעיל להתראות כרגע.'
-              : 'This user has no active push subscription.',
+          title: t('announcementsPage.noSubscriptions'),
+          description: t('announcementsPage.noSubscriptionsDesc'),
           variant: 'destructive',
         });
       }
@@ -241,7 +235,7 @@ export default function Announcements() {
       console.error('Error sending test notification:', error);
       toast({
         title: t('common.error'),
-        description: language === 'he' ? 'שגיאה בשליחת הבדיקה' : 'Failed to send test notification',
+        description: t('announcementsPage.testSendError'),
         variant: 'destructive',
       });
     } finally {
@@ -284,19 +278,18 @@ export default function Announcements() {
         if (sent === 0) {
           // Show a soft warning only if nothing was actually sent.
           toast({
-            title: language === 'he' ? 'פורסם, אבל לא נשלחה התראה' : 'Published, but no push was sent',
-            description:
-              language === 'he'
-                ? `פורסם בהצלחה, אבל לא נשלחו התראות (נשלח: ${sent}, נכשל: ${failed}).`
-                : `Published successfully, but no push was sent (sent: ${sent}, failed: ${failed}).`,
+            title: t('announcementsPage.publishedNoPush'),
+            description: t('announcementsPage.publishedNoPushDesc')
+              .replace('{sent}', String(sent))
+              .replace('{failed}', String(failed)),
             variant: 'destructive',
           });
         }
       } catch (pushError) {
         console.error('Error sending push notification:', pushError);
         toast({
-          title: language === 'he' ? 'פורסם, אבל הפוש נכשל' : 'Published, but push failed',
-          description: language === 'he' ? 'הפוסט פורסם אבל הייתה בעיה בשליחת ההתראה.' : 'Announcement published, but push notification failed.',
+          title: t('announcementsPage.publishedPushFailed'),
+          description: t('announcementsPage.publishedPushFailedDesc'),
           variant: 'destructive',
         });
       }
@@ -375,8 +368,8 @@ export default function Announcements() {
       if (error) throw error;
 
       toast({
-        title: language === 'he' ? 'ההודעה עודכנה' : 'Announcement updated',
-        description: language === 'he' ? 'ההודעה עודכנה בהצלחה' : 'Announcement updated successfully',
+        title: t('announcementsPage.updated'),
+        description: t('announcementsPage.updatedDesc'),
       });
 
       setNewAnnouncement({ title: '', content: '', is_pinned: false });
@@ -420,7 +413,7 @@ export default function Announcements() {
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('announcements.title')}</h1>
               <p className="text-muted-foreground mt-1.5">
-                התראות, עדכונים והודעות חשובות
+                {t('announcementsPage.headerSubtitle')}
               </p>
             </div>
 
@@ -436,7 +429,7 @@ export default function Announcements() {
                 ) : (
                   <>
                     <BellOff className="w-4 h-4 mx-2" />
-                    {language === 'he' ? 'ביטול התראות' : 'Disable Notifications'}
+                    {t('announcementsPage.disableNotifications')}
                   </>
                 )}
               </Button>
@@ -446,7 +439,7 @@ export default function Announcements() {
                 onClick={() => navigate('/install')}
               >
                 <Bell className="w-4 h-4 mx-2" />
-                {language === 'he' ? 'הפעל התראות' : 'Enable Notifications'}
+                {t('notifications.enable')}
               </Button>
             )}
             
@@ -462,14 +455,14 @@ export default function Announcements() {
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>
-                        {editingAnnouncement 
-                          ? (language === 'he' ? 'עריכת הודעה' : 'Edit Announcement')
+                        {editingAnnouncement
+                          ? t('announcementsPage.editAnnouncement')
                           : t('announcements.newAnnouncement')
                         }
                       </DialogTitle>
                       <DialogDescription>
                         {editingAnnouncement
-                          ? (language === 'he' ? 'עריכת פרטי ההודעה' : 'Edit announcement details')
+                          ? t('announcementsPage.editAnnouncementDesc')
                           : t('announcements.newAnnouncementDesc')
                         }
                       </DialogDescription>
@@ -512,12 +505,12 @@ export default function Announcements() {
                       {!editingAnnouncement && subscribedUsers.length > 0 && (
                         <div className="border rounded-lg p-3 bg-muted/30 space-y-3">
                           <Label className="text-sm font-medium">
-                            {language === 'he' ? 'שליחת בדיקה למשתמש' : 'Send Test to User'}
+                            {t('announcementsPage.sendTestToUser')}
                           </Label>
                           <div className="flex gap-2">
                             <Select value={selectedTestUser} onValueChange={setSelectedTestUser}>
                               <SelectTrigger className="flex-1">
-                                <SelectValue placeholder={language === 'he' ? 'בחירת משתמש...' : 'Select user...'} />
+                                <SelectValue placeholder={t('announcementsPage.selectUserPlaceholder')} />
                               </SelectTrigger>
                               <SelectContent>
                                 {subscribedUsers.map((user) => (
@@ -541,7 +534,7 @@ export default function Announcements() {
                             </Button>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {language === 'he' ? 'שליחת התראה לבדיקה לפני הפרסום' : 'Send a test notification before publishing'}
+                            {t('announcementsPage.sendTestHint')}
                           </p>
                         </div>
                       )}
@@ -554,14 +547,14 @@ export default function Announcements() {
                         {isCreating ? (
                           <>
                             <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                            {editingAnnouncement 
-                              ? (language === 'he' ? 'מעדכן...' : 'Updating...')
+                            {editingAnnouncement
+                              ? t('announcementsPage.updating')
                               : t('announcements.publishing')
                             }
                           </>
                         ) : (
-                          editingAnnouncement 
-                            ? (language === 'he' ? 'עדכון הודעה' : 'Update Announcement')
+                          editingAnnouncement
+                            ? t('announcementsPage.updateAnnouncement')
                             : t('announcements.publish')
                         )}
                       </Button>
@@ -648,7 +641,7 @@ export default function Announcements() {
                           <span className="text-border">•</span>
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
-                            {format(new Date(announcement.created_at), 'd בMMMM yyyy', { locale: language === 'he' ? he : enUS })}
+                            {format(new Date(announcement.created_at), language === 'he' ? 'd בMMMM yyyy' : 'd MMMM yyyy', { locale: language === 'he' ? he : language === 'es' ? es : enUS })}
                           </span>
                         </CardDescription>
                       </div>

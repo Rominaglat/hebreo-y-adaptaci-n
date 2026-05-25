@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { 
-  Pencil, Eraser, Trash2, MousePointer, Hand, 
+import {
+  Pencil, Eraser, Trash2, MousePointer, Hand,
   Palette, X, Check, Circle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface WhiteboardOverlayProps {
   strokes: DrawingStroke[];
@@ -56,6 +57,7 @@ const WhiteboardOverlay = ({
   userId,
   userName,
 }: WhiteboardOverlayProps) => {
+  const { t } = useLanguage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -273,7 +275,7 @@ const WhiteboardOverlay = ({
           size="icon"
           className="w-8 h-8 rounded-full"
           onClick={() => setTool('pointer')}
-          title="מצביע"
+          title={t('whiteboard.pointer')}
         >
           <MousePointer className="w-4 h-4" />
         </Button>
@@ -285,7 +287,7 @@ const WhiteboardOverlay = ({
               size="icon"
               className="w-8 h-8 rounded-full"
               onClick={() => setTool('pen')}
-              title="עט"
+              title={t('whiteboard.pen')}
             >
               <Pencil className="w-4 h-4" />
             </Button>
@@ -295,7 +297,7 @@ const WhiteboardOverlay = ({
               size="icon"
               className="w-8 h-8 rounded-full"
               onClick={() => setTool('eraser')}
-              title="מחק"
+              title={t('whiteboard.eraser')}
             >
               <Eraser className="w-4 h-4" />
             </Button>
@@ -309,7 +311,7 @@ const WhiteboardOverlay = ({
                   variant="ghost"
                   size="icon"
                   className="w-8 h-8 rounded-full"
-                  title="צבע"
+                  title={t('whiteboard.color')}
                 >
                   <div 
                     className="w-5 h-5 rounded-full border-2 border-white shadow-sm"
@@ -341,7 +343,7 @@ const WhiteboardOverlay = ({
                   variant="ghost"
                   size="icon"
                   className="w-8 h-8 rounded-full"
-                  title="גודל מברשת"
+                  title={t('whiteboard.brushSize')}
                 >
                   <Circle className="w-4 h-4" style={{ strokeWidth: brushSize / 2 }} />
                 </Button>
@@ -375,7 +377,7 @@ const WhiteboardOverlay = ({
                   size="icon"
                   className="w-8 h-8 rounded-full text-destructive hover:text-destructive"
                   onClick={onClearBoard}
-                  title="נקה לוח"
+                  title={t('whiteboard.clearBoard')}
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
@@ -394,7 +396,7 @@ const WhiteboardOverlay = ({
             disabled={hasRequestedAccess}
           >
             <Hand className="w-4 h-4" />
-            {hasRequestedAccess ? 'בקשה נשלחה' : 'בקש לצייר'}
+            {hasRequestedAccess ? t('whiteboard.requestSent') : t('whiteboard.requestToDraw')}
           </Button>
         )}
 
@@ -405,7 +407,7 @@ const WhiteboardOverlay = ({
           size="icon"
           className="w-8 h-8 rounded-full"
           onClick={onClose}
-          title="סגירת לוח"
+          title={t('whiteboard.closeBoard')}
         >
           <X className="w-4 h-4" />
         </Button>
@@ -414,7 +416,7 @@ const WhiteboardOverlay = ({
       {/* Permission requests for host */}
       {isHost && pendingRequests.length > 0 && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 glass rounded-xl p-3 space-y-2 max-w-xs">
-          <p className="text-xs text-muted-foreground text-center mb-2">בקשות ציור</p>
+          <p className="text-xs text-muted-foreground text-center mb-2">{t('whiteboard.drawRequests')}</p>
           {pendingRequests.map(req => (
             <div key={req.userId} className="flex items-center gap-2">
               <span className="text-sm flex-1">{req.userName}</span>
@@ -442,14 +444,14 @@ const WhiteboardOverlay = ({
       {/* Approved users indicator for host */}
       {isHost && approvedUsers.size > 1 && (
         <div className="absolute bottom-3 left-3 glass rounded-lg px-3 py-2">
-          <p className="text-xs text-muted-foreground mb-1">מורשים לצייר:</p>
+          <p className="text-xs text-muted-foreground mb-1">{t('whiteboard.approvedDrawers')}</p>
           <div className="flex flex-wrap gap-1">
             {Array.from(approvedUsers).map(uid => (
               <div 
                 key={uid} 
                 className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full flex items-center gap-1"
               >
-                {uid === userId ? 'את/ה' : 'משתתף'}
+                {uid === userId ? t('whiteboard.you') : t('whiteboard.participant')}
                 {uid !== userId && (
                   <button 
                     onClick={() => onRevokeAccess(uid)}

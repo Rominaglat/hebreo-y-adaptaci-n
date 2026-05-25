@@ -10,7 +10,6 @@ import {
   UsersRound,
   Gift,
   Settings,
-  Sparkles,
   UserPlus,
   Building2,
   LogOut,
@@ -51,11 +50,10 @@ export function CommandPalette() {
   const [members, setMembers] = useState<SearchedMember[]>([]);
   const navigate = useNavigate();
   const { signOut, isAdmin, isSuperAdmin } = useAuth();
-  const { language } = useLanguage();
+  const { t } = useLanguage();
   const { currentTenant } = useTenant();
   const { theme, setTheme } = usePlatform();
 
-  // Toggle on Cmd+K / Ctrl+K
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) {
@@ -67,28 +65,18 @@ export function CommandPalette() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
-  // Reset query when opening
   useEffect(() => {
     if (open) setQuery('');
   }, [open]);
 
-  // Fetch courses + members for search
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     (async () => {
       try {
         const [coursesRes, membersRes] = await Promise.all([
-          supabase
-            .from('courses')
-            .select('id, title')
-            .eq('is_published', true)
-            .limit(20),
-          supabase
-            .from('profiles')
-            .select('id, full_name')
-            .eq('show_in_community', true)
-            .limit(20),
+          supabase.from('courses').select('id, title').eq('is_published', true).limit(20),
+          supabase.from('profiles').select('id, full_name').eq('show_in_community', true).limit(20),
         ]);
         if (cancelled) return;
         setCourses((coursesRes.data || []) as SearchedCourse[]);
@@ -97,9 +85,7 @@ export function CommandPalette() {
         console.error('Command palette fetch failed', e);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [open]);
 
   const runAction = (fn: () => void) => {
@@ -112,34 +98,32 @@ export function CommandPalette() {
   const navItems = useMemo(() => {
     if (isMainTenant && isSuperAdmin) {
       return [
-        { icon: Home, label: language === 'he' ? 'לוח בקרה' : 'Dashboard', path: '/dashboard' },
-        { icon: Megaphone, label: language === 'he' ? 'הודעות' : 'Announcements', path: '/announcements' },
-        { icon: Sparkles, label: language === 'he' ? 'ספריית סקילים' : 'Skills Library', path: '/skills' },
-        { icon: Building2, label: language === 'he' ? 'ניהול ארגונים' : 'Manage Tenants', path: '/admin/tenants' },
-        { icon: UserPlus, label: language === 'he' ? 'ניהול משתמשים' : 'Manage Users', path: '/admin/users' },
-        { icon: Settings, label: language === 'he' ? 'הגדרות' : 'Settings', path: '/admin/settings' },
+        { icon: Home, label: t('nav.dashboard'), path: '/dashboard' },
+        { icon: Megaphone, label: t('announcements.title'), path: '/announcements' },
+        { icon: Building2, label: t('commandPalette.manageTenants'), path: '/admin/tenants' },
+        { icon: UserPlus, label: t('nav.manageUsers'), path: '/admin/users' },
+        { icon: Settings, label: t('nav.settings'), path: '/admin/settings' },
       ];
     }
     return [
-      { icon: Home, label: language === 'he' ? 'לוח בקרה' : 'Dashboard', path: '/dashboard' },
-      { icon: BookOpen, label: language === 'he' ? 'קורסים' : 'Courses', path: '/courses' },
-      { icon: Bookmark, label: language === 'he' ? 'מועדפים' : 'Favorites', path: '/courses/favorites' },
-      { icon: Video, label: language === 'he' ? 'חדרי לימוד' : 'Study Rooms', path: '/study-rooms' },
-      { icon: Calendar, label: language === 'he' ? 'לוח שנה' : 'Calendar', path: '/calendar' },
-      { icon: Megaphone, label: language === 'he' ? 'הודעות' : 'Announcements', path: '/announcements' },
-      { icon: Gift, label: language === 'he' ? 'הטבות לקהילה' : 'Benefits', path: '/community-benefits' },
-      { icon: UsersRound, label: language === 'he' ? 'חברי הקהילה' : 'Members', path: '/community-members' },
-      { icon: GraduationCap, label: language === 'he' ? 'מסלול הלמידה שלי' : 'My Learning Path', path: '/learning-path' },
+      { icon: Home, label: t('nav.dashboard'), path: '/dashboard' },
+      { icon: BookOpen, label: t('nav.courses'), path: '/courses' },
+      { icon: Bookmark, label: t('courseDetail.favorites'), path: '/courses/favorites' },
+      { icon: Video, label: t('nav.studyRooms'), path: '/study-rooms' },
+      { icon: Calendar, label: t('nav.calendar'), path: '/calendar' },
+      { icon: Megaphone, label: t('nav.announcements'), path: '/announcements' },
+      { icon: Gift, label: t('nav.communityBenefits'), path: '/community-benefits' },
+      { icon: UsersRound, label: t('nav.communityMembers'), path: '/community-members' },
+      { icon: GraduationCap, label: t('nav.learningPath'), path: '/learning-path' },
       ...(isAdmin
         ? [
-            { icon: Sparkles, label: language === 'he' ? 'ספריית סקילים' : 'Skills Library', path: '/skills' },
-            { icon: UserPlus, label: language === 'he' ? 'ניהול משתמשים' : 'Manage Users', path: '/admin/users' },
-            { icon: Settings, label: language === 'he' ? 'הגדרות' : 'Settings', path: '/admin/settings' },
+            { icon: UserPlus, label: t('nav.manageUsers'), path: '/admin/users' },
+            { icon: Settings, label: t('nav.settings'), path: '/admin/settings' },
           ]
         : []),
-      { icon: User, label: language === 'he' ? 'הפרופיל שלי' : 'My Profile', path: '/profile' },
+      { icon: User, label: t('commandPalette.myProfile'), path: '/profile' },
     ];
-  }, [language, isMainTenant, isSuperAdmin, isAdmin]);
+  }, [t, isMainTenant, isSuperAdmin, isAdmin]);
 
   const handleLogout = async () => {
     await signOut();
@@ -149,15 +133,14 @@ export function CommandPalette() {
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput
-        placeholder={language === 'he' ? 'חפש דפים, קורסים, חברים, פעולות...' : 'Search pages, courses, members, actions...'}
+        placeholder={t('commandPalette.searchPlaceholder')}
         value={query}
         onValueChange={setQuery}
       />
       <CommandList>
-        <CommandEmpty>{language === 'he' ? 'לא נמצאו תוצאות' : 'No results found'}</CommandEmpty>
+        <CommandEmpty>{t('commandPalette.empty')}</CommandEmpty>
 
-        {/* Pages */}
-        <CommandGroup heading={language === 'he' ? 'דפים' : 'Pages'}>
+        <CommandGroup heading={t('commandPalette.groupPages')}>
           {navItems.map((item) => (
             <CommandItem
               key={item.path}
@@ -170,11 +153,10 @@ export function CommandPalette() {
           ))}
         </CommandGroup>
 
-        {/* Courses */}
         {courses.length > 0 && (
           <>
             <CommandSeparator />
-            <CommandGroup heading={language === 'he' ? 'קורסים' : 'Courses'}>
+            <CommandGroup heading={t('nav.courses')}>
               {courses.map((course) => (
                 <CommandItem
                   key={course.id}
@@ -189,11 +171,10 @@ export function CommandPalette() {
           </>
         )}
 
-        {/* Members */}
         {members.length > 0 && (
           <>
             <CommandSeparator />
-            <CommandGroup heading={language === 'he' ? 'חברי הקהילה' : 'Members'}>
+            <CommandGroup heading={t('nav.communityMembers')}>
               {members.map((m) => (
                 <CommandItem
                   key={m.id}
@@ -201,16 +182,15 @@ export function CommandPalette() {
                   onSelect={() => runAction(() => navigate('/community-members'))}
                 >
                   <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="truncate">{m.full_name || (language === 'he' ? 'משתמש' : 'User')}</span>
+                  <span className="truncate">{m.full_name || t('commandPalette.userFallback')}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
           </>
         )}
 
-        {/* Actions */}
         <CommandSeparator />
-        <CommandGroup heading={language === 'he' ? 'פעולות' : 'Actions'}>
+        <CommandGroup heading={t('commandPalette.groupActions')}>
           <CommandItem
             value="action toggle theme"
             onSelect={() => runAction(() => setTheme(theme === 'light' ? 'dark' : 'light'))}
@@ -221,18 +201,12 @@ export function CommandPalette() {
               <Sun className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             )}
             <span>
-              {theme === 'light'
-                ? language === 'he'
-                  ? 'עבור למצב כהה'
-                  : 'Switch to dark mode'
-                : language === 'he'
-                ? 'עבור למצב בהיר'
-                : 'Switch to light mode'}
+              {theme === 'light' ? t('commandPalette.switchDark') : t('commandPalette.switchLight')}
             </span>
           </CommandItem>
           <CommandItem value="action logout" onSelect={() => runAction(handleLogout)}>
             <LogOut className="h-4 w-4 text-destructive flex-shrink-0" />
-            <span className="text-destructive">{language === 'he' ? 'התנתק' : 'Log out'}</span>
+            <span className="text-destructive">{t('auth.logout')}</span>
           </CommandItem>
         </CommandGroup>
       </CommandList>

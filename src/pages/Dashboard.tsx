@@ -15,7 +15,7 @@ import {
   Check
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { he, enUS } from 'date-fns/locale';
+import { he, enUS, es } from 'date-fns/locale';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -137,7 +137,7 @@ export default function Dashboard() {
   const { toast } = useToast();
 
   const displayName = (tenantProfile?.full_name || profile?.full_name || '').trim();
-  const firstName = displayName.split(' ')[0] || (language === 'he' ? 'שם' : 'Name');
+  const firstName = displayName.split(' ')[0] || t('dashboard.fallbackName');
   const [stats, setStats] = useState<DashboardStats>({
     myCourses: 0,
     myProgress: 0,
@@ -256,7 +256,9 @@ export default function Dashboard() {
     return `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`;
   };
 
-  const dateLocale = language === 'he' ? he : enUS;
+  const dateLocale = language === 'he' ? he : language === 'es' ? es : enUS;
+  const dateLocaleString = language === 'he' ? 'he-IL' : language === 'es' ? 'es-ES' : 'en-US';
+  const longDateFormat = language === 'he' ? 'EEEE, d בMMMM yyyy' : language === 'es' ? "EEEE, d 'de' MMMM 'de' yyyy" : 'EEEE, MMMM d, yyyy';
 
   const handleRsvp = async (eventId: string, currentlyRsvped: boolean) => {
     if (!user) return;
@@ -269,15 +271,15 @@ export default function Dashboard() {
           .eq('event_id', eventId)
           .eq('user_id', user.id);
 
-        toast({ title: language === 'he' ? 'ביטלת את ההרשמה' : 'Unregistered' });
+        toast({ title: t('dashboard.unregisteredToast') });
       } else {
         await supabase
           .from('event_rsvps')
           .insert({ event_id: eventId, user_id: user.id });
 
         toast({
-          title: language === 'he' ? 'נרשמת בהצלחה!' : 'Registered!',
-          description: language === 'he' ? 'נתראה באירוע!' : 'See you at the event'
+          title: t('dashboard.registeredToast'),
+          description: t('dashboard.registeredToastDesc')
         });
       }
 
@@ -305,7 +307,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error updating RSVP:', error);
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
+        title: t('common.error'),
         variant: 'destructive'
       });
     }
@@ -399,35 +401,35 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
             <StatCard
               value={stats.myCourses}
-              label="הקורסים שלי"
-              icon={<BookOpen className="w-6 h-6 text-violet-600 dark:text-violet-300" />}
-              iconColor="bg-violet-100 dark:bg-violet-950/60"
-              gradient="bg-gradient-to-br from-violet-50/80 to-transparent dark:from-violet-950/30"
+              label={t('dashboard.myCourses')}
+              icon={<BookOpen className="w-6 h-6 text-primary dark:text-primary" />}
+              iconColor="bg-primary/10 dark:bg-primary/20"
+              gradient="bg-gradient-to-br from-primary/5 to-transparent dark:from-primary/10"
               delay={0}
             />
             <StatCard
               value={stats.myProgress}
-              label="התקדמות"
+              label={t('courses.progress')}
               suffix="%"
-              icon={<GraduationCap className="w-6 h-6 text-fuchsia-600 dark:text-fuchsia-300" />}
-              iconColor="bg-fuchsia-100 dark:bg-fuchsia-950/60"
-              gradient="bg-gradient-to-br from-fuchsia-50/80 to-transparent dark:from-fuchsia-950/30"
+              icon={<GraduationCap className="w-6 h-6 text-accent dark:text-accent" />}
+              iconColor="bg-accent/10 dark:bg-accent/20"
+              gradient="bg-gradient-to-br from-accent/5 to-transparent dark:from-accent/10"
               delay={0.08}
             />
             <StatCard
               value={stats.announcements}
-              label="הודעות"
-              icon={<Megaphone className="w-6 h-6 text-purple-600 dark:text-purple-300" />}
-              iconColor="bg-purple-100 dark:bg-purple-950/60"
-              gradient="bg-gradient-to-br from-purple-50/80 to-transparent dark:from-purple-950/30"
+              label={t('announcements.title')}
+              icon={<Megaphone className="w-6 h-6 text-warning dark:text-warning" />}
+              iconColor="bg-warning/10 dark:bg-warning/20"
+              gradient="bg-gradient-to-br from-warning/5 to-transparent dark:from-warning/10"
               delay={0.16}
             />
             <StatCard
               value={stats.upcomingEvents}
-              label="אירועים"
-              icon={<Calendar className="w-6 h-6 text-indigo-600 dark:text-indigo-300" />}
-              iconColor="bg-indigo-100 dark:bg-indigo-950/60"
-              gradient="bg-gradient-to-br from-indigo-50/80 to-transparent dark:from-indigo-950/30"
+              label={t('calendar.events')}
+              icon={<Calendar className="w-6 h-6 text-secondary-foreground dark:text-secondary-foreground" />}
+              iconColor="bg-secondary dark:bg-secondary"
+              gradient="bg-gradient-to-br from-secondary/40 to-transparent dark:from-secondary/30"
               delay={0.24}
             />
           </div>
@@ -457,9 +459,9 @@ export default function Dashboard() {
                   <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
                     <Calendar className="w-5 h-5 text-accent" />
                   </div>
-                  <span className="truncate">אירועים קרובים</span>
+                  <span className="truncate">{t('dashboard.upcomingEvents')}</span>
                 </CardTitle>
-                <CardDescription className="truncate mt-1">האירועים הבאים בלוח השנה</CardDescription>
+                <CardDescription className="truncate mt-1">{t('dashboard.upcomingEventsDesc')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 p-5 pt-0 sm:p-6 sm:pt-0">
                 {upcomingEvents.length === 0 ? (
@@ -467,16 +469,16 @@ export default function Dashboard() {
                     <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-3">
                       <Calendar className="w-8 h-8 text-accent/60" />
                     </div>
-                    <p className="text-muted-foreground text-sm">אין אירועים קרובים</p>
+                    <p className="text-muted-foreground text-sm">{t('dashboard.noUpcomingEvents')}</p>
                   </div>
                 ) : (
                   <div className="space-y-2.5 w-full min-w-0 overflow-hidden">
                     {upcomingEvents.map((event) => {
                       const eventDate = new Date(event.start_time);
-                      const dayName = eventDate.toLocaleDateString(language === 'he' ? 'he-IL' : 'en-US', { weekday: 'short' });
+                      const dayName = eventDate.toLocaleDateString(dateLocaleString, { weekday: 'short' });
                       const dayNum = eventDate.getDate();
-                      const month = eventDate.toLocaleDateString(language === 'he' ? 'he-IL' : 'en-US', { month: 'short' });
-                      const time = eventDate.toLocaleTimeString(language === 'he' ? 'he-IL' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+                      const month = eventDate.toLocaleDateString(dateLocaleString, { month: 'short' });
+                      const time = eventDate.toLocaleTimeString(dateLocaleString, { hour: '2-digit', minute: '2-digit' });
 
                       return (
                         <div
@@ -501,7 +503,7 @@ export default function Dashboard() {
                             {isAdmin && event.rsvp_count > 0 && (
                               <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground w-full min-w-0">
                                 <Users className="w-3 h-3 flex-shrink-0" />
-                                <span className="truncate">{event.rsvp_count} נרשמים</span>
+                                <span className="truncate">{event.rsvp_count} {t('calendar.participants')}</span>
                               </div>
                             )}
                           </div>
@@ -517,10 +519,10 @@ export default function Dashboard() {
                             {event.user_rsvped ? (
                               <>
                                 <Check className="w-3 h-3 mx-1" />
-                                מגיע
+                                {t('calendar.attending')}
                               </>
                             ) : (
-                              'אני מגיע'
+                              t('calendar.rsvp')
                             )}
                           </Button>
                         </div>
@@ -530,7 +532,7 @@ export default function Dashboard() {
                 )}
                 <Button variant="outline" className="w-full mt-2" asChild>
                   <Link to="/calendar">
-                    צפה בלוח השנה
+                    {t('dashboard.showCalendar')}
                     <ArrowIcon className="w-4 h-4 mx-2" />
                   </Link>
                 </Button>
@@ -570,7 +572,7 @@ export default function Dashboard() {
                 <DialogHeader className="flex-shrink-0">
                   <DialogTitle className="text-xl break-words leading-tight">{selectedEvent.title}</DialogTitle>
                   <DialogDescription>
-                    {format(new Date(selectedEvent.start_time), 'EEEE, d בMMMM yyyy', { locale: dateLocale })}
+                    {format(new Date(selectedEvent.start_time), longDateFormat, { locale: dateLocale })}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 pt-4 overflow-y-auto flex-1 min-h-0">
@@ -595,7 +597,7 @@ export default function Dashboard() {
                         rel="noopener noreferrer"
                         className="text-primary hover:underline flex items-center gap-1 break-all min-w-0"
                       >
-                        <span className="break-all">{language === 'he' ? 'הצטרף לפגישה' : 'Join Meeting'}</span>
+                        <span className="break-all">{t('calendar.joinMeeting')}</span>
                         <ExternalLink className="w-3 h-3 flex-shrink-0" />
                       </a>
                     </div>
@@ -603,7 +605,7 @@ export default function Dashboard() {
 
                   <div className="flex items-center gap-3 text-muted-foreground">
                     <Users className="w-5 h-5 flex-shrink-0" />
-                    <span>{selectedEvent.rsvp_count} {language === 'he' ? 'נרשמים' : 'participants'}</span>
+                    <span>{selectedEvent.rsvp_count} {t('calendar.participants')}</span>
                   </div>
 
                   {cleanDescription(selectedEvent.description) && (
@@ -618,7 +620,7 @@ export default function Dashboard() {
                     <Button variant="outline" className="flex-1 min-w-0" asChild>
                       <a href={selectedEvent.meeting_url} target="_blank" rel="noopener noreferrer" className="truncate">
                         <ExternalLink className="w-4 h-4 mx-2 flex-shrink-0" />
-                        <span className="truncate">{language === 'he' ? 'הצטרף לפגישה' : 'Join Meeting'}</span>
+                        <span className="truncate">{t('calendar.joinMeeting')}</span>
                       </a>
                     </Button>
                   )}
@@ -630,10 +632,10 @@ export default function Dashboard() {
                     {selectedEvent.user_rsvped ? (
                       <>
                         <Check className="w-4 h-4 mx-2 flex-shrink-0" />
-                        <span className="truncate">{language === 'he' ? 'מגיע' : 'Attending'}</span>
+                        <span className="truncate">{t('calendar.attending')}</span>
                       </>
                     ) : (
-                      <span className="truncate">{language === 'he' ? 'אני מגיע' : 'RSVP'}</span>
+                      <span className="truncate">{t('calendar.rsvp')}</span>
                     )}
                   </Button>
                 </div>

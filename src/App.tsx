@@ -31,13 +31,7 @@ const ManageUsers = lazy(() => import("./pages/admin/ManageUsers"));
 const PlatformSettings = lazy(() => import("./pages/admin/PlatformSettings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const InstallApp = lazy(() => import("./pages/InstallApp"));
-const SkillsLibrary = lazy(() => import("./pages/SkillsLibrary"));
-const SkillDetail = lazy(() => import("./pages/SkillDetail"));
-const SkillSubmit = lazy(() => import("./pages/SkillSubmit"));
 const LearningPath = lazy(() => import("./pages/LearningPath"));
-const PersonalityAssessment = lazy(() => import("./pages/PersonalityAssessment"));
-const PersonalityResultsView = lazy(() => import("./pages/PersonalityResultsView"));
-const PersonalityResultsAdmin = lazy(() => import("./pages/admin/PersonalityResults"));
 const SecuritySettings = lazy(() => import("./pages/SecuritySettings"));
 const AcceptInvite = lazy(() => import("./pages/AcceptInvite"));
 
@@ -84,13 +78,7 @@ const App = () => (
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/settings/security" element={<SecuritySettings />} />
                     <Route path="/install" element={<InstallApp />} />
-                    <Route path="/skills" element={<SkillsLibrary />} />
-                    <Route path="/skills/submit" element={<SkillSubmit />} />
-                    <Route path="/skills/:id" element={<SkillDetail />} />
                     <Route path="/learning-path" element={<LearningPath />} />
-                    <Route path="/personality" element={<PersonalityAssessment />} />
-                    <Route path="/personality/:id" element={<PersonalityResultsView />} />
-                    <Route path="/admin/personality-results" element={<ProtectedRoute requireAdminOrInstructor>{<PersonalityResultsAdmin />}</ProtectedRoute>} />
                     <Route path="/admin/users" element={<ProtectedRoute requireAdminOrInstructor>{<ManageUsers />}</ProtectedRoute>} />
                     <Route path="/admin/settings" element={<PlatformSettings />} />
                   </Route>

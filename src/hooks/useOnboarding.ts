@@ -26,37 +26,13 @@ const DEFAULT_STATE: OnboardingState = {
   selectedInterests: [],
 };
 
-export const ONBOARDING_STEPS: { id: OnboardingStep; label: string; description: string; icon: string }[] = [
-  {
-    id: 'profile',
-    label: 'השלמת הפרופיל',
-    description: 'הוספת תמונה ופרטים אישיים',
-    icon: '👤',
-  },
-  {
-    id: 'first_course',
-    label: 'הרשמה לקורס ראשון',
-    description: 'בחירת קורס מעניין',
-    icon: '📚',
-  },
-  {
-    id: 'first_lesson',
-    label: 'צפייה בשיעור הראשון',
-    description: 'להתחיל ללמוד עכשיו',
-    icon: '🎬',
-  },
-  {
-    id: 'aria_chat',
-    label: 'ניסיון של העוזר',
-    description: 'העוזר החכם זמין לכל שאלה',
-    icon: '🤖',
-  },
-  {
-    id: 'study_room',
-    label: 'הצטרף לחדר לימוד',
-    description: 'למד יחד עם הקהילה',
-    icon: '🎓',
-  },
+// Step labels/descriptions are translation keys — resolved via t() at render time.
+export const ONBOARDING_STEPS: { id: OnboardingStep; labelKey: string; descriptionKey: string; icon: string }[] = [
+  { id: 'profile', labelKey: 'onboarding.step.profile.label', descriptionKey: 'onboarding.step.profile.description', icon: '👤' },
+  { id: 'first_course', labelKey: 'onboarding.step.firstCourse.label', descriptionKey: 'onboarding.step.firstCourse.description', icon: '📚' },
+  { id: 'first_lesson', labelKey: 'onboarding.step.firstLesson.label', descriptionKey: 'onboarding.step.firstLesson.description', icon: '🎬' },
+  { id: 'aria_chat', labelKey: 'onboarding.step.assistantChat.label', descriptionKey: 'onboarding.step.assistantChat.description', icon: '🤖' },
+  { id: 'study_room', labelKey: 'onboarding.step.studyRoom.label', descriptionKey: 'onboarding.step.studyRoom.description', icon: '🎓' },
 ];
 
 export function useOnboarding() {

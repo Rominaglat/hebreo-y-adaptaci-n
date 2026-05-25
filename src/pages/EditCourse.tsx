@@ -563,13 +563,13 @@ export default function EditCourse() {
           <ArrowRight className="w-7 h-7 text-destructive" />
         </div>
         <h2 className="text-xl font-semibold mb-2">
-          {t('admin.accessDenied') || 'אין הרשאה'}
+          {t('admin.accessDenied') || t('editCourse.noPermission')}
         </h2>
         <p className="text-muted-foreground mb-6">
-          ניתן לערוך רק קורסים שהוגדרת כמרצה שלהם
+          {t('editCourse.canOnlyEditAssigned')}
         </p>
         <Button onClick={() => navigate('/courses')}>
-          חזור לקורסים
+          {t('editCourse.backToCourses')}
         </Button>
       </div>
     );
@@ -794,17 +794,17 @@ export default function EditCourse() {
                       className="text-muted-foreground"
                     >
                       <ChevronUp className="w-4 h-4 ml-1" />
-                      כווץ הכל
+                      {t('editCourse.collapseAll')}
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={expandAllModules}
                       className="text-muted-foreground"
                     >
                       <ChevronDown className="w-4 h-4 ml-1" />
-                      הרחב הכל
+                      {t('editCourse.expandAll')}
                     </Button>
                   </>
                 )}

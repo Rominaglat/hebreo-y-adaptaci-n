@@ -43,6 +43,7 @@ import VideoSelectDialog from "./meeting/VideoSelectDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Room } from "@/hooks/useRooms";
 import { supabase } from "@/integrations/supabase/client";
+import { useLanguage } from "@/contexts/LanguageContext";
 interface CourseLesson {
   id: string;
   title: string;
@@ -63,6 +64,7 @@ interface MeetingRoomProps {
 
 const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [showChat, setShowChat] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -120,18 +122,18 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
   useEffect(() => {
     if (!joinError) return;
     const titles: Record<string, string> = {
-      room_full: "החדר מלא",
-      room_locked: "החדר נעול",
-      unknown: "כניסה לחדר נכשלה",
+      room_full: t('meetingRoom.joinErrorRoomFullTitle'),
+      room_locked: t('meetingRoom.joinErrorRoomLockedTitle'),
+      unknown: t('meetingRoom.joinErrorUnknownTitle'),
     };
     const descriptions: Record<string, string> = {
-      room_full: "החדר הזה הגיע למספר המשתתפים המרבי. אפשר לנסות מאוחר יותר.",
-      room_locked: "החדר נעול על ידי המארח. ניתן להיכנס רק כשהמארח פותח אותו.",
-      unknown: "אירעה שגיאה בכניסה לחדר.",
+      room_full: t('meetingRoom.joinErrorRoomFullDesc'),
+      room_locked: t('meetingRoom.joinErrorRoomLockedDesc'),
+      unknown: t('meetingRoom.joinErrorUnknownDesc'),
     };
     const baseDescription = descriptions[joinError.kind] ?? descriptions.unknown;
     const description = joinError.detail
-      ? `${baseDescription}\nפרטים: ${joinError.detail}`
+      ? `${baseDescription}\n${t('meetingRoom.errorDetailsPrefix')}: ${joinError.detail}`
       : baseDescription;
     toast({
       title: titles[joinError.kind] ?? titles.unknown,
@@ -467,9 +469,8 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
       const hasIframeVideo = !!document.querySelector('main iframe');
       if (hasIframeVideo) {
         toast({
-          title: "התראה לפני הקלטה",
-          description:
-            "סרטוני YouTube ו-Vimeo לא ייכללו בקובץ ההקלטה מסיבות אבטחה של הדפדפן. כדי להקליט סרטון, יש להשתמש בקובץ ישיר (.mp4).",
+          title: t('meetingRoom.recordingWarningTitle'),
+          description: t('meetingRoom.recordingWarningDesc'),
           duration: 6000,
         });
       }
@@ -549,7 +550,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
           ctx.fillStyle = '#2d2d44';
           ctx.font = 'bold 48px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('אין וידאו פעיל', canvas.width / 2, canvas.height / 2);
+          ctx.fillText(t('meetingRoom.noActiveVideo'), canvas.width / 2, canvas.height / 2);
           animationFrameRef.current = requestAnimationFrame(drawFrame);
           return;
         }
@@ -700,7 +701,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `הקלטה-${room.name}-${new Date().toISOString().slice(0, 10)}.${extension}`;
+        a.download = `${t('meetingRoom.recordingFilePrefix')}-${room.name}-${new Date().toISOString().slice(0, 10)}.${extension}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -712,8 +713,8 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
         }
         
         toast({
-          title: "ההקלטה הורדה!",
-          description: `קובץ ההקלטה נשמר במחשב שלך (${extension.toUpperCase()})`,
+          title: t('meetingRoom.recordingDownloadedTitle'),
+          description: `${t('meetingRoom.recordingDownloadedDesc')} (${extension.toUpperCase()})`,
           duration: 3000,
         });
       };
@@ -737,20 +738,20 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
         });
 
       toast({
-        title: "ההקלטה התחילה",
-        description: "מקליט את כל הוידאו בחדר",
+        title: t('meetingRoom.recordingStartedTitle'),
+        description: t('meetingRoom.recordingStartedDesc'),
         duration: 3000,
       });
     } catch (error) {
       console.error('Error starting recording:', error);
       toast({
-        title: "שגיאה בהקלטה",
-        description: "לא ניתן להתחיל את ההקלטה",
+        title: t('meetingRoom.recordingErrorTitle'),
+        description: t('meetingRoom.recordingErrorDesc'),
         variant: "destructive",
         duration: 4000,
       });
     }
-  }, [room.name, toast, localStream, remoteStreams, stopRecording]);
+  }, [room.name, toast, localStream, remoteStreams, stopRecording, t]);
 
   const formatRecordingTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -762,8 +763,8 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
     navigator.clipboard.writeText(window.location.href + '?room=' + room.id);
     setCopied(true);
     toast({
-      title: "הקישור הועתק!",
-      description: "שתף את הקישור עם אחרים להזמנה לחדר",
+      title: t('meetingRoom.linkCopiedTitle'),
+      description: t('meetingRoom.linkCopiedDesc'),
     });
     setTimeout(() => setCopied(false), 2000);
   };
@@ -772,8 +773,8 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
     updateSharedVideo(videoUrl);
     setVideoDialogOpen(false);
     toast({
-      title: "סרטון נבחר",
-      description: `כעת צופים ב: ${lessonTitle}`,
+      title: t('meetingRoom.videoSelectedTitle'),
+      description: `${t('meetingRoom.videoSelectedDesc')}: ${lessonTitle}`,
     });
   };
 
@@ -797,15 +798,15 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
     setSavingName(false);
     if (error) {
       toast({
-        title: 'שגיאה',
-        description: 'לא ניתן לעדכן את השם. יש לנסות שוב.',
+        title: t('common.error'),
+        description: t('meetingRoom.nameUpdateErrorDesc'),
         variant: 'destructive',
       });
       return;
     }
     setDisplayName(trimmed);
     setNameDialogOpen(false);
-    toast({ title: 'השם עודכן' });
+    toast({ title: t('meetingRoom.nameUpdatedTitle') });
   };
 
   const screenSharer = participants.find(p => p.is_screen_sharing && p.user_id !== userId);
@@ -857,7 +858,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
           </div>
           <div className="min-w-0">
             <h2 className="font-semibold text-foreground text-xs sm:text-sm truncate">{room.name}</h2>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">{participants.length} משתתפים</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">{participants.length} {t('meetingRoom.participantsCount')}</p>
           </div>
         </div>
         <Button 
@@ -867,7 +868,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
           onClick={copyRoomLink}
         >
           {copied ? <Check className="w-3 h-3 sm:w-4 sm:h-4" /> : <Copy className="w-3 h-3 sm:w-4 sm:h-4" />}
-          <span className="hidden sm:inline">הזמנת אחרים</span>
+          <span className="hidden sm:inline">{t('meetingRoom.inviteOthers')}</span>
         </Button>
       </header>
 
@@ -894,7 +895,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 {primaryKind === "local-screen" && screenStream && (
                   <VideoTile
                     stream={screenStream}
-                    name={`${displayName} — שיתוף מסך`}
+                    name={`${displayName} — ${t('meetingRoom.screenShareLabel')}`}
                     isMuted={true}
                     isVideoOn={true}
                     isScreenSharing={true}
@@ -905,7 +906,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 {primaryKind === "remote-screen" && screenSharer && (
                   <VideoTile
                     stream={remoteStreams.get(screenSharer.user_id) || null}
-                    name={`${screenSharer.user_name || 'משתתף'} — שיתוף מסך`}
+                    name={`${screenSharer.user_name || t('meetingRoom.participant')} — ${t('meetingRoom.screenShareLabel')}`}
                     isMuted={screenSharer.is_muted || false}
                     isVideoOn={true}
                     isScreenSharing={true}
@@ -957,7 +958,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                       <div key={participant.user_id} className="w-32 sm:w-44 shrink-0 h-full">
                         <VideoTile
                           stream={stream || null}
-                          name={participant.user_name || 'משתתף'}
+                          name={participant.user_name || t('meetingRoom.participant')}
                           isMuted={participant.is_muted || false}
                           isVideoOn={participant.is_video_on !== false}
                           isScreenSharing={false}
@@ -982,7 +983,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 {primaryKind === "local-screen" && screenStream && (
                   <VideoTile
                     stream={screenStream}
-                    name={`${displayName} — שיתוף מסך`}
+                    name={`${displayName} — ${t('meetingRoom.screenShareLabel')}`}
                     isMuted={true}
                     isVideoOn={true}
                     isScreenSharing={true}
@@ -993,7 +994,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 {primaryKind === "remote-screen" && screenSharer && (
                   <VideoTile
                     stream={remoteStreams.get(screenSharer.user_id) || null}
-                    name={`${screenSharer.user_name || 'משתתף'} — שיתוף מסך`}
+                    name={`${screenSharer.user_name || t('meetingRoom.participant')} — ${t('meetingRoom.screenShareLabel')}`}
                     isMuted={screenSharer.is_muted || false}
                     isVideoOn={true}
                     isScreenSharing={true}
@@ -1027,11 +1028,11 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                             prev === participant.user_id ? null : participant.user_id,
                           );
                         }}
-                        title={pinnedUserId === participant.user_id ? "ביטול הצמדה" : "הצמדת המשתתף"}
+                        title={pinnedUserId === participant.user_id ? t('meetingRoom.unpinParticipant') : t('meetingRoom.pinParticipant')}
                       >
                         <VideoTile
                           stream={stream || null}
-                          name={participant.user_name || 'משתתף'}
+                          name={participant.user_name || t('meetingRoom.participant')}
                           isMuted={participant.is_muted || false}
                           isVideoOn={participant.is_video_on !== false}
                           isScreenSharing={false}
@@ -1054,7 +1055,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
           <aside className="flex w-72 lg:w-80 glass border-r border-border flex-col shrink-0">
             <div className="p-3 sm:p-4 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold text-foreground text-sm">
-                {showChat ? "צ'אט" : "משתתפים"}
+                {showChat ? t('meetingRoom.chat') : t('meetingRoom.participants')}
               </h3>
               <Button
                 variant="ghost"
@@ -1091,20 +1092,20 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                             {p.user_name}
-                            {isSelf && ' (את/ה)'}
+                            {isSelf && ` (${t('meetingRoom.youSuffix')})`}
                             {isParticipantHost && (
-                              <span className="ms-1.5 text-[10px] text-amber-500 font-semibold">מארח</span>
+                              <span className="ms-1.5 text-[10px] text-amber-500 font-semibold">{t('meetingRoom.hostBadge')}</span>
                             )}
                           </p>
                           <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
                             {p.is_screen_sharing && (
                               <span className="flex items-center gap-1 text-primary">
-                                <Monitor className="w-3 h-3" /> משתף מסך
+                                <Monitor className="w-3 h-3" /> {t('meetingRoom.sharingScreen')}
                               </span>
                             )}
                             {raisedHands.has(p.user_id) && (
                               <span className="flex items-center gap-1 text-amber-500">
-                                <Hand className="w-3 h-3" /> יד מורמת
+                                <Hand className="w-3 h-3" /> {t('meetingRoom.handRaised')}
                               </span>
                             )}
                           </div>
@@ -1116,7 +1117,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                               size="icon"
                               className="h-7 w-7"
                               onClick={openNameDialog}
-                              title="עריכת שם"
+                              title={t('meetingRoom.editName')}
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
@@ -1156,7 +1157,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
       >
         <SheetContent side="bottom" className="h-[85vh] flex flex-col p-0">
           <SheetHeader className="px-4 py-3 border-b border-border">
-            <SheetTitle>{showChat ? "צ'אט" : "משתתפים"}</SheetTitle>
+            <SheetTitle>{showChat ? t('meetingRoom.chat') : t('meetingRoom.participants')}</SheetTitle>
           </SheetHeader>
           {/* Chat takes full sheet body; participants get their own scroll. */}
           {showChat && (
@@ -1178,20 +1179,20 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
                           {p.user_name}
-                          {isSelf && ' (את/ה)'}
+                          {isSelf && ` (${t('meetingRoom.youSuffix')})`}
                           {isParticipantHost && (
-                            <span className="ms-1.5 text-[10px] text-amber-500 font-semibold">מארח</span>
+                            <span className="ms-1.5 text-[10px] text-amber-500 font-semibold">{t('meetingRoom.hostBadge')}</span>
                           )}
                         </p>
                         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                           {p.is_screen_sharing && (
                             <span className="flex items-center gap-1 text-primary">
-                              <Monitor className="w-3 h-3" /> משתף מסך
+                              <Monitor className="w-3 h-3" /> {t('meetingRoom.sharingScreen')}
                             </span>
                           )}
                           {raisedHands.has(p.user_id) && (
                             <span className="flex items-center gap-1 text-amber-500">
-                              <Hand className="w-3 h-3" /> יד מורמת
+                              <Hand className="w-3 h-3" /> {t('meetingRoom.handRaised')}
                             </span>
                           )}
                         </div>
@@ -1220,12 +1221,12 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 size="icon"
                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
                 onClick={toggleMute}
-                aria-label={isMuted ? "ביטול השתקה" : "השתקה"}
+                aria-label={isMuted ? t('meetingRoom.unmute') : t('meetingRoom.mute')}
               >
                 {isMuted ? <MicOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Mic className="w-4 h-4 sm:w-5 sm:h-5" />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{isMuted ? "ביטול השתקה (M)" : "השתקה (M)"}</TooltipContent>
+            <TooltipContent>{isMuted ? `${t('meetingRoom.unmute')} (M)` : `${t('meetingRoom.mute')} (M)`}</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -1235,12 +1236,12 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 size="icon"
                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
                 onClick={toggleVideo}
-                aria-label={isVideoOn ? "כיבוי מצלמה" : "הפעלת מצלמה"}
+                aria-label={isVideoOn ? t('meetingRoom.cameraOff') : t('meetingRoom.cameraOn')}
               >
                 {isVideoOn ? <Video className="w-4 h-4 sm:w-5 sm:h-5" /> : <VideoOff className="w-4 h-4 sm:w-5 sm:h-5" />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{isVideoOn ? "כיבוי מצלמה (V)" : "הפעלת מצלמה (V)"}</TooltipContent>
+            <TooltipContent>{isVideoOn ? `${t('meetingRoom.cameraOff')} (V)` : `${t('meetingRoom.cameraOn')} (V)`}</TooltipContent>
           </Tooltip>
 
           {/* Raise hand — broadcast-only, anyone can do it. */}
@@ -1254,12 +1255,12 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                   isLocalRaised && "bg-amber-400 hover:bg-amber-500 text-amber-950",
                 )}
                 onClick={isLocalRaised ? lowerHand : raiseHand}
-                aria-label={isLocalRaised ? "הורדת היד" : "הרמת היד"}
+                aria-label={isLocalRaised ? t('meetingRoom.lowerHand') : t('meetingRoom.raiseHand')}
               >
                 <Hand className="w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{isLocalRaised ? "הורדת היד" : "הרמת היד"}</TooltipContent>
+            <TooltipContent>{isLocalRaised ? t('meetingRoom.lowerHand') : t('meetingRoom.raiseHand')}</TooltipContent>
           </Tooltip>
 
           {/* View mode toggle — only meaningful when there's primary content
@@ -1273,7 +1274,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                   size="icon"
                   className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
                   onClick={() => setViewMode((m) => (m === "grid" ? "speaker" : "grid"))}
-                  aria-label="החלפת תצוגה"
+                  aria-label={t('meetingRoom.switchView')}
                 >
                   {viewMode === "grid" ? (
                     <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1283,7 +1284,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {viewMode === "grid" ? "תצוגת ספוטלייט (שיתוף ראשי)" : "תצוגת רשת"}
+                {viewMode === "grid" ? t('meetingRoom.spotlightView') : t('meetingRoom.gridView')}
               </TooltipContent>
             </Tooltip>
           )}
@@ -1296,12 +1297,12 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 size="icon"
                 className="hidden sm:flex w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
                 onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-                aria-label={isScreenSharing ? "הפסקת שיתוף מסך" : "שיתוף מסך"}
+                aria-label={isScreenSharing ? t('meetingRoom.stopScreenShare') : t('meetingRoom.startScreenShare')}
               >
                 {isScreenSharing ? <MonitorOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Monitor className="w-4 h-4 sm:w-5 sm:h-5" />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{isScreenSharing ? "הפסקת שיתוף מסך" : "שיתוף מסך"}</TooltipContent>
+            <TooltipContent>{isScreenSharing ? t('meetingRoom.stopScreenShare') : t('meetingRoom.startScreenShare')}</TooltipContent>
           </Tooltip>
           
           {/* Recording button - only for host, hidden on mobile */}
@@ -1313,7 +1314,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                   size="icon"
                   className={cn("hidden sm:flex w-10 h-10 sm:w-12 sm:h-12 rounded-full relative shrink-0", isRecording && "animate-pulse")}
                   onClick={isRecording ? stopRecording : startRecording}
-                  aria-label={isRecording ? "עצירת הקלטה" : "התחלת הקלטה"}
+                  aria-label={isRecording ? t('meetingRoom.stopRecording') : t('meetingRoom.startRecording')}
                 >
                   {isRecording ? (
                     <>
@@ -1327,7 +1328,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                   )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{isRecording ? "עצירת הקלטה" : "התחלת הקלטה"}</TooltipContent>
+              <TooltipContent>{isRecording ? t('meetingRoom.stopRecording') : t('meetingRoom.startRecording')}</TooltipContent>
             </Tooltip>
           )}
 
@@ -1340,12 +1341,12 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                   size="icon"
                   className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
                   onClick={() => setShowWhiteboard(!showWhiteboard)}
-                  aria-label={showWhiteboard ? "סגירת לוח ציור" : "פתיחת לוח ציור"}
+                  aria-label={showWhiteboard ? t('meetingRoom.closeWhiteboard') : t('meetingRoom.openWhiteboard')}
                 >
                   <PenTool className="w-4 h-4 sm:w-5 sm:h-5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{showWhiteboard ? "סגירת לוח ציור" : "פתיחת לוח ציור"}</TooltipContent>
+              <TooltipContent>{showWhiteboard ? t('meetingRoom.closeWhiteboard') : t('meetingRoom.openWhiteboard')}</TooltipContent>
             </Tooltip>
           )}
 
@@ -1357,12 +1358,12 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 size="icon"
                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
                 onClick={() => setVideoDialogOpen(true)}
-                aria-label="צפייה בסרטון מהקורס"
+                aria-label={t('meetingRoom.watchCourseVideo')}
               >
                 <Play className="w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>צפייה בסרטון מהקורס יחד</TooltipContent>
+            <TooltipContent>{t('meetingRoom.watchCourseVideoTogether')}</TooltipContent>
           </Tooltip>
           <VideoSelectDialog
             open={videoDialogOpen}
@@ -1381,20 +1382,20 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 size="icon"
                 className={cn("w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0 relative", showChat && "bg-primary text-primary-foreground")}
                 onClick={() => { setShowChat(!showChat); setShowParticipants(false); }}
-                aria-label="צ'אט"
+                aria-label={t('meetingRoom.chat')}
               >
                 <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
                 {unreadCount > 0 && !showChat && (
                   <span
                     className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-white text-[10px] font-bold flex items-center justify-center"
-                    aria-label={`${unreadCount} הודעות חדשות`}
+                    aria-label={`${unreadCount} ${t('meetingRoom.newMessagesA11y')}`}
                   >
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>צ'אט (C)</TooltipContent>
+            <TooltipContent>{`${t('meetingRoom.chat')} (C)`}</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -1404,7 +1405,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 size="icon"
                 className={cn("w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0 relative", showParticipants && "bg-primary text-primary-foreground")}
                 onClick={() => { setShowParticipants(!showParticipants); setShowChat(false); }}
-                aria-label="משתתפים"
+                aria-label={t('meetingRoom.participants')}
               >
                 <Users className="w-4 h-4 sm:w-5 sm:h-5" />
                 {raisedHands.size > 0 && !showParticipants && (
@@ -1414,7 +1415,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>משתתפים</TooltipContent>
+            <TooltipContent>{t('meetingRoom.participants')}</TooltipContent>
           </Tooltip>
 
           <div className="w-px h-6 sm:h-8 bg-border mx-1 sm:mx-2 shrink-0" />
@@ -1425,13 +1426,13 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 variant="destructive"
                 className="h-10 sm:h-12 px-3 sm:px-6 rounded-full gap-1 sm:gap-2 text-xs sm:text-sm shrink-0"
                 onClick={handleLeave}
-                aria-label="יציאה מהחדר"
+                aria-label={t('meetingRoom.leaveRoom')}
               >
                 <Phone className="w-4 h-4 sm:w-5 sm:h-5 rotate-[135deg]" />
-                <span className="hidden xs:inline">עזוב</span>
+                <span className="hidden xs:inline">{t('meetingRoom.leave')}</span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>יציאה מהחדר (Esc)</TooltipContent>
+            <TooltipContent>{`${t('meetingRoom.leaveRoom')} (Esc)`}</TooltipContent>
           </Tooltip>
         </div>
         </TooltipProvider>
@@ -1449,7 +1450,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
           </span>
-          השיחה מוקלטת
+          {t('meetingRoom.callRecording')}
         </div>
       )}
 
@@ -1462,7 +1463,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
           video header even when it does fire. */}
       {connectionStatus === "failed" && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 rounded-full px-4 py-2 text-sm font-medium shadow-lg flex items-center gap-2 bg-red-500 text-white">
-          <span>החיבור נכשל</span>
+          <span>{t('meetingRoom.connectionFailed')}</span>
           <Button
             size="sm"
             variant="secondary"
@@ -1473,7 +1474,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
             }}
           >
             <RotateCw className="w-3 h-3" />
-            חיבור מחדש
+            {t('meetingRoom.reconnect')}
           </Button>
         </div>
       )}
@@ -1482,16 +1483,16 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
       <Dialog open={confirmLeaveOpen} onOpenChange={setConfirmLeaveOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>יציאה מהחדר</DialogTitle>
+            <DialogTitle>{t('meetingRoom.leaveRoom')}</DialogTitle>
             <DialogDescription>
               {isHost
-                ? "אתם המארחים. יציאה תשאיר את החדר פעיל למשתתפים האחרים."
-                : "האם לצאת מהחדר?"}
+                ? t('meetingRoom.leaveAsHostDesc')
+                : t('meetingRoom.leaveConfirmDesc')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setConfirmLeaveOpen(false)}>
-              ביטול
+              {t('common.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -1500,7 +1501,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 performLeave();
               }}
             >
-              יציאה
+              {t('meetingRoom.leaveAction')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1509,18 +1510,18 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
       <Dialog open={nameDialogOpen} onOpenChange={setNameDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>עריכת השם שלך</DialogTitle>
+            <DialogTitle>{t('meetingRoom.editYourName')}</DialogTitle>
             <DialogDescription>
-              השם שיוצג למשתתפים האחרים בחדר.
+              {t('meetingRoom.editYourNameDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
-            <Label htmlFor="display-name">שם</Label>
+            <Label htmlFor="display-name">{t('meetingRoom.nameLabel')}</Label>
             <Input
               id="display-name"
               value={pendingName}
               onChange={(e) => setPendingName(e.target.value)}
-              placeholder="הזנת שם..."
+              placeholder={t('meetingRoom.namePlaceholder')}
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') saveDisplayName();
@@ -1529,13 +1530,13 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setNameDialogOpen(false)}>
-              ביטול
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={saveDisplayName}
               disabled={!pendingName.trim() || savingName}
             >
-              {savingName ? 'בשמירה...' : 'שמירה'}
+              {savingName ? t('meetingRoom.saving') : t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>

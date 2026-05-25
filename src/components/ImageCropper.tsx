@@ -78,7 +78,7 @@ export function ImageCropper({
   onCropComplete,
   isUploading = false,
 }: ImageCropperProps) {
-  const { language } = useLanguage();
+  const { t } = useLanguage();
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
@@ -122,11 +122,9 @@ export function ImageCropper({
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
       <DialogContent className="max-w-2xl p-0 overflow-hidden border-border/60">
         <DialogHeader className="p-5 pb-3">
-          <DialogTitle>{language === 'he' ? 'חיתוך תמונה' : 'Crop image'}</DialogTitle>
+          <DialogTitle>{t('imageCropper.title')}</DialogTitle>
           <DialogDescription>
-            {language === 'he'
-              ? 'יש לגרור את הריבוע כדי לבחור את האזור הרצוי'
-              : 'Drag the box to select the desired area'}
+            {t('imageCropper.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -161,7 +159,7 @@ export function ImageCropper({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-muted-foreground">
-                {language === 'he' ? 'זום' : 'Zoom'}
+                {t('imageCropper.zoom')}
               </Label>
               <span className="text-xs text-muted-foreground tabular-nums">{Math.round(scale * 100)}%</span>
             </div>
@@ -179,7 +177,7 @@ export function ImageCropper({
         <DialogFooter className="p-5 pt-3 border-t border-border/50 bg-muted/20">
           <Button variant="outline" onClick={handleClose} disabled={isUploading || isProcessing}>
             <X className="w-4 h-4 me-1.5" />
-            {language === 'he' ? 'ביטול' : 'Cancel'}
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleConfirm}
@@ -187,7 +185,7 @@ export function ImageCropper({
             className="gap-1.5 bg-gradient-to-br from-primary to-accent shadow-md shadow-primary/20"
           >
             {(isUploading || isProcessing) && <Loader2 className="w-4 h-4 animate-spin" />}
-            {language === 'he' ? 'שמירת תמונה' : 'Save image'}
+            {t('imageCropper.saveImage')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -14,7 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { LanguageSelector } from '@/components/LanguageSelector';
 import AuroraFlow from '@/components/ui/aurora-flow';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo.svg';
 
 type FieldErrors = {
   email?: string;
@@ -33,8 +33,8 @@ export default function Login() {
   const { t } = useLanguage();
 
   useEffect(() => {
-    document.title = 'התחברות | Learning Portal';
-  }, []);
+    document.title = `${t('auth.loginTitle')} | Hebreo y Adaptación`;
+  }, [t]);
 
   useEffect(() => {
     if (user) navigate('/dashboard', { replace: true });
@@ -84,7 +84,7 @@ export default function Login() {
         if ((guard.data as { locked?: boolean } | null)?.locked) {
           toast({
             title: t('auth.loginFailed'),
-            description: 'יותר מדי ניסיונות. נסו שוב בעוד 15 דקות.',
+            description: t('auth.tooManyAttempts'),
             variant: 'destructive',
           });
           return;
@@ -157,13 +157,14 @@ export default function Login() {
           <div className="inline-flex items-center justify-center bg-white/10 backdrop-blur-md p-4 rounded-2xl shadow-lg shadow-black/20 mb-5 border border-white/10">
             <img
               src={logo}
-              alt="Learning Portal logo"
+              alt="Hebreo y Adaptación logo"
               className="w-16 h-16 rounded-xl"
               loading="eager"
             />
           </div>
-          <h1 className="text-2xl font-bold text-white">Learning Portal</h1>
-          <p className="text-white/60 mt-1">{t('auth.portalSubtitle')}</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Hebreo y Adaptación</h1>
+          <p className="text-white/70 mt-1 text-sm uppercase tracking-[0.18em]">Romina Glatstein</p>
+          <p className="text-white/60 mt-2">{t('auth.portalSubtitle')}</p>
         </header>
 
         <Card className="border-white/10 shadow-2xl shadow-black/30 backdrop-blur-xl bg-black/40">
@@ -184,7 +185,7 @@ export default function Login() {
                     placeholder="your@email.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className={`pr-10 bg-white/5 border-purple-500/30 text-white placeholder:text-white/25 focus-visible:ring-purple-500/50 focus-visible:border-purple-400/60 ${errors.email ? 'border-destructive ring-2 ring-destructive/20' : ''}`}
+                    className={`pr-10 bg-white/5 border-primary/40 text-white placeholder:text-white/25 focus-visible:ring-primary/60 focus-visible:border-primary/70 ${errors.email ? 'border-destructive ring-2 ring-destructive/20' : ''}`}
                     style={{ textAlign: 'right', direction: 'rtl' }}
                     disabled={isLoading}
                     autoComplete="username"
@@ -203,7 +204,7 @@ export default function Login() {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className={`pr-10 bg-white/5 border-purple-500/30 text-white placeholder:text-white/25 focus-visible:ring-purple-500/50 focus-visible:border-purple-400/60 ${errors.password ? 'border-destructive ring-2 ring-destructive/20' : ''}`}
+                    className={`pr-10 bg-white/5 border-primary/40 text-white placeholder:text-white/25 focus-visible:ring-primary/60 focus-visible:border-primary/70 ${errors.password ? 'border-destructive ring-2 ring-destructive/20' : ''}`}
                     disabled={isLoading}
                     autoComplete="current-password"
                   />
@@ -211,7 +212,7 @@ export default function Login() {
                 {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
               </div>
 
-              <Button type="submit" className="w-full h-11 font-medium bg-purple-600 hover:bg-purple-500 shadow-lg shadow-purple-900/40" disabled={isLoading}>
+              <Button type="submit" className="w-full h-11 font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-black/30" disabled={isLoading}>
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 ml-2 animate-spin" />

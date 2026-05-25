@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { BookOpen, Play, Pause, CheckCircle, Clock, Download, ChevronDown, ChevronRight, ArrowRight, ArrowLeft, StickyNote, FileText, ClipboardList, Lock, FileInput, File, ExternalLink, Calendar, Star, EyeOff, Info } from 'lucide-react';
 import { format } from 'date-fns';
-import { he, enUS } from 'date-fns/locale';
+import { he, enUS, es } from 'date-fns/locale';
 import DOMPurify from 'dompurify';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -524,7 +524,7 @@ export default function CourseDetail() {
                   }
                 }}
               >
-                {language === 'he' ? `לשיעור הבא: ${getNextLesson.title}` : `Next Lesson: ${getNextLesson.title}`}
+                {`${t('courseDetail.nextLessonLabel')}: ${getNextLesson.title}`}
                 <ArrowLeft className="w-4 h-4" />
               </Button>
             ) : nextCourse ? (
@@ -533,7 +533,7 @@ export default function CourseDetail() {
                 className="gap-2"
                 onClick={() => navigate(`/courses/${nextCourse.id}`)}
               >
-                {language === 'he' ? `לקורס הבא: ${nextCourse.title}` : `Next Course: ${nextCourse.title}`}
+                {`${t('courseDetail.nextCourseLabel')}: ${nextCourse.title}`}
                 <ArrowLeft className="w-4 h-4" />
               </Button>
             ) : (
@@ -543,7 +543,7 @@ export default function CourseDetail() {
                 asChild
               >
                 <Link to="/courses">
-                  {language === 'he' ? 'חזרה לקורסים' : 'Back to Courses'}
+                  {t('courseDetail.backToCourses')}
                   <ArrowLeft className="w-4 h-4" />
                 </Link>
               </Button>
@@ -618,8 +618,8 @@ export default function CourseDetail() {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar className="w-4 h-4" />
                     <span>
-                      {language === 'he' ? 'עודכן לאחרונה:' : 'Last updated:'}{' '}
-                      {format(new Date(selectedLesson.updated_at), 'd בMMM yyyy', { locale: language === 'he' ? he : enUS })}
+                      {t('courseDetail.lastUpdated')}{' '}
+                      {format(new Date(selectedLesson.updated_at), language === 'he' ? 'd בMMM yyyy' : 'd MMM yyyy', { locale: language === 'he' ? he : language === 'es' ? es : enUS })}
                     </span>
                   </div>
                 )}

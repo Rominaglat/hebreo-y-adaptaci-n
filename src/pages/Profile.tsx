@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { format } from 'date-fns';
-import { he, enUS } from 'date-fns/locale';
+import { he, enUS, es } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -146,7 +146,7 @@ export default function Profile() {
       if (error) throw error;
 
       toast({
-        title: language === 'he' ? 'ההגדרה עודכנה' : 'Setting updated',
+        title: t('profilePage.settingUpdated'),
       });
     } catch (error) {
       console.error('Error updating visibility:', error);
@@ -417,7 +417,7 @@ export default function Profile() {
                   )}
                   <span className="flex items-center gap-1.5">
                     <Calendar className="w-4 h-4" />
-                    {t('profile.memberSince')} {format(new Date(effectiveProfile.join_date), 'MMMM yyyy', { locale: language === 'he' ? he : enUS })}
+                    {t('profile.memberSince')} {format(new Date(effectiveProfile.join_date), 'MMMM yyyy', { locale: language === 'he' ? he : language === 'es' ? es : enUS })}
                   </span>
                 </div>
               </div>
@@ -653,9 +653,9 @@ export default function Profile() {
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-muted-foreground" />
               <div>
-                <CardTitle>{language === 'he' ? 'הגדרות נראות' : 'Visibility Settings'}</CardTitle>
+                <CardTitle>{t('profilePage.visibilityTitle')}</CardTitle>
                 <CardDescription>
-                  {language === 'he' ? 'הגדרת ההופעה שלך לחברי הקהילה' : 'Control how you appear to community members'}
+                  {t('profilePage.visibilityDesc')}
                 </CardDescription>
               </div>
             </div>
@@ -664,10 +664,10 @@ export default function Profile() {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label className="text-base">
-                  {language === 'he' ? 'הצג אותי ברשימת חברי הקהילה' : 'Show me in community members list'}
+                  {t('profilePage.showInCommunity')}
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  {language === 'he' ? 'כשמופעל, הכרטיסיה שלך תופיע בדף חברי הקהילה' : 'When enabled, your card will appear on the community members page'}
+                  {t('profilePage.showInCommunityDesc')}
                 </p>
               </div>
               <Switch
@@ -683,10 +683,10 @@ export default function Profile() {
               <div className="space-y-0.5">
                 <Label className="text-base flex items-center gap-2">
                   <Phone className="w-4 h-4" />
-                  {language === 'he' ? 'הצגת כפתור התקשרות' : 'Show call button'}
+                  {t('profilePage.showCallButton')}
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  {language === 'he' ? 'אפשר לחברי הקהילה להתקשר אליך' : 'Allow community members to call you'}
+                  {t('profilePage.showCallButtonDesc')}
                 </p>
               </div>
               <Switch
@@ -702,10 +702,10 @@ export default function Profile() {
               <div className="space-y-0.5">
                 <Label className="text-base flex items-center gap-2">
                   <MessageCircle className="w-4 h-4" />
-                  {language === 'he' ? 'הצגת כפתור וואטסאפ' : 'Show WhatsApp button'}
+                  {t('profilePage.showWhatsappButton')}
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  {language === 'he' ? 'אפשר לחברי הקהילה לשלוח לך הודעה בוואטסאפ' : 'Allow community members to message you on WhatsApp'}
+                  {t('profilePage.showWhatsappButtonDesc')}
                 </p>
               </div>
               <Switch

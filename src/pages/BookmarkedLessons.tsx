@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Play, CheckCircle, Clock, Download, ChevronDown, ChevronRight, ArrowRight, StickyNote, FileText, ClipboardList, FileInput, File, ExternalLink, Calendar, Star, BookOpen } from 'lucide-react';
 import { format } from 'date-fns';
-import { he, enUS } from 'date-fns/locale';
+import { he, enUS, es } from 'date-fns/locale';
 import DOMPurify from 'dompurify';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -368,8 +368,8 @@ export default function BookmarkedLessons() {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar className="w-4 h-4" />
                     <span>
-                      {language === 'he' ? 'עודכן לאחרונה:' : 'Last updated:'}{' '}
-                      {format(new Date(selectedLesson.updated_at), 'dd/MM/yyyy', { locale: language === 'he' ? he : enUS })}
+                      {t('bookmarksPage.lastUpdated')}{' '}
+                      {format(new Date(selectedLesson.updated_at), 'dd/MM/yyyy', { locale: language === 'he' ? he : language === 'es' ? es : enUS })}
                     </span>
                   </div>
                 )}

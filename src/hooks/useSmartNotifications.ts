@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useStreak } from './useStreak';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export type SmartNotificationType =
   | 'streak_at_risk'
@@ -48,6 +49,7 @@ interface EventRow {
  */
 export function useSmartNotifications() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { current: currentStreak, isAtRisk, lastActivityDate } = useStreak();
 
   const [upcomingEvents, setUpcomingEvents] = useState<EventRow[]>([]);
@@ -116,8 +118,8 @@ export function useSmartNotifications() {
       items.push({
         id: `streak-risk-${lastActivityDate}`,
         type: 'streak_at_risk',
-        title: 'הסטריק שלך בסכנה! 🔥',
-        body: `כבר ${currentStreak} ימי רצף — כדאי להיכנס היום כדי לא לאבד!`,
+        title: t('smartNotifications.streakAtRiskTitle'),
+        body: t('smartNotifications.streakAtRiskBody').replace('{count}', String(currentStreak)),
         icon: '⚠️',
         priority: 'high',
         createdAt: new Date().toISOString(),
@@ -132,8 +134,10 @@ export function useSmartNotifications() {
       items.push({
         id: `event-${event.id}`,
         type: 'event_starting_soon',
-        title: 'אירוע מתחיל בקרוב',
-        body: `${event.title} מתחיל בעוד ${minutesUntil} דקות`,
+        title: t('smartNotifications.eventStartingSoonTitle'),
+        body: t('smartNotifications.eventStartingSoonBody')
+          .replace('{title}', event.title)
+          .replace('{minutes}', String(minutesUntil)),
         icon: '📅',
         link: '/calendar',
         priority: 'high',
@@ -147,8 +151,10 @@ export function useSmartNotifications() {
       items.push({
         id: `stale-${course.course_id}`,
         type: 'unfinished_course',
-        title: 'להמשיך מהמקום האחרון',
-        body: `${course.courses.title} — ההתקדמות: ${Math.round(course.progress_percentage ?? 0)}%`,
+        title: t('smartNotifications.continueWhereLeftOffTitle'),
+        body: t('smartNotifications.continueWhereLeftOffBody')
+          .replace('{title}', course.courses.title)
+          .replace('{progress}', String(Math.round(course.progress_percentage ?? 0))),
         icon: '📚',
         link: `/courses/${course.course_id}`,
         priority: 'medium',
@@ -158,7 +164,7 @@ export function useSmartNotifications() {
 
     // Filter out dismissed
     return items.filter((n) => !dismissed.has(n.id));
-  }, [user, currentStreak, isAtRisk, lastActivityDate, upcomingEvents, staleCourses, dismissed]);
+  }, [user, currentStreak, isAtRisk, lastActivityDate, upcomingEvents, staleCourses, dismissed, t]);
 
   const dismiss = (id: string) => {
     setDismissed((prev) => {

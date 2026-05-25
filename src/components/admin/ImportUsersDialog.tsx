@@ -67,7 +67,7 @@ const generatePassword = () => {
 };
 
 export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: ImportUsersDialogProps) {
-  const { language } = useLanguage();
+  const { t } = useLanguage();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -251,10 +251,8 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
       
       if (parsedUsers.length === 0) {
         toast({
-          title: language === 'he' ? 'שגיאה' : 'Error',
-          description: language === 'he' 
-            ? 'לא נמצאו משתמשים בקובץ. וודא שהקובץ מכיל עמודות email ו-full_name' 
-            : 'No users found in file. Make sure the file contains email and full_name columns',
+          title: t('common.error'),
+          description: t('importUsers.noUsersFound'),
           variant: 'destructive',
         });
         return;
@@ -265,8 +263,8 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
     } catch (error) {
       console.error('Error parsing file:', error);
       toast({
-        title: language === 'he' ? 'שגיאה בקריאת הקובץ' : 'Error reading file',
-        description: language === 'he' ? 'וודא שהקובץ בפורמט CSV או Excel תקין' : 'Make sure the file is a valid CSV or Excel format',
+        title: t('importUsers.fileReadError'),
+        description: t('importUsers.fileReadErrorDesc'),
         variant: 'destructive',
       });
     }
@@ -312,7 +310,7 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
           failedCount++;
         } else if (response.data?.alreadyMember) {
           // User already in tenant - count as skipped/success
-          updatedUsers[i] = { ...user, status: 'success', error: language === 'he' ? 'כבר חבר בארגון' : 'Already member' };
+          updatedUsers[i] = { ...user, status: 'success', error: t('importUsers.alreadyMember') };
           skippedCount++;
         } else {
           updatedUsers[i] = { ...user, status: 'success' };
@@ -340,15 +338,12 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
   };
 
   const getRoleLabel = (role: string) => {
-    if (language === 'he') {
-      switch (role) {
-        case 'admin': return 'מנהל';
-        case 'instructor': return 'מרצה';
-        case 'student': return 'תלמיד';
-        default: return role;
-      }
+    switch (role) {
+      case 'admin': return t('admin.admin');
+      case 'instructor': return t('admin.instructor');
+      case 'student': return t('admin.student');
+      default: return role;
     }
-    return role;
   };
 
   return (
@@ -356,12 +351,10 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {language === 'he' ? 'ייבוא משתמשים מקובץ' : 'Import Users from File'}
+            {t('importUsers.title')}
           </DialogTitle>
           <DialogDescription>
-            {language === 'he' 
-              ? 'העלה קובץ CSV או Excel עם רשימת משתמשים לייבוא'
-              : 'Upload a CSV or Excel file with a list of users to import'}
+            {t('importUsers.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -373,10 +366,10 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
             >
               <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
               <p className="font-medium mb-1">
-                {language === 'he' ? 'להעלאת קובץ' : 'Click to upload a file'}
+                {t('importUsers.clickToUpload')}
               </p>
               <p className="text-sm text-muted-foreground">
-                {language === 'he' ? 'CSV או Excel (xlsx)' : 'CSV or Excel (xlsx)'}
+                {t('importUsers.fileTypes')}
               </p>
               <Input
                 ref={fileInputRef}
@@ -390,16 +383,14 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
             <div className="flex items-center justify-center gap-2">
               <Button variant="outline" size="sm" onClick={downloadTemplate}>
                 <Download className="w-4 h-4 me-2" />
-                {language === 'he' ? 'הורדת תבנית לדוגמה' : 'Download Template'}
+                {t('importUsers.downloadTemplate')}
               </Button>
             </div>
 
             <Alert>
               <FileSpreadsheet className="w-4 h-4" />
               <AlertDescription>
-                {language === 'he' 
-                  ? 'הקובץ צריך לכלול עמודות: email, full_name, role (אופציונלי: phone). ערכי role תקינים: admin, instructor, student'
-                  : 'The file should include columns: email, full_name, role (optional: phone). Valid role values: admin, instructor, student'}
+                {t('importUsers.fileRequirements')}
               </AlertDescription>
             </Alert>
           </div>
@@ -411,10 +402,10 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-primary" />
                 <span className="font-medium">{fileName}</span>
-                <Badge variant="secondary">{users.length} {language === 'he' ? 'משתמשים' : 'users'}</Badge>
+                <Badge variant="secondary">{users.length} {t('importUsers.users')}</Badge>
               </div>
               <Button variant="ghost" size="sm" onClick={resetState}>
-                {language === 'he' ? 'בחירת קובץ אחר' : 'Choose different file'}
+                {t('importUsers.chooseDifferent')}
               </Button>
             </div>
 
@@ -422,10 +413,10 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{language === 'he' ? 'מייל' : 'Email'}</TableHead>
-                    <TableHead>{language === 'he' ? 'שם מלא' : 'Full Name'}</TableHead>
-                    <TableHead>{language === 'he' ? 'תפקיד' : 'Role'}</TableHead>
-                    <TableHead>{language === 'he' ? 'טלפון' : 'Phone'}</TableHead>
+                    <TableHead>{t('admin.userEmail')}</TableHead>
+                    <TableHead>{t('admin.userFullName')}</TableHead>
+                    <TableHead>{t('admin.role')}</TableHead>
+                    <TableHead>{t('importUsers.phone')}</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -456,7 +447,7 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
             <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
             <div>
               <p className="font-medium mb-2">
-                {language === 'he' ? 'מייבא משתמשים...' : 'Importing users...'}
+                {t('importUsers.importing')}
               </p>
               <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
                 <div 
@@ -478,7 +469,7 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
                 </div>
                 <p className="text-2xl font-bold text-green-500">{importResults.success}</p>
                 <p className="text-sm text-muted-foreground">
-                  {language === 'he' ? 'נוספו' : 'Added'}
+                  {t('importUsers.added')}
                 </p>
               </div>
               {importResults.skipped > 0 && (
@@ -488,7 +479,7 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
                   </div>
                   <p className="text-2xl font-bold text-yellow-500">{importResults.skipped}</p>
                   <p className="text-sm text-muted-foreground">
-                    {language === 'he' ? 'כבר קיימים' : 'Already Exist'}
+                    {t('importUsers.alreadyExist')}
                   </p>
                 </div>
               )}
@@ -499,7 +490,7 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
                   </div>
                   <p className="text-2xl font-bold text-destructive">{importResults.failed}</p>
                   <p className="text-sm text-muted-foreground">
-                    {language === 'he' ? 'נכשלו' : 'Failed'}
+                    {t('importUsers.failed')}
                   </p>
                 </div>
               )}
@@ -510,9 +501,9 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{language === 'he' ? 'מייל' : 'Email'}</TableHead>
-                      <TableHead>{language === 'he' ? 'סטטוס' : 'Status'}</TableHead>
-                      <TableHead>{language === 'he' ? 'שגיאה' : 'Error'}</TableHead>
+                      <TableHead>{t('admin.userEmail')}</TableHead>
+                      <TableHead>{t('importUsers.status')}</TableHead>
+                      <TableHead>{t('importUsers.errorColumn')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -521,7 +512,7 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
                         <TableCell className="font-mono text-sm">{user.email}</TableCell>
                         <TableCell>
                           <Badge variant="destructive">
-                            {language === 'he' ? 'נכשל' : 'Failed'}
+                            {t('importUsers.failedSingular')}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-destructive">{user.error}</TableCell>
@@ -537,23 +528,23 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
         <DialogFooter>
           {step === 'upload' && (
             <Button variant="outline" onClick={handleClose}>
-              {language === 'he' ? 'ביטול' : 'Cancel'}
+              {t('common.cancel')}
             </Button>
           )}
           {step === 'preview' && (
             <>
               <Button variant="outline" onClick={handleClose}>
-                {language === 'he' ? 'ביטול' : 'Cancel'}
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleImport} disabled={users.length === 0}>
                 <Upload className="w-4 h-4 me-2" />
-                {language === 'he' ? `ייבא ${users.length} משתמשים` : `Import ${users.length} Users`}
+                {t('importUsers.importCountPrefix')}{users.length}{t('importUsers.importCountSuffix')}
               </Button>
             </>
           )}
           {step === 'results' && (
             <Button onClick={handleClose}>
-              {language === 'he' ? 'סגור' : 'Close'}
+              {t('common.close')}
             </Button>
           )}
         </DialogFooter>

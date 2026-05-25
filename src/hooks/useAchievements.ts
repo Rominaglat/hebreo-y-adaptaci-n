@@ -17,101 +17,31 @@ export type AchievementCode =
 
 export interface Achievement {
   code: AchievementCode;
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
   icon: string; // emoji
   color: string; // tailwind gradient classes
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
-  {
-    code: 'first_login',
-    name: 'ברוכים הבאים! 👋',
-    description: 'התחברת בפעם הראשונה',
-    icon: '🎉',
-    color: 'from-purple-500 to-pink-500',
-    rarity: 'common',
-  },
-  {
-    code: 'profile_complete',
-    name: 'פרופיל מלא',
-    description: 'השלמת את הפרופיל שלך',
-    icon: '👤',
-    color: 'from-violet-500 to-purple-500',
-    rarity: 'common',
-  },
-  {
-    code: 'first_course',
-    name: 'יוצאים לדרך',
-    description: 'נרשמת לקורס הראשון שלך',
-    icon: '📚',
-    color: 'from-indigo-500 to-blue-500',
-    rarity: 'common',
-  },
-  {
-    code: 'first_lesson',
-    name: 'התחלה טובה',
-    description: 'השלמת את השיעור הראשון',
-    icon: '🎯',
-    color: 'from-cyan-500 to-blue-500',
-    rarity: 'common',
-  },
-  {
-    code: 'streak_3',
-    name: 'בלהט',
-    description: '3 ימים של למידה רצופה',
-    icon: '🔥',
-    color: 'from-orange-500 to-red-500',
-    rarity: 'rare',
-  },
-  {
-    code: 'streak_7',
-    name: 'שבוע מושלם',
-    description: '7 ימי למידה ברצף',
-    icon: '⚡',
-    color: 'from-yellow-500 to-orange-500',
-    rarity: 'rare',
-  },
-  {
-    code: 'streak_30',
-    name: 'אגדה',
-    description: '30 ימים של התמדה!',
-    icon: '👑',
-    color: 'from-amber-400 via-yellow-500 to-amber-600',
-    rarity: 'legendary',
-  },
-  {
-    code: 'aria_first_chat',
-    name: 'נעים מאוד',
-    description: 'שוחחת עם העוזר בפעם הראשונה',
-    icon: '🤖',
-    color: 'from-fuchsia-500 to-purple-500',
-    rarity: 'common',
-  },
-  {
-    code: 'study_room_join',
-    name: 'חלק מהקהילה',
-    description: 'הצטרפת לחדר לימוד',
-    icon: '🎓',
-    color: 'from-emerald-500 to-teal-500',
-    rarity: 'common',
-  },
-  {
-    code: 'community_hello',
-    name: 'חבר חדש',
-    description: 'גילית חברי קהילה',
-    icon: '🤝',
-    color: 'from-rose-500 to-pink-500',
-    rarity: 'common',
-  },
+  { code: 'first_login', nameKey: 'achievements.firstLogin.name', descriptionKey: 'achievements.firstLogin.description', icon: '🎉', color: 'from-orange-500 to-amber-600', rarity: 'common' },
+  { code: 'profile_complete', nameKey: 'achievements.profileComplete.name', descriptionKey: 'achievements.profileComplete.description', icon: '👤', color: 'from-amber-500 to-orange-600', rarity: 'common' },
+  { code: 'first_course', nameKey: 'achievements.firstCourse.name', descriptionKey: 'achievements.firstCourse.description', icon: '📚', color: 'from-indigo-500 to-blue-500', rarity: 'common' },
+  { code: 'first_lesson', nameKey: 'achievements.firstLesson.name', descriptionKey: 'achievements.firstLesson.description', icon: '🎯', color: 'from-cyan-500 to-blue-500', rarity: 'common' },
+  { code: 'streak_3', nameKey: 'achievements.streak3.name', descriptionKey: 'achievements.streak3.description', icon: '🔥', color: 'from-orange-500 to-red-500', rarity: 'rare' },
+  { code: 'streak_7', nameKey: 'achievements.streak7.name', descriptionKey: 'achievements.streak7.description', icon: '⚡', color: 'from-yellow-500 to-orange-500', rarity: 'rare' },
+  { code: 'streak_30', nameKey: 'achievements.streak30.name', descriptionKey: 'achievements.streak30.description', icon: '👑', color: 'from-amber-400 via-yellow-500 to-amber-600', rarity: 'legendary' },
+  { code: 'aria_first_chat', nameKey: 'achievements.assistantChat.name', descriptionKey: 'achievements.assistantChat.description', icon: '🤖', color: 'from-blue-600 to-indigo-700', rarity: 'common' },
+  { code: 'study_room_join', nameKey: 'achievements.studyRoomJoin.name', descriptionKey: 'achievements.studyRoomJoin.description', icon: '🎓', color: 'from-emerald-500 to-teal-500', rarity: 'common' },
+  { code: 'community_hello', nameKey: 'achievements.communityHello.name', descriptionKey: 'achievements.communityHello.description', icon: '🤝', color: 'from-rose-500 to-pink-500', rarity: 'common' },
 ];
 
 const RARITY_COLORS = {
-  common: '#a78bfa',
-  rare: '#60a5fa',
-  epic: '#f472b6',
-  legendary: '#fbbf24',
+  common: '#C4582A',
+  rare: '#1E40AF',
+  epic: '#A14823',
+  legendary: '#F5C99A',
 };
 
 function fireConfetti(rarity: Achievement['rarity']) {
@@ -126,7 +56,7 @@ function fireConfetti(rarity: Achievement['rarity']) {
     spread: rarity === 'legendary' ? 90 : 60,
     startVelocity: 35,
     origin: { x: 0.5, y: 0.1 },
-    colors: [color, '#ffffff', '#a78bfa'],
+    colors: [color, '#FBF4DE', '#C4582A'],
     disableForReducedMotion: true,
     ticks: 150,
   });

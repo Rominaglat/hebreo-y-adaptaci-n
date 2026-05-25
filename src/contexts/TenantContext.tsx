@@ -477,7 +477,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     try {
       const stubTenant: Tenant = {
         id: SINGLE_TENANT_ID,
-        name: 'Learning Portal',
+        name: 'Hebreo y Adaptación',
         slug: SINGLE_TENANT_SLUG,
         logo_url: null,
         is_active: true,

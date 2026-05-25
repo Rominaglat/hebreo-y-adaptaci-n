@@ -193,7 +193,7 @@ export default function ManageUsers() {
     admin: t('admin.admin'),
     instructor: t('admin.instructor'),
     student: t('admin.student'),
-    super_admin: language === 'he' ? 'סופר אדמין' : 'Super Admin',
+    super_admin: t('manageUsers.superAdmin'),
   };
 
   useEffect(() => {
@@ -355,19 +355,17 @@ export default function ManageUsers() {
 
       const result = response.data;
       toast({
-        title: language === 'he' ? 'סנכרון הושלם' : 'Sync Complete',
-        description: language === 'he' 
-          ? `סונכרנו ${result.synced} אימיילים` 
-          : `Synced ${result.synced} emails`,
+        title: t('manageUsers.syncComplete'),
+        description: `${t('manageUsers.syncedPrefix')}${result.synced}${t('manageUsers.syncedSuffix')}`,
       });
-      
+
       fetchUsers();
     } catch (error: any) {
       console.error('Error syncing emails:', error);
       toast({
         variant: 'destructive',
-        title: language === 'he' ? 'שגיאה' : 'Error',
-        description: error.message || (language === 'he' ? 'שגיאה בסנכרון' : 'Failed to sync'),
+        title: t('common.error'),
+        description: error.message || t('manageUsers.syncFailed'),
       });
     } finally {
       setIsSyncingEmails(false);
@@ -438,15 +436,13 @@ export default function ManageUsers() {
 
       if (response.data?.addedToExistingUser) {
         toast({
-          title: language === 'he' ? 'משתמש נוסף לארגון' : 'User added to tenant',
-          description: language === 'he'
-            ? `${inviteForm.email} כבר קיים במערכת ונוסף לארגון הנוכחי.`
-            : `${inviteForm.email} already exists and was added to this tenant.`,
+          title: t('manageUsers.userAddedToTenant'),
+          description: `${inviteForm.email} ${t('manageUsers.userAddedToTenantDesc')}`,
         });
       } else {
         toast({
           title: t('admin.userInvited'),
-          description: `${inviteForm.email}. ${language === 'he' ? 'סיסמה זמנית' : 'Temp password'}: ${tempPassword}`,
+          description: `${inviteForm.email}. ${t('manageUsers.tempPasswordLabel')}: ${tempPassword}`,
         });
       }
 
@@ -469,9 +465,7 @@ export default function ManageUsers() {
     if (newRole === 'super_admin' && !isMainTenant) {
       toast({
         title: t('admin.accessDenied'),
-        description: language === 'he'
-          ? 'אפשר להעניק הרשאת סופר אדמין רק בטננט הראשי'
-          : 'Super Admin can only be granted in the main tenant',
+        description: t('manageUsers.superAdminMainOnly'),
         variant: 'destructive',
       });
       return;
@@ -524,10 +518,8 @@ export default function ManageUsers() {
       }
 
       toast({
-        title: language === 'he' ? 'הרשאות עודכנו' : 'Roles Updated',
-        description: language === 'he' 
-          ? `${userIds.length} משתמשים עודכנו` 
-          : `${userIds.length} users updated`,
+        title: t('manageUsers.rolesUpdated'),
+        description: `${userIds.length} ${t('manageUsers.usersUpdated')}`,
       });
 
       setSelectedUsers(new Set());
@@ -590,8 +582,8 @@ export default function ManageUsers() {
       }
 
       toast({
-        title: language === 'he' ? 'גישה עודכנה' : 'Access Updated',
-        description: language === 'he' ? `${userIds.length} משתמשים עודכנו` : `${userIds.length} users updated`,
+        title: t('manageUsers.accessUpdated'),
+        description: `${userIds.length} ${t('manageUsers.usersUpdated')}`,
       });
 
       setSelectedUsers(new Set());
@@ -657,8 +649,8 @@ export default function ManageUsers() {
       }
 
       toast({
-        title: language === 'he' ? 'גישה עודכנה' : 'Access Updated',
-        description: language === 'he' ? 'גישת המשתמש לקורסים עודכנה' : 'User course access updated',
+        title: t('manageUsers.accessUpdated'),
+        description: t('manageUsers.userCourseAccessUpdated'),
       });
 
       setAccessDialogOpen(false);
@@ -680,7 +672,7 @@ export default function ManageUsers() {
     if (user.role === 'super_admin' && !isSuperAdmin) {
       toast({
         title: t('admin.accessDenied'),
-        description: language === 'he' ? 'לא ניתן לשנות הרשאות של סופר אדמין' : "You can't change a Super Admin role",
+        description: t('manageUsers.cantChangeSuperAdmin'),
         variant: 'destructive',
       });
       return;
@@ -871,19 +863,15 @@ export default function ManageUsers() {
       if (data?.error) throw new Error(data.error);
 
       toast({
-        title: language === 'he' ? 'השאלון אופס' : 'Assessment reset',
-        description: language === 'he'
-          ? `${selectedUser.full_name} יכול/ה כעת למלא את שאלון האישיות שוב.`
-          : `${selectedUser.full_name} can now retake the personality assessment.`,
+        title: t('manageUsers.assessmentReset'),
+        description: `${selectedUser.full_name} ${t('manageUsers.assessmentResetDesc')}`,
       });
       setResetPersonalityDialogOpen(false);
     } catch (err: any) {
       const code = err?.message || '';
-      let message = err?.message || (language === 'he' ? 'איפוס נכשל' : 'Reset failed');
+      let message = err?.message || t('manageUsers.resetFailed');
       if (code.includes('no_active_assessment')) {
-        message = language === 'he'
-          ? 'אין שאלון פעיל למשתמש/ת זה/זו.'
-          : 'No active assessment for this user.';
+        message = t('manageUsers.noActiveAssessment');
       }
       console.error('Error resetting personality:', err);
       toast({
@@ -920,8 +908,8 @@ export default function ManageUsers() {
           .eq('user_id', selectedUser.id);
 
         toast({
-          title: language === 'he' ? 'המשתמש הוסר מהארגון' : 'User removed from organization',
-          description: language === 'he' ? 'המשתמש הוסר מהארגון הזה' : 'User has been removed from this organization',
+          title: t('manageUsers.userRemovedFromOrg'),
+          description: t('manageUsers.userRemovedFromOrgDesc'),
         });
       } else {
         // In main tenant - actually delete the user completely
@@ -1012,10 +1000,8 @@ export default function ManageUsers() {
       }
 
       toast({
-        title: language === 'he' ? 'מחיקה הושלמה' : 'Deletion completed',
-        description: language === 'he' 
-          ? `${successCount} משתמשים נמחקו${failedCount > 0 ? `, ${failedCount} נכשלו` : ''}`
-          : `${successCount} users deleted${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
+        title: t('manageUsers.deletionCompleted'),
+        description: `${successCount} ${t('manageUsers.usersDeleted')}${failedCount > 0 ? `, ${failedCount} ${t('manageUsers.usersFailed')}` : ''}`,
         variant: failedCount > 0 ? 'destructive' : 'default',
       });
 
@@ -1124,7 +1110,7 @@ export default function ManageUsers() {
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('admin.manageUsers')}</h1>
               <p className="text-muted-foreground mt-1.5">
-                {language === 'he' ? 'ניהול חברים, הרשאות והזמנות' : 'Manage members, roles and invitations'}
+                {t('manageUsers.headerSubtitle')}
               </p>
             </div>
 
@@ -1162,7 +1148,7 @@ export default function ManageUsers() {
                   <Label htmlFor="name">{t('admin.userFullName')}</Label>
                   <Input
                     id="name"
-                    placeholder={language === 'he' ? 'ישראל ישראלי' : 'John Doe'}
+                    placeholder={t('manageUsers.fullNamePlaceholder')}
                     value={inviteForm.full_name}
                     onChange={(e) => setInviteForm({ ...inviteForm, full_name: e.target.value })}
                     className={errors.full_name ? 'border-destructive' : ''}
@@ -1194,7 +1180,7 @@ export default function ManageUsers() {
                   <Input
                     id="password"
                     type="text"
-                    placeholder={language === 'he' ? 'תיווצר אוטומטית אם ריק' : 'Auto-generated if empty'}
+                    placeholder={t('manageUsers.passwordAutoGenerated')}
                     value={inviteForm.password}
                     onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })}
                   />
@@ -1228,7 +1214,7 @@ export default function ManageUsers() {
           {canEdit && (
           <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
             <Upload className="w-4 h-4 mx-2" />
-            {language === 'he' ? 'ייבוא מקובץ' : 'Import from File'}
+            {t('manageUsers.importFromFile')}
           </Button>
           )}
 
@@ -1239,7 +1225,7 @@ export default function ManageUsers() {
               ) : (
                 <RefreshCw className="w-4 h-4 mx-2" />
               )}
-              {language === 'he' ? 'סנכרון אימיילים' : 'Sync Emails'}
+              {t('manageUsers.syncEmails')}
             </Button>
           )}
           </div>
@@ -1262,11 +1248,11 @@ export default function ManageUsers() {
             <Select value={roleFilter} onValueChange={setRoleFilter}>
               <SelectTrigger className="w-full sm:w-[180px]">
                 <Filter className="w-4 h-4 ml-2" />
-                <SelectValue placeholder={language === 'he' ? 'סנן לפי הרשאה' : 'Filter by role'} />
+                <SelectValue placeholder={t('manageUsers.filterByRole')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{language === 'he' ? 'כל ההרשאות' : 'All roles'}</SelectItem>
-                <SelectItem value="super_admin">{language === 'he' ? 'סופר אדמין' : 'Super Admin'}</SelectItem>
+                <SelectItem value="all">{t('manageUsers.allRoles')}</SelectItem>
+                <SelectItem value="super_admin">{t('manageUsers.superAdmin')}</SelectItem>
                 <SelectItem value="admin">{t('admin.admin')}</SelectItem>
                 <SelectItem value="instructor">{t('admin.instructor')}</SelectItem>
                 <SelectItem value="student">{t('admin.student')}</SelectItem>
@@ -1277,10 +1263,10 @@ export default function ManageUsers() {
               <Select value={courseFilter} onValueChange={setCourseFilter}>
                 <SelectTrigger className="w-full sm:w-[200px]">
                   <BookOpen className="w-4 h-4 ml-2" />
-                  <SelectValue placeholder={language === 'he' ? 'סנן לפי קורס' : 'Filter by course'} />
+                  <SelectValue placeholder={t('manageUsers.filterByCourse')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">{language === 'he' ? 'כל הקורסים' : 'All courses'}</SelectItem>
+                  <SelectItem value="all">{t('manageUsers.allCourses')}</SelectItem>
                   {courses.map(course => (
                     <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
                   ))}
@@ -1298,9 +1284,7 @@ export default function ManageUsers() {
                 <div className="flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-primary" />
                   <span className="font-medium">
-                    {language === 'he' 
-                      ? `${selectedUsers.size} משתמשים נבחרו` 
-                      : `${selectedUsers.size} users selected`}
+                    {selectedUsers.size} {t('manageUsers.usersSelected')}
                   </span>
                   <Button 
                     variant="ghost" 
@@ -1317,25 +1301,25 @@ export default function ManageUsers() {
                     onClick={() => setBulkRoleDialogOpen(true)}
                   >
                     <Lock className="w-4 h-4 ml-2" />
-                    {language === 'he' ? 'שנה הרשאות' : 'Change Roles'}
+                    {t('manageUsers.changeRoles')}
                   </Button>
                   {!isMainTenant && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => setBulkAccessDialogOpen(true)}
                     >
                       <BookOpen className="w-4 h-4 ml-2" />
-                      {language === 'he' ? 'ניהול גישה' : 'Manage Access'}
+                      {t('manageUsers.manageAccess')}
                     </Button>
                   )}
-                  <Button 
-                    variant="destructive" 
+                  <Button
+                    variant="destructive"
                     size="sm"
                     onClick={() => setBulkDeleteDialogOpen(true)}
                   >
                     <Trash2 className="w-4 h-4 ml-2" />
-                    {language === 'he' ? 'מחיקת הנבחרים' : 'Delete Selected'}
+                    {t('manageUsers.deleteSelected')}
                   </Button>
                 </div>
               </div>
@@ -1374,7 +1358,7 @@ export default function ManageUsers() {
                       <TableHead className="text-right">{t('admin.user')}</TableHead>
                       <TableHead className="text-right">{t('admin.role')}</TableHead>
                       {!isMainTenant && (
-                        <TableHead className="text-right">{language === 'he' ? 'קורסים' : 'Courses'}</TableHead>
+                        <TableHead className="text-right">{t('manageUsers.courses')}</TableHead>
                       )}
                       <TableHead className="text-right">{t('admin.joined')}</TableHead>
                       <TableHead className="text-left">{t('admin.actions')}</TableHead>
@@ -1418,7 +1402,7 @@ export default function ManageUsers() {
                           </TableCell>
                         )}
                         <TableCell className="text-muted-foreground">
-                          {format(new Date(user.join_date), 'd בMMM yyyy', { locale: language === 'he' ? he : enUS })}
+                          {format(new Date(user.join_date), language === 'he' ? 'd בMMM yyyy' : 'd MMM yyyy', { locale: language === 'he' ? he : enUS })}
                         </TableCell>
                         <TableCell className="text-left">
                           <DropdownMenu>
@@ -1431,19 +1415,19 @@ export default function ManageUsers() {
                               {canEdit && (
                                 <DropdownMenuItem onClick={() => openEditDialog(user)}>
                                   <Pencil className="w-4 h-4 ml-2" />
-                                  {language === 'he' ? 'עריכת פרטים' : 'Edit Details'}
+                                  {t('manageUsers.editDetails')}
                                 </DropdownMenuItem>
                               )}
                               {canEdit && (
                                 <DropdownMenuItem onClick={() => openRoleDialog(user)}>
                                   <Lock className="w-4 h-4 ml-2" />
-                                  {language === 'he' ? 'שינוי הרשאות' : 'Change Role'}
+                                  {t('manageUsers.changeRole')}
                                 </DropdownMenuItem>
                               )}
                               {(canEdit || (isInstructor && user.role === 'student')) && !isMainTenant && (
                                 <DropdownMenuItem onClick={() => openAccessDialog(user)}>
                                   <BookOpen className="w-4 h-4 ml-2" />
-                                  {language === 'he' ? 'ניהול גישה לתכנים' : 'Manage Content Access'}
+                                  {t('manageUsers.manageContentAccess')}
                                 </DropdownMenuItem>
                               )}
                               {!isMainTenant && (
@@ -1462,7 +1446,7 @@ export default function ManageUsers() {
                               {canEdit && (
                                 <DropdownMenuItem onClick={() => openResetPersonalityDialog(user)}>
                                   <Sparkles className="w-4 h-4 ml-2" />
-                                  {language === 'he' ? 'איפוס שאלון אישיות' : 'Reset personality assessment'}
+                                  {t('manageUsers.resetPersonality')}
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuItem onClick={() => openActivityDialog(user)}>
@@ -1542,19 +1526,19 @@ export default function ManageUsers() {
                             {canEdit && (
                               <DropdownMenuItem onClick={() => openEditDialog(user)}>
                                 <Pencil className="w-4 h-4 ml-2" />
-                                {language === 'he' ? 'עריכת פרטים' : 'Edit Details'}
+                                {t('manageUsers.editDetails')}
                               </DropdownMenuItem>
                             )}
                             {canEdit && (
                               <DropdownMenuItem onClick={() => openRoleDialog(user)}>
                                 <Lock className="w-4 h-4 ml-2" />
-                                {language === 'he' ? 'שינוי הרשאות' : 'Change Role'}
+                                {t('manageUsers.changeRole')}
                               </DropdownMenuItem>
                             )}
                             {(canEdit || (isInstructor && user.role === 'student')) && !isMainTenant && (
                               <DropdownMenuItem onClick={() => openAccessDialog(user)}>
                                 <BookOpen className="w-4 h-4 ml-2" />
-                                {language === 'he' ? 'ניהול גישה לתכנים' : 'Manage Content Access'}
+                                {t('manageUsers.manageContentAccess')}
                               </DropdownMenuItem>
                             )}
                             {!isMainTenant && (
@@ -1573,7 +1557,7 @@ export default function ManageUsers() {
                             {canEdit && (
                               <DropdownMenuItem onClick={() => openResetPersonalityDialog(user)}>
                                 <Sparkles className="w-4 h-4 ml-2" />
-                                {language === 'he' ? 'איפוס שאלון אישיות' : 'Reset personality assessment'}
+                                {t('manageUsers.resetPersonality')}
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => openActivityDialog(user)}>
@@ -1599,11 +1583,11 @@ export default function ManageUsers() {
                         </Badge>
                         {!isMainTenant && (
                           <Badge variant="outline" className="text-xs">
-                            {user.enrolledCourses?.length || 0} {language === 'he' ? 'קורסים' : 'courses'}
+                            {user.enrolledCourses?.length || 0} {t('manageUsers.coursesLower')}
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
-                          {format(new Date(user.join_date), 'd בMMM yyyy', { locale: language === 'he' ? he : enUS })}
+                          {format(new Date(user.join_date), language === 'he' ? 'd בMMM yyyy' : 'd MMM yyyy', { locale: language === 'he' ? he : enUS })}
                         </span>
                       </div>
                     </div>
@@ -1619,11 +1603,9 @@ export default function ManageUsers() {
       <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{language === 'he' ? 'שינוי הרשאות' : 'Change Role'}</DialogTitle>
+            <DialogTitle>{t('manageUsers.changeRole')}</DialogTitle>
             <DialogDescription>
-              {selectedUser && (language === 'he' 
-                ? `שינוי ההרשאות של ${selectedUser.full_name}`
-                : `Change role for ${selectedUser.full_name}`)}
+              {selectedUser && `${t('manageUsers.changeRoleFor')} ${selectedUser.full_name}`}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -1636,7 +1618,7 @@ export default function ManageUsers() {
                 <SelectItem value="instructor">{t('admin.instructor')}</SelectItem>
                 <SelectItem value="admin">{t('admin.admin')}</SelectItem>
                 {isSuperAdmin && isMainTenant && (
-                  <SelectItem value="super_admin">{language === 'he' ? 'סופר אדמין' : 'Super Admin'}</SelectItem>
+                  <SelectItem value="super_admin">{t('manageUsers.superAdmin')}</SelectItem>
                 )}
               </SelectContent>
             </Select>
@@ -1646,7 +1628,7 @@ export default function ManageUsers() {
               {t('common.cancel')}
             </Button>
             <Button onClick={handleSingleUserRoleUpdate}>
-              {language === 'he' ? 'שמור' : 'Save'}
+              {t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1656,11 +1638,9 @@ export default function ManageUsers() {
       <Dialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{language === 'he' ? 'ניהול גישה לתכנים' : 'Manage Content Access'}</DialogTitle>
+            <DialogTitle>{t('manageUsers.manageContentAccess')}</DialogTitle>
             <DialogDescription>
-              {selectedUser && (language === 'he' 
-                ? `בחירת הקורסים שאליהם תהיה גישה עבור ${selectedUser.full_name}`
-                : `Select courses ${selectedUser.full_name} should have access to`)}
+              {selectedUser && `${t('manageUsers.selectCoursesFor')} ${selectedUser.full_name}`}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 max-h-[300px] overflow-y-auto space-y-2">
@@ -1683,7 +1663,7 @@ export default function ManageUsers() {
             ))}
             {courses.length === 0 && (
               <p className="text-muted-foreground text-center py-4">
-                {language === 'he' ? 'אין קורסים זמינים' : 'No courses available'}
+                {t('manageUsers.noCoursesAvailable')}
               </p>
             )}
           </div>
@@ -1699,10 +1679,10 @@ export default function ManageUsers() {
               {isUpdatingAccess ? (
                 <>
                   <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                  {language === 'he' ? 'שומר...' : 'Saving...'}
+                  {t('manageUsers.saving')}
                 </>
               ) : (
-                (language === 'he' ? 'שמור' : 'Save')
+                t('common.save')
               )}
             </Button>
           </DialogFooter>
@@ -1715,9 +1695,7 @@ export default function ManageUsers() {
           <DialogHeader>
             <DialogTitle>{t('admin.editUser')}</DialogTitle>
             <DialogDescription>
-              {selectedUser && (language === 'he' 
-                ? `עדכן את פרטי ${selectedUser.full_name}` 
-                : `Update details for ${selectedUser.full_name}`)}
+              {selectedUser && `${t('manageUsers.updateDetailsFor')} ${selectedUser.full_name}`}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -1743,7 +1721,7 @@ export default function ManageUsers() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit_phone">{language === 'he' ? 'טלפון' : 'Phone'}</Label>
+              <Label htmlFor="edit_phone">{t('manageUsers.phone')}</Label>
               <div className="relative">
                 <Phone className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -1752,7 +1730,7 @@ export default function ManageUsers() {
                   value={editUserForm.phone}
                   onChange={(e) => setEditUserForm({ ...editUserForm, phone: e.target.value })}
                   className="ps-10"
-                  placeholder={language === 'he' ? '050-1234567' : '050-1234567'}
+                  placeholder="050-1234567"
                 />
               </div>
             </div>
@@ -1765,7 +1743,7 @@ export default function ManageUsers() {
               {isUpdatingUser ? (
                 <>
                   <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                  {language === 'he' ? 'מעדכן...' : 'Updating...'}
+                  {t('manageUsers.updating')}
                 </>
               ) : (
                 t('admin.updateUser')
@@ -1779,11 +1757,9 @@ export default function ManageUsers() {
       <Dialog open={bulkRoleDialogOpen} onOpenChange={setBulkRoleDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{language === 'he' ? 'שינוי הרשאות מרובות' : 'Bulk Role Change'}</DialogTitle>
+            <DialogTitle>{t('manageUsers.bulkRoleChange')}</DialogTitle>
             <DialogDescription>
-              {language === 'he' 
-                ? `שינוי ההרשאות של ${selectedUsers.size} משתמשים`
-                : `Change role for ${selectedUsers.size} users`}
+              {`${t('manageUsers.changeRoleFor')} ${selectedUsers.size} ${t('manageUsers.usersLower')}`}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -1803,7 +1779,7 @@ export default function ManageUsers() {
               {t('common.cancel')}
             </Button>
             <Button onClick={handleBulkRoleUpdate}>
-              {language === 'he' ? 'עדכן הכל' : 'Update All'}
+              {t('manageUsers.updateAll')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1813,28 +1789,26 @@ export default function ManageUsers() {
       <Dialog open={bulkAccessDialogOpen} onOpenChange={setBulkAccessDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{language === 'he' ? 'ניהול גישה מרובה' : 'Bulk Access Management'}</DialogTitle>
+            <DialogTitle>{t('manageUsers.bulkAccessManagement')}</DialogTitle>
             <DialogDescription>
-              {language === 'he' 
-                ? `ניהול גישה לקורסים עבור ${selectedUsers.size} משתמשים`
-                : `Manage course access for ${selectedUsers.size} users`}
+              {`${t('manageUsers.manageAccessFor')} ${selectedUsers.size} ${t('manageUsers.usersLower')}`}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="flex gap-2">
-              <Button 
-                variant={bulkAccessAction === 'add' ? 'default' : 'outline'} 
+              <Button
+                variant={bulkAccessAction === 'add' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setBulkAccessAction('add')}
               >
-                {language === 'he' ? 'הוספת גישה' : 'Add Access'}
+                {t('manageUsers.addAccess')}
               </Button>
-              <Button 
-                variant={bulkAccessAction === 'remove' ? 'default' : 'outline'} 
+              <Button
+                variant={bulkAccessAction === 'remove' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setBulkAccessAction('remove')}
               >
-                {language === 'he' ? 'הסרת גישה' : 'Remove Access'}
+                {t('manageUsers.removeAccess')}
               </Button>
             </div>
             <div className="max-h-[250px] overflow-y-auto space-y-2">
@@ -1872,10 +1846,10 @@ export default function ManageUsers() {
               {isBulkUpdatingAccess ? (
                 <>
                   <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                  {language === 'he' ? 'מעדכן...' : 'Updating...'}
+                  {t('manageUsers.updating')}
                 </>
               ) : (
-                (language === 'he' ? 'עדכן הכל' : 'Update All')
+                t('manageUsers.updateAll')
               )}
             </Button>
           </DialogFooter>
@@ -1888,9 +1862,7 @@ export default function ManageUsers() {
           <DialogHeader>
             <DialogTitle>{t('admin.resetPassword')}</DialogTitle>
             <DialogDescription>
-              {selectedUser && (language === 'he' 
-                ? `הגדר סיסמה חדשה ל-${selectedUser.full_name}` 
-                : `Set a new password for ${selectedUser.full_name}`)}
+              {selectedUser && `${t('manageUsers.setNewPasswordFor')} ${selectedUser.full_name}`}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -1902,7 +1874,7 @@ export default function ManageUsers() {
                   type={showNewPassword ? 'text' : 'password'}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder={language === 'he' ? 'לפחות 6 תווים' : 'At least 6 characters'}
+                  placeholder={t('manageUsers.passwordMinChars')}
                   className="pe-10"
                 />
                 <button
@@ -1938,13 +1910,15 @@ export default function ManageUsers() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {language === 'he' ? 'איפוס שאלון אישיות' : 'Reset personality assessment'}
+              {t('manageUsers.resetPersonality')}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {selectedUser && (
                 language === 'he'
                   ? `השאלון האחרון של ${selectedUser.full_name} ייסגר ולא יוצג עוד בדוח. ${selectedUser.full_name} יוכל/תוכל למלא את השאלון מחדש מיד, ללא המתנה של 7 ימים. ההיסטוריה נשמרת לתיעוד.`
-                  : `${selectedUser.full_name}'s most recent assessment will be archived and removed from their report. They will be able to retake immediately, without waiting the 7-day cooldown. History is preserved for audit.`
+                  : language === 'es'
+                    ? `La evaluación más reciente de ${selectedUser.full_name} se archivará y se eliminará de su informe. Podrá repetirla de inmediato, sin esperar el período de 7 días. El historial se conserva para auditoría.`
+                    : `${selectedUser.full_name}'s most recent assessment will be archived and removed from their report. They will be able to retake immediately, without waiting the 7-day cooldown. History is preserved for audit.`
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1957,10 +1931,10 @@ export default function ManageUsers() {
               {isResettingPersonality ? (
                 <>
                   <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                  {language === 'he' ? 'מאפס...' : 'Resetting...'}
+                  {t('manageUsers.resetting')}
                 </>
               ) : (
-                language === 'he' ? 'איפוס השאלון' : 'Reset assessment'
+                t('manageUsers.resetAssessment')
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1972,19 +1946,15 @@ export default function ManageUsers() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {isMainTenant 
+              {isMainTenant
                 ? t('admin.deleteUserConfirm')
-                : (language === 'he' ? 'הסרת משתמש מהארגון' : 'Remove User from Organization')}
+                : t('manageUsers.removeUserFromOrg')}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {selectedUser && (
                 isMainTenant
-                  ? (language === 'he' 
-                      ? `פעולה זו תמחק את המשתמש ${selectedUser.full_name} לצמיתות מכל המערכת. האם להמשיך?` 
-                      : `This will permanently delete ${selectedUser.full_name} from the entire system. Continue?`)
-                  : (language === 'he' 
-                      ? `פעולה זו תסיר את ${selectedUser.full_name} מהארגון הזה בלבד. המשתמש ימשיך להתקיים במערכת.` 
-                      : `This will remove ${selectedUser.full_name} from this organization only. The user will still exist in the system.`)
+                  ? `${t('manageUsers.deleteUserPermanentPrefix')}${selectedUser.full_name}${t('manageUsers.deleteUserPermanentSuffix')}`
+                  : `${t('manageUsers.removeUserFromOrgPrefix')}${selectedUser.full_name}${t('manageUsers.removeUserFromOrgSuffix')}`
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1998,10 +1968,10 @@ export default function ManageUsers() {
               {isDeletingUser ? (
                 <>
                   <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                  {isMainTenant ? t('admin.deletingUser') : (language === 'he' ? 'בהסרה...' : 'Removing...')}
+                  {isMainTenant ? t('admin.deletingUser') : t('manageUsers.removing')}
                 </>
               ) : (
-                isMainTenant ? t('admin.deleteUser') : (language === 'he' ? 'הסרה מהארגון' : 'Remove from Organization')
+                isMainTenant ? t('admin.deleteUser') : t('manageUsers.removeFromOrg')
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -2014,9 +1984,7 @@ export default function ManageUsers() {
           <DialogHeader>
             <DialogTitle>{t('admin.activityHistory')}</DialogTitle>
             <DialogDescription>
-              {selectedUser && (language === 'he' 
-                ? `היסטוריית פעילות של ${selectedUser.full_name}` 
-                : `Activity history for ${selectedUser.full_name}`)}
+              {selectedUser && `${t('manageUsers.activityHistoryFor')} ${selectedUser.full_name}`}
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[400px]">
@@ -2067,7 +2035,7 @@ export default function ManageUsers() {
           </ScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setActivityDialogOpen(false)}>
-              {language === 'he' ? 'סגירה' : 'Close'}
+              {t('common.close')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2078,18 +2046,12 @@ export default function ManageUsers() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {language === 'he' 
-                ? `מחיקת ${selectedUsers.size} משתמשים` 
-                : `Delete ${selectedUsers.size} Users`}
+              {`${t('manageUsers.deletePrefix')}${selectedUsers.size}${t('manageUsers.deleteSuffix')}`}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {isMainTenant 
-                ? (language === 'he' 
-                    ? 'פעולה זו תמחק את המשתמשים לצמיתות מכל המערכת. האם לאשר?'
-                    : 'This will permanently delete these users from the entire system. Are you sure?')
-                : (language === 'he' 
-                    ? 'פעולה זו תסיר את המשתמשים מהארגון הזה. הם עדיין יוכלו לגשת לארגונים אחרים אליהם הם שייכים.' 
-                    : 'This will remove these users from this organization. They will still have access to other organizations they belong to.')}
+              {isMainTenant
+                ? t('manageUsers.bulkDeletePermanent')
+                : t('manageUsers.bulkRemoveFromOrg')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2102,12 +2064,12 @@ export default function ManageUsers() {
               {isBulkDeleting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mx-2" />
-                  {language === 'he' ? 'מוחק...' : 'Deleting...'}
+                  {t('manageUsers.deleting')}
                 </>
               ) : (
                 <>
                   <Trash2 className="w-4 h-4 mx-2" />
-                  {language === 'he' ? 'מחק' : 'Delete'}
+                  {t('common.delete')}
                 </>
               )}
             </AlertDialogAction>

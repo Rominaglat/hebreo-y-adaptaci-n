@@ -26,18 +26,18 @@ const COLOR_PAIRS: Record<string, string> = {
   '#111827': '#F3F4F6', // darker gray <-> lighter gray
 };
 
-const TEXT_COLORS = [
-  { name: 'אוטומטי', value: 'foreground', cssVar: true, isAuto: true }, // Auto - adapts to dark/light mode
-  { name: 'שחור', value: '#000000', cssVar: false, isAuto: false },
-  { name: 'לבן', value: '#FFFFFF', cssVar: false, isAuto: false },
-  { name: 'אדום', value: '#EF4444', cssVar: false, isAuto: false },
-  { name: 'כתום', value: '#F97316', cssVar: false, isAuto: false },
-  { name: 'צהוב', value: '#EAB308', cssVar: false, isAuto: false },
-  { name: 'ירוק', value: '#22C55E', cssVar: false, isAuto: false },
-  { name: 'כחול', value: '#3B82F6', cssVar: false, isAuto: false },
-  { name: 'סגול', value: '#8B5CF6', cssVar: false, isAuto: false },
-  { name: 'ורוד', value: '#EC4899', cssVar: false, isAuto: false },
-  { name: 'אפור', value: '#6B7280', cssVar: false, isAuto: false },
+const TEXT_COLOR_DEFS = [
+  { nameKey: 'richTextEditor.colorAuto', value: 'foreground', cssVar: true, isAuto: true }, // Auto - adapts to dark/light mode
+  { nameKey: 'richTextEditor.colorBlack', value: '#000000', cssVar: false, isAuto: false },
+  { nameKey: 'richTextEditor.colorWhite', value: '#FFFFFF', cssVar: false, isAuto: false },
+  { nameKey: 'richTextEditor.colorRed', value: '#EF4444', cssVar: false, isAuto: false },
+  { nameKey: 'richTextEditor.colorOrange', value: '#F97316', cssVar: false, isAuto: false },
+  { nameKey: 'richTextEditor.colorYellow', value: '#EAB308', cssVar: false, isAuto: false },
+  { nameKey: 'richTextEditor.colorGreen', value: '#22C55E', cssVar: false, isAuto: false },
+  { nameKey: 'richTextEditor.colorBlue', value: '#3B82F6', cssVar: false, isAuto: false },
+  { nameKey: 'richTextEditor.colorPurple', value: '#8B5CF6', cssVar: false, isAuto: false },
+  { nameKey: 'richTextEditor.colorPink', value: '#EC4899', cssVar: false, isAuto: false },
+  { nameKey: 'richTextEditor.colorGray', value: '#6B7280', cssVar: false, isAuto: false },
 ];
 
 // Get computed CSS variable value
@@ -62,7 +62,7 @@ export default function RichTextEditor({
   placeholder,
   className = ''
 }: RichTextEditorProps) {
-  const { isRTL } = useLanguage();
+  const { isRTL, t } = useLanguage();
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isInternalChange = useRef(false);
@@ -177,7 +177,7 @@ export default function RichTextEditor({
     handleInput();
   };
 
-  const handleTextColor = (colorItem: typeof TEXT_COLORS[0]) => {
+  const handleTextColor = (colorItem: typeof TEXT_COLOR_DEFS[0] | { value: string; isAuto: boolean; cssVar: boolean }) => {
     editorRef.current?.focus();
     
     if (colorItem.isAuto) {
@@ -279,7 +279,7 @@ export default function RichTextEditor({
     if (!imageUrl) return;
     
     restoreSelection();
-    document.execCommand('insertHTML', false, `<img src="${imageUrl}" alt="תמונה" style="max-width: 100%; height: auto; margin: 0.5rem 0;" />`);
+    document.execCommand('insertHTML', false, `<img src="${imageUrl}" alt="${t('richTextEditor.imageAlt')}" style="max-width: 100%; height: auto; margin: 0.5rem 0;" />`);
     handleInput();
     setImageUrl('');
     setImageDialogOpen(false);
@@ -290,12 +290,12 @@ export default function RichTextEditor({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      toast({ title: 'שגיאה', description: 'יש להעלות קובץ תמונה בלבד', variant: 'destructive' });
+      toast({ title: t('common.error'), description: t('richTextEditor.errorImageOnly'), variant: 'destructive' });
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      toast({ title: 'שגיאה', description: 'גודל הקובץ חייב להיות עד 5MB', variant: 'destructive' });
+      toast({ title: t('common.error'), description: t('richTextEditor.errorFileTooLarge'), variant: 'destructive' });
       return;
     }
 
@@ -316,13 +316,13 @@ export default function RichTextEditor({
         .getPublicUrl(filePath);
 
       restoreSelection();
-      document.execCommand('insertHTML', false, `<img src="${publicUrl}" alt="תמונה" style="max-width: 100%; height: auto; margin: 0.5rem 0;" />`);
+      document.execCommand('insertHTML', false, `<img src="${publicUrl}" alt="${t('richTextEditor.imageAlt')}" style="max-width: 100%; height: auto; margin: 0.5rem 0;" />`);
       handleInput();
       setImageDialogOpen(false);
-      toast({ title: 'הצלחה', description: 'התמונה הועלתה בהצלחה' });
+      toast({ title: t('common.success'), description: t('richTextEditor.imageUploaded') });
     } catch (error) {
       console.error('Error uploading image:', error);
-      toast({ title: 'שגיאה', description: 'שגיאה בהעלאת התמונה', variant: 'destructive' });
+      toast({ title: t('common.error'), description: t('richTextEditor.imageUploadError'), variant: 'destructive' });
     } finally {
       setImageUploading(false);
       if (fileInputRef.current) {
@@ -360,13 +360,13 @@ export default function RichTextEditor({
       {/* Toolbar */}
       <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-md border flex-wrap">
         {/* Text formatting */}
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleBold} title="הדגשה">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleBold} title={t('richTextEditor.bold')}>
           <Bold className="w-3.5 h-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleItalic} title="נטוי">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleItalic} title={t('richTextEditor.italic')}>
           <Italic className="w-3.5 h-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleUnderline} title="קו תחתון">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleUnderline} title={t('richTextEditor.underline')}>
           <Underline className="w-3.5 h-3.5" />
         </Button>
         
@@ -375,29 +375,29 @@ export default function RichTextEditor({
         {/* Text color */}
         <Popover open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
           <PopoverTrigger asChild>
-            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="צבע טקסט">
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title={t('richTextEditor.textColor')}>
               <Palette className="w-3.5 h-3.5" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-2" align="start">
             <div className="space-y-2">
               <div className="grid grid-cols-6 gap-1">
-                {TEXT_COLORS.map((colorItem) => (
+                {TEXT_COLOR_DEFS.map((colorItem) => (
                   <button
                     key={colorItem.value}
                     type="button"
                     className={`w-6 h-6 rounded border border-border hover:scale-110 transition-transform flex items-center justify-center ${
                       colorItem.isAuto ? 'bg-gradient-to-br from-foreground/20 to-foreground/80' : ''
                     }`}
-                    style={colorItem.isAuto ? undefined : { 
-                      backgroundColor: colorItem.cssVar 
-                        ? `hsl(var(--${colorItem.value}))` 
-                        : colorItem.value 
+                    style={colorItem.isAuto ? undefined : {
+                      backgroundColor: colorItem.cssVar
+                        ? `hsl(var(--${colorItem.value}))`
+                        : colorItem.value
                     }}
                     onClick={() => handleTextColor(colorItem)}
-                    title={colorItem.name}
+                    title={t(colorItem.nameKey)}
                   >
-                    {colorItem.isAuto && <span className="text-[10px] font-bold text-foreground">א</span>}
+                    {colorItem.isAuto && <span className="text-[10px] font-bold text-foreground">{t('richTextEditor.autoMarker')}</span>}
                   </button>
                 ))}
               </div>
@@ -405,10 +405,10 @@ export default function RichTextEditor({
                 <input
                   type="color"
                   className="w-6 h-6 rounded border border-border cursor-pointer"
-                  onChange={(e) => handleTextColor({ name: 'מותאם אישית', value: e.target.value, cssVar: false, isAuto: false })}
-                  title="בחירת צבע מותאם אישית"
+                  onChange={(e) => handleTextColor({ value: e.target.value, cssVar: false, isAuto: false })}
+                  title={t('richTextEditor.pickCustomColor')}
                 />
-                <span className="text-xs text-muted-foreground">מותאם אישית</span>
+                <span className="text-xs text-muted-foreground">{t('richTextEditor.customColor')}</span>
               </div>
             </div>
           </PopoverContent>
@@ -417,53 +417,53 @@ export default function RichTextEditor({
         <div className="w-px h-5 bg-border mx-1" />
         
         {/* Alignment */}
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleAlignRight} title="יישור לימין">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleAlignRight} title={t('richTextEditor.alignRight')}>
           <AlignRight className="w-3.5 h-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleAlignCenter} title="יישור למרכז">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleAlignCenter} title={t('richTextEditor.alignCenter')}>
           <AlignCenter className="w-3.5 h-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleAlignLeft} title="יישור לשמאל">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleAlignLeft} title={t('richTextEditor.alignLeft')}>
           <AlignLeft className="w-3.5 h-3.5" />
         </Button>
-        
+
         <div className="w-px h-5 bg-border mx-1" />
-        
+
         {/* Text Direction */}
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleDirectionRTL} title="כיוון ימין לשמאל (RTL)">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleDirectionRTL} title={t('richTextEditor.directionRtl')}>
           <PilcrowRight className="w-3.5 h-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleDirectionLTR} title="כיוון שמאל לימין (LTR)">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleDirectionLTR} title={t('richTextEditor.directionLtr')}>
           <PilcrowLeft className="w-3.5 h-3.5" />
         </Button>
-        
+
         <div className="w-px h-5 bg-border mx-1" />
-        
+
         {/* Lists */}
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleBulletList} title="רשימה">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleBulletList} title={t('richTextEditor.bulletList')}>
           <List className="w-3.5 h-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleNumberedList} title="רשימה ממוספרת">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleNumberedList} title={t('richTextEditor.numberedList')}>
           <ListOrdered className="w-3.5 h-3.5" />
         </Button>
-        
+
         <div className="w-px h-5 bg-border mx-1" />
-        
+
         {/* Links */}
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { saveSelection(); setLinkDialogOpen(true); }} title="הוספת קישור">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { saveSelection(); setLinkDialogOpen(true); }} title={t('richTextEditor.insertLink')}>
           <LinkIcon className="w-3.5 h-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleUnlink} title="הסרת קישור">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={handleUnlink} title={t('richTextEditor.removeLink')}>
           <Unlink className="w-3.5 h-3.5" />
         </Button>
-        
+
         <div className="w-px h-5 bg-border mx-1" />
-        
+
         {/* Media */}
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { saveSelection(); setImageDialogOpen(true); }} title="הוספת תמונה">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { saveSelection(); setImageDialogOpen(true); }} title={t('richTextEditor.insertImage')}>
           <Image className="w-3.5 h-3.5" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { saveSelection(); setTableDialogOpen(true); }} title="הוספת טבלה">
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { saveSelection(); setTableDialogOpen(true); }} title={t('richTextEditor.insertTable')}>
           <Table className="w-3.5 h-3.5" />
         </Button>
       </div>
@@ -486,11 +486,11 @@ export default function RichTextEditor({
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
         <DialogContent className="sm:max-w-md" dir="rtl">
           <DialogHeader>
-            <DialogTitle>הוספת קישור</DialogTitle>
+            <DialogTitle>{t('richTextEditor.insertLink')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="link-url">כתובת URL</Label>
+              <Label htmlFor="link-url">{t('richTextEditor.urlLabel')}</Label>
               <Input
                 id="link-url"
                 type="url"
@@ -502,8 +502,8 @@ export default function RichTextEditor({
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>ביטול</Button>
-            <Button onClick={handleInsertLink} disabled={!linkUrl}>הוספת קישור</Button>
+            <Button variant="outline" onClick={() => setLinkDialogOpen(false)}>{t('common.cancel')}</Button>
+            <Button onClick={handleInsertLink} disabled={!linkUrl}>{t('richTextEditor.insertLink')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -512,18 +512,18 @@ export default function RichTextEditor({
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent className="sm:max-w-md" dir="rtl">
           <DialogHeader>
-            <DialogTitle>הוספת תמונה</DialogTitle>
+            <DialogTitle>{t('richTextEditor.insertImage')}</DialogTitle>
           </DialogHeader>
           <Tabs defaultValue="upload" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="upload">העלאה מהמחשב</TabsTrigger>
-              <TabsTrigger value="url">כתובת URL</TabsTrigger>
+              <TabsTrigger value="upload">{t('richTextEditor.uploadFromComputer')}</TabsTrigger>
+              <TabsTrigger value="url">{t('richTextEditor.urlLabel')}</TabsTrigger>
             </TabsList>
             <TabsContent value="upload" className="space-y-4 py-4">
               <div className="flex flex-col items-center justify-center gap-4 p-6 border-2 border-dashed rounded-lg">
                 <Upload className="w-10 h-10 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground text-center">
-                  לחיצה לבחירת תמונה או גרירה לכאן
+                  {t('richTextEditor.clickOrDragImage')}
                 </p>
                 <input
                   ref={fileInputRef}
@@ -532,20 +532,20 @@ export default function RichTextEditor({
                   className="hidden"
                   onChange={handleFileUpload}
                 />
-                <Button 
-                  type="button" 
-                  variant="outline" 
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={imageUploading}
                 >
-                  {imageUploading ? 'בהעלאה...' : 'בחירת תמונה'}
+                  {imageUploading ? t('richTextEditor.uploading') : t('richTextEditor.chooseImage')}
                 </Button>
-                <p className="text-xs text-muted-foreground">עד 5MB</p>
+                <p className="text-xs text-muted-foreground">{t('richTextEditor.maxFileSize')}</p>
               </div>
             </TabsContent>
             <TabsContent value="url" className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="image-url">כתובת URL של תמונה</Label>
+                <Label htmlFor="image-url">{t('richTextEditor.imageUrl')}</Label>
                 <Input
                   id="image-url"
                   type="url"
@@ -556,8 +556,8 @@ export default function RichTextEditor({
                 />
               </div>
               <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => setImageDialogOpen(false)}>ביטול</Button>
-                <Button onClick={handleInsertImageUrl} disabled={!imageUrl}>הוספת תמונה</Button>
+                <Button variant="outline" onClick={() => setImageDialogOpen(false)}>{t('common.cancel')}</Button>
+                <Button onClick={handleInsertImageUrl} disabled={!imageUrl}>{t('richTextEditor.insertImage')}</Button>
               </DialogFooter>
             </TabsContent>
           </Tabs>
@@ -568,11 +568,11 @@ export default function RichTextEditor({
       <Dialog open={tableDialogOpen} onOpenChange={setTableDialogOpen}>
         <DialogContent className="sm:max-w-sm" dir="rtl">
           <DialogHeader>
-            <DialogTitle>הוספת טבלה</DialogTitle>
+            <DialogTitle>{t('richTextEditor.insertTable')}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="table-rows">מספר שורות</Label>
+              <Label htmlFor="table-rows">{t('richTextEditor.rowsCount')}</Label>
               <Input
                 id="table-rows"
                 type="number"
@@ -583,7 +583,7 @@ export default function RichTextEditor({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="table-cols">מספר עמודות</Label>
+              <Label htmlFor="table-cols">{t('richTextEditor.colsCount')}</Label>
               <Input
                 id="table-cols"
                 type="number"
@@ -595,8 +595,8 @@ export default function RichTextEditor({
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setTableDialogOpen(false)}>ביטול</Button>
-            <Button onClick={handleInsertTable}>הוספת טבלה</Button>
+            <Button variant="outline" onClick={() => setTableDialogOpen(false)}>{t('common.cancel')}</Button>
+            <Button onClick={handleInsertTable}>{t('richTextEditor.insertTable')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

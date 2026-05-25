@@ -3,7 +3,7 @@ import { Sparkles, ArrowLeft, ArrowRight, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useRecommendations } from '@/hooks/useRecommendations';
+import { useRecommendations, RecommendedCourse } from '@/hooks/useRecommendations';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 
@@ -13,8 +13,31 @@ interface RecommendedCoursesProps {
 
 export function RecommendedCourses({ className }: RecommendedCoursesProps) {
   const { recommendations, loading } = useRecommendations(4);
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const ArrowIcon = language === 'he' ? ArrowLeft : ArrowRight;
+
+  const reasonLabel = (course: RecommendedCourse): string => {
+    if (course.reasonType === 'unfinished') {
+      return t('recommendations.continueProgress').replace(
+        '{progress}',
+        String(course.reasonData?.progress ?? 0)
+      );
+    }
+    if (course.reasonType === 'kg_similar') {
+      if (course.reasonData?.kgSource === 'concept_overlap') {
+        return t('recommendations.sharedConcepts').replace(
+          '{count}',
+          String(course.reasonData?.sharedConcepts ?? 0)
+        );
+      }
+      return t('recommendations.relatedContent');
+    }
+    if (course.reasonType === 'new') {
+      return t('recommendations.newOnPlatform');
+    }
+    // Fallback to the raw reason field (legacy/edge cases)
+    return course.reason;
+  };
 
   // Hide entirely if not loading and no recommendations
   if (!loading && recommendations.length === 0) return null;
@@ -32,10 +55,10 @@ export function RecommendedCourses({ className }: RecommendedCoursesProps) {
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
           </div>
-          מומלץ עבורך
+          {t('recommendations.title')}
         </CardTitle>
         <CardDescription>
-          הצעות אישיות מבוססות הלמידה שלך
+          {t('recommendations.subtitle')}
         </CardDescription>
       </CardHeader>
 
@@ -96,7 +119,7 @@ export function RecommendedCourses({ className }: RecommendedCoursesProps) {
                             : 'bg-primary/15 text-primary'
                         )}
                       >
-                        {course.reason}
+                        {reasonLabel(course)}
                       </span>
                     </div>
                   </div>

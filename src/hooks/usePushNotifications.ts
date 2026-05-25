@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // VAPID public key is stored in backend secrets; we fetch it at runtime (it's safe to expose because it's public).
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -22,6 +23,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 export function usePushNotifications() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [isSupported, setIsSupported] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -116,8 +118,8 @@ export function usePushNotifications() {
   const subscribe = useCallback(async () => {
     if (!isSupported) {
       toast({
-        title: 'לא נתמך',
-        description: 'הדפדפן שלך לא תומך בהתראות פוש',
+        title: t('pushNotifications.notSupportedTitle'),
+        description: t('pushNotifications.notSupportedDesc'),
         variant: 'destructive',
       });
       return false;
@@ -125,8 +127,8 @@ export function usePushNotifications() {
 
     if (!user) {
       toast({
-        title: 'נדרשת התחברות',
-        description: 'יש להתחבר כדי להפעיל התראות',
+        title: t('pushNotifications.loginRequiredTitle'),
+        description: t('pushNotifications.loginRequiredDesc'),
         variant: 'destructive',
       });
       return false;
@@ -151,8 +153,8 @@ export function usePushNotifications() {
 
       if (isIOS && !pwaNow) {
         toast({
-          title: 'צריך לפתוח מהמסך הבית',
-          description: 'באייפון התראות פוש עובדות רק באפליקציה שמותקנת למסך הבית ונפתחת מהאייקון.',
+          title: t('pushNotifications.openFromHomeTitle'),
+          description: t('pushNotifications.openFromHomeDesc'),
           variant: 'destructive',
         });
         return false;
@@ -164,10 +166,10 @@ export function usePushNotifications() {
       // If already denied, we can't request again - user must change in settings
       if (currentPermission === 'denied') {
         toast({
-          title: 'התראות חסומות',
+          title: t('pushNotifications.blockedTitle'),
           description: isIOS
-            ? 'באייפון צריך לאפשר ידנית דרך הגדרות > Notifications > (שם האפליקציה)'
-            : 'יש לאפשר התראות בהגדרות הדפדפן',
+            ? t('pushNotifications.blockedDescIos')
+            : t('pushNotifications.blockedDescBrowser'),
           variant: 'destructive',
         });
         return false;
@@ -178,10 +180,10 @@ export function usePushNotifications() {
 
       if (permission !== 'granted') {
         toast({
-          title: 'יש לאשר התראות',
+          title: t('pushNotifications.allowRequiredTitle'),
           description: isIOS
-            ? 'כשתופיע בקשת ההרשאה של iOS, יש ללחוץ "אפשר"'
-            : 'יש לאפשר התראות בחלון שיופיע',
+            ? t('pushNotifications.allowRequiredDescIos')
+            : t('pushNotifications.allowRequiredDescBrowser'),
           variant: 'destructive',
         });
         return false;
@@ -236,8 +238,8 @@ export function usePushNotifications() {
       setIsSubscribed(true);
 
       toast({
-        title: 'התראות הופעלו',
-        description: 'יישלחו התראות על הודעות חדשות',
+        title: t('pushNotifications.enabledTitle'),
+        description: t('pushNotifications.enabledDesc'),
       });
 
       return true;
@@ -248,15 +250,15 @@ export function usePushNotifications() {
         (typeof error === 'string' ? error : 'Unknown error');
 
       toast({
-        title: 'שגיאה בהפעלת התראות',
-        description: `לא ניתן להפעיל התראות: ${String(msg).slice(0, 180)}`,
+        title: t('pushNotifications.enableErrorTitle'),
+        description: `${t('pushNotifications.enableErrorDesc')}: ${String(msg).slice(0, 180)}`,
         variant: 'destructive',
       });
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, [isSupported, user, vapidPublicKey, fetchVapidPublicKey, toast]);
+  }, [isSupported, user, vapidPublicKey, fetchVapidPublicKey, toast, t]);
 
   const unsubscribe = useCallback(async () => {
     if (!user) return false;
@@ -282,23 +284,23 @@ export function usePushNotifications() {
       setIsSubscribed(false);
       
       toast({
-        title: 'התראות בוטלו',
-        description: 'לא יישלחו יותר התראות על הודעות חדשות',
+        title: t('pushNotifications.unsubscribedTitle'),
+        description: t('pushNotifications.unsubscribedDesc'),
       });
-      
+
       return true;
     } catch (error) {
       console.error('Error unsubscribing:', error);
       toast({
-        title: 'שגיאה',
-        description: 'לא ניתן לבטל התראות',
+        title: t('common.error'),
+        description: t('pushNotifications.unsubscribeErrorDesc'),
         variant: 'destructive',
       });
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, [user, subscription, toast]);
+  }, [user, subscription, toast, t]);
 
   return {
     isSupported,

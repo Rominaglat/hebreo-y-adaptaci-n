@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export interface ChatMessage {
   id?: string;
@@ -23,6 +24,7 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-assistant
 export function useAiChat() {
   const { user, session } = useAuth();
   const { toast } = useToast();
+  const { t } = useLanguage();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function useAiChat() {
         .from('chat_conversations')
         .insert({
           user_id: user.id,
-          title: 'שיחה חדשה',
+          title: t('aiChat.newChat'),
         })
         .select()
         .single();
@@ -89,7 +91,7 @@ export function useAiChat() {
       console.error('Error creating conversation:', e);
       return null;
     }
-  }, [user]);
+  }, [user, t]);
 
   const startNewChat = useCallback(async () => {
     setMessages([]);
@@ -162,12 +164,12 @@ export function useAiChat() {
 
       if (!resp.ok) {
         if (resp.status === 429) {
-          toast({ title: 'הגבלת קצב', description: 'יותר מדי בקשות, יש לנסות שוב בעוד רגע', variant: 'destructive' });
+          toast({ title: t('aiChat.rateLimitTitle'), description: t('aiChat.rateLimitDesc'), variant: 'destructive' });
           setIsLoading(false);
           return;
         }
         if (resp.status === 402) {
-          toast({ title: 'מגבלת שימוש', description: 'נגמרו הקרדיטים, יש לפנות למנהל המערכת', variant: 'destructive' });
+          toast({ title: t('aiChat.quotaTitle'), description: t('aiChat.quotaDesc'), variant: 'destructive' });
           setIsLoading(false);
           return;
         }
@@ -235,15 +237,15 @@ export function useAiChat() {
       if (e.name === 'AbortError') return;
       console.error('Error sending message:', e);
       toast({
-        title: 'שגיאה',
-        description: 'אירעה שגיאה בשליחת ההודעה, יש לנסות שוב',
+        title: t('common.error'),
+        description: t('aiChat.sendError'),
         variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [currentConversationId, session, messages, createConversation, loadConversations, toast]);
+  }, [currentConversationId, session, messages, createConversation, loadConversations, toast, t]);
 
   const cancelStream = useCallback(() => {
     abortControllerRef.current?.abort();

@@ -7,32 +7,34 @@ import { Button } from '@/components/ui/button';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTenant } from '@/contexts/TenantContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
-
-const INTERESTS = [
-  { id: 'ai', label: 'בינה מלאכותית', emoji: '🤖' },
-  { id: 'business', label: 'עסקים', emoji: '💼' },
-  { id: 'marketing', label: 'שיווק', emoji: '📈' },
-  { id: 'sales', label: 'מכירות', emoji: '💰' },
-  { id: 'product', label: 'מוצר', emoji: '🎯' },
-  { id: 'design', label: 'עיצוב', emoji: '🎨' },
-  { id: 'dev', label: 'פיתוח', emoji: '💻' },
-  { id: 'data', label: 'דאטה', emoji: '📊' },
-  { id: 'content', label: 'תוכן', emoji: '✍️' },
-  { id: 'leadership', label: 'מנהיגות', emoji: '🚀' },
-];
 
 type Step = 'welcome' | 'interests' | 'first_action';
 
 export function OnboardingFlow() {
-  const { showFlow, setShowFlow, finishOnboarding, skipOnboarding } = useOnboarding();
+  const { showFlow, finishOnboarding, skipOnboarding } = useOnboarding();
   const { profile, tenantProfile } = useAuth();
   const { tenantSettings } = useTenant();
-  const assistantName = tenantSettings?.ai_assistant_name?.trim() || 'ג\u0027ייסון';
+  const { t, isRTL } = useLanguage();
+  const assistantName = tenantSettings?.ai_assistant_name?.trim() || 'Aria';
   const [step, setStep] = useState<Step>('welcome');
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
 
-  const firstName = ((tenantProfile?.full_name || profile?.full_name || '').trim().split(' ')[0]) || 'שלום';
+  const INTERESTS = [
+    { id: 'ai', label: t('onboarding.interest.ai'), emoji: '🤖' },
+    { id: 'business', label: t('onboarding.interest.business'), emoji: '💼' },
+    { id: 'marketing', label: t('onboarding.interest.marketing'), emoji: '📈' },
+    { id: 'sales', label: t('onboarding.interest.sales'), emoji: '💰' },
+    { id: 'product', label: t('onboarding.interest.product'), emoji: '🎯' },
+    { id: 'design', label: t('onboarding.interest.design'), emoji: '🎨' },
+    { id: 'dev', label: t('onboarding.interest.dev'), emoji: '💻' },
+    { id: 'data', label: t('onboarding.interest.data'), emoji: '📊' },
+    { id: 'content', label: t('onboarding.interest.content'), emoji: '✍️' },
+    { id: 'leadership', label: t('onboarding.interest.leadership'), emoji: '🚀' },
+  ];
+
+  const firstName = ((tenantProfile?.full_name || profile?.full_name || '').trim().split(' ')[0]) || t('onboarding.fallbackName');
 
   const toggleInterest = (id: string) => {
     setSelectedInterests((prev) =>
@@ -62,18 +64,16 @@ export function OnboardingFlow() {
 
   const stepIndex = step === 'welcome' ? 0 : step === 'interests' ? 1 : 2;
 
+  const ChevronNext = isRTL ? ChevronLeft : ChevronRight;
+  const ChevronPrev = isRTL ? ChevronRight : ChevronLeft;
+
   return (
     <Dialog open={showFlow} onOpenChange={(open) => !open && handleSkip()}>
       <DialogContent className="max-w-lg p-0 overflow-hidden border-border/60 [&>button]:hidden">
         <VisuallyHidden>
-          <DialogTitle>ברוכים הבאים לפורטל הלמידה</DialogTitle>
-          <DialogDescription>
-            תהליך היכרות קצר שיעזור להתאים את חוויית הלמידה אליך
-          </DialogDescription>
+          <DialogTitle>{t('onboarding.dialogTitle')}</DialogTitle>
+          <DialogDescription>{t('onboarding.dialogDescription')}</DialogDescription>
         </VisuallyHidden>
-        {/* Hero header — wrapper has no overflow:hidden so the avatar can
-            float below the gradient. The gradient layer itself still clips
-            its radial overlays. */}
         <div className="relative">
           <div className="relative h-32 bg-gradient-to-br from-primary via-accent to-primary/80 overflow-hidden">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.2),transparent_50%)]" />
@@ -92,7 +92,6 @@ export function OnboardingFlow() {
               </div>
             </div>
           </div>
-          {/* Avatar floats below the gradient — sits OUTSIDE the clipped hero */}
           <div className="absolute -bottom-10 inset-x-0 flex justify-center pointer-events-none">
             <div className="w-20 h-20 rounded-2xl bg-card shadow-xl flex items-center justify-center border-4 border-card">
               <Sparkles className="w-9 h-9 text-primary" />
@@ -100,7 +99,6 @@ export function OnboardingFlow() {
           </div>
         </div>
 
-        {/* Content */}
         <div className="px-6 pt-14 pb-6">
           <AnimatePresence mode="wait">
             {step === 'welcome' && (
@@ -113,16 +111,14 @@ export function OnboardingFlow() {
                 className="text-center space-y-3"
               >
                 <h2 className="text-2xl font-bold tracking-tight">
-                  ברוכים הבאים, <span className="text-gradient">{firstName}</span>! 🎉
+                  {t('onboarding.welcomeTitle')}, <span className="text-gradient">{firstName}</span>! 🎉
                 </h2>
-                <p className="text-muted-foreground">
-                  אנחנו שמחים שהגעת. בואו נכיר כדי שנוכל להתאים את חוויית הלמידה הטובה ביותר.
-                </p>
+                <p className="text-muted-foreground">{t('onboarding.welcomeBody')}</p>
                 <div className="grid grid-cols-3 gap-3 pt-4">
                   {[
-                    { emoji: '📚', label: 'קורסים' },
-                    { emoji: '🤖', label: 'AI חכם' },
-                    { emoji: '🏆', label: 'הישגים' },
+                    { emoji: '📚', label: t('onboarding.feature.courses') },
+                    { emoji: '🤖', label: t('onboarding.feature.smartAi') },
+                    { emoji: '🏆', label: t('onboarding.feature.achievements') },
                   ].map((f) => (
                     <div key={f.label} className="text-center p-3 rounded-xl bg-muted/50 border border-border/50">
                       <div className="text-2xl mb-1">{f.emoji}</div>
@@ -143,10 +139,8 @@ export function OnboardingFlow() {
                 className="space-y-4"
               >
                 <div className="text-center">
-                  <h2 className="text-2xl font-bold tracking-tight">מה מעניין אותך?</h2>
-                  <p className="text-muted-foreground text-sm mt-1">
-                    בחירת התחומים שמעניינים אותך — נמליץ על קורסים מתאימים
-                  </p>
+                  <h2 className="text-2xl font-bold tracking-tight">{t('onboarding.interestsTitle')}</h2>
+                  <p className="text-muted-foreground text-sm mt-1">{t('onboarding.interestsSubtitle')}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {INTERESTS.map((interest) => {
@@ -164,7 +158,7 @@ export function OnboardingFlow() {
                         )}
                       >
                         <span className="text-xl">{interest.emoji}</span>
-                        <span className="flex-1 text-right">{interest.label}</span>
+                        <span className="flex-1 text-start">{interest.label}</span>
                         {selected && (
                           <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
                             <Check className="w-3 h-3 text-primary-foreground" />
@@ -186,19 +180,17 @@ export function OnboardingFlow() {
                 transition={{ duration: 0.25 }}
                 className="text-center space-y-4"
               >
-                <h2 className="text-2xl font-bold tracking-tight">מוכן להתחיל? 🚀</h2>
-                <p className="text-muted-foreground text-sm">
-                  הכל מוכן! יש לך צ'קליסט מהיר שיעזור לך להתחיל.
-                </p>
+                <h2 className="text-2xl font-bold tracking-tight">{t('onboarding.readyTitle')}</h2>
+                <p className="text-muted-foreground text-sm">{t('onboarding.readyBody')}</p>
                 <div className="bg-gradient-to-br from-primary/10 via-accent/5 to-transparent rounded-2xl p-5 space-y-3 border border-border/50">
                   {[
-                    { icon: '👤', text: 'השלם את הפרופיל' },
-                    { icon: '📚', text: 'גלה קורסים' },
-                    { icon: '🤖', text: `דבר עם ${assistantName}` },
+                    { icon: '👤', text: t('onboarding.task.profile') },
+                    { icon: '📚', text: t('onboarding.task.discoverCourses') },
+                    { icon: '🤖', text: t('onboarding.task.chatAssistant').replace('{name}', assistantName) },
                   ].map((item) => (
                     <div key={item.text} className="flex items-center gap-3 text-sm">
                       <span className="text-xl">{item.icon}</span>
-                      <span className="flex-1 text-right font-medium">{item.text}</span>
+                      <span className="flex-1 text-start font-medium">{item.text}</span>
                       <div className="w-5 h-5 rounded-full border-2 border-border" />
                     </div>
                   ))}
@@ -207,26 +199,25 @@ export function OnboardingFlow() {
             )}
           </AnimatePresence>
 
-          {/* Footer */}
           <div className="flex items-center justify-between gap-2 mt-6 pt-4 border-t border-border/50">
             <Button variant="ghost" onClick={handleSkip} className="text-muted-foreground">
-              דלג
+              {t('onboarding.skip')}
             </Button>
             <div className="flex items-center gap-2">
               {step !== 'welcome' && (
                 <Button variant="outline" onClick={handleBack} size="sm">
-                  <ChevronRight className="w-4 h-4" />
-                  חזור
+                  <ChevronPrev className="w-4 h-4" />
+                  {t('onboarding.back')}
                 </Button>
               )}
               {step !== 'first_action' ? (
                 <Button onClick={handleNext} className="gap-1.5 shadow-md shadow-primary/20">
-                  הבא
-                  <ChevronLeft className="w-4 h-4" />
+                  {t('onboarding.next')}
+                  <ChevronNext className="w-4 h-4" />
                 </Button>
               ) : (
                 <Button onClick={handleFinish} className="gap-1.5 shadow-md shadow-primary/20">
-                  בואו נתחיל! 🎉
+                  {t('onboarding.startCta')}
                 </Button>
               )}
             </div>

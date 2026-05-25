@@ -257,7 +257,7 @@ export function StudentProgressDialog({ open, onOpenChange, user }: StudentProgr
                 </div>
               ) : modules.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  {language === 'he' ? 'אין שיעורים בקורס זה' : 'No lessons in this course'}
+                  {t('studentProgress.noLessons')}
                 </div>
               ) : (
                 modules.map(module => (
@@ -332,8 +332,8 @@ export function StudentProgressDialog({ open, onOpenChange, user }: StudentProgr
                     <div className="flex items-center justify-between text-xs text-muted-foreground flex-row-reverse">
                       <span>{Math.round(enrollment.progress_percentage)}%</span>
                       <span>
-                        {t('admin.enrolledAt')}: {format(new Date(enrollment.enrolled_at), 'd בMMM yyyy', { 
-                          locale: language === 'he' ? he : enUS 
+                        {t('admin.enrolledAt')}: {format(new Date(enrollment.enrolled_at), language === 'he' ? 'd בMMM yyyy' : 'd MMM yyyy', {
+                          locale: language === 'he' ? he : enUS
                         })}
                       </span>
                     </div>

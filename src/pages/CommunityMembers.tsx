@@ -27,7 +27,7 @@ interface Member {
 }
 
 export default function CommunityMembers() {
-  const { language } = useLanguage();
+  const { t } = useLanguage();
 
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,7 +141,7 @@ export default function CommunityMembers() {
 
   const getWhatsAppUrl = (phone: string) => {
     const cleanPhone = phone.replace(/\D/g, '');
-    const message = encodeURIComponent('היי :) הגעתי אליך דרך הקהילה');
+    const message = encodeURIComponent(t('membersPage.whatsappMessage'));
     return `https://wa.me/${cleanPhone}?text=${message}`;
   };
 
@@ -193,11 +193,11 @@ export default function CommunityMembers() {
                   <Users className="w-5 h-5 text-primary-foreground" />
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                  {language === 'he' ? 'חברי הקהילה' : 'Community Members'}
+                  {t('nav.communityMembers')}
                 </h1>
               </div>
               <p className="text-muted-foreground">
-                {language === 'he' ? 'ליצור קשר עם חברי הקהילה' : 'Connect with your community members'}
+                {t('membersPage.headerSubtitle')}
               </p>
             </div>
 
@@ -205,7 +205,7 @@ export default function CommunityMembers() {
             <div className="relative w-full sm:w-64">
               <Search className="absolute end-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input
-                placeholder={language === 'he' ? 'חפש...' : 'Search...'}
+                placeholder={t('membersPage.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pe-9 h-11 bg-card border-border/60 focus-visible:ring-primary/30 focus-visible:border-primary/50"
@@ -239,12 +239,8 @@ export default function CommunityMembers() {
               </div>
               <h3 className="text-lg font-semibold">
                 {searchQuery.trim()
-                  ? language === 'he'
-                    ? 'לא נמצאו תוצאות'
-                    : 'No results found'
-                  : language === 'he'
-                    ? 'אין חברי קהילה עדיין'
-                    : 'No community members yet'}
+                  ? t('commandPalette.empty')
+                  : t('membersPage.noMembers')}
               </h3>
             </CardContent>
           </Card>
@@ -252,7 +248,7 @@ export default function CommunityMembers() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredMembers.map((member) => {
               const socialLinks = getSocialLinks(member);
-              const displayName = member.full_name || (language === 'he' ? 'משתמש' : 'User');
+              const displayName = member.full_name || t('commandPalette.userFallback');
               const phone = member.phone?.trim() || null;
 
               return (
@@ -353,7 +349,7 @@ export default function CommunityMembers() {
                             <Button asChild className="flex-1">
                               <a href={`tel:${phone.replace(/\D/g, '')}`} aria-label="Call">
                                 <Phone className="w-4 h-4" />
-                                {language === 'he' ? 'חייג' : 'Call'}
+                                {t('benefitsPage.call')}
                               </a>
                             </Button>
                           )}
@@ -369,7 +365,7 @@ export default function CommunityMembers() {
                                 aria-label="WhatsApp"
                               >
                                 <MessageCircle className="w-4 h-4" />
-                                {language === 'he' ? 'ווטסאפ' : 'WhatsApp'}
+                                {t('benefitsPage.whatsapp')}
                               </a>
                             </Button>
                           )}

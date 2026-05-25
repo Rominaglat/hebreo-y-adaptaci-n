@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Flame } from 'lucide-react';
 import { useStreak } from '@/hooks/useStreak';
 import { Card, CardContent } from '@/components/ui/card';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 
 interface StreakIndicatorProps {
@@ -11,6 +12,7 @@ interface StreakIndicatorProps {
 
 export function StreakIndicator({ variant = 'card', className }: StreakIndicatorProps) {
   const { current, longest, isAtRisk } = useStreak();
+  const { t } = useLanguage();
 
   if (variant === 'compact') {
     return (
@@ -34,7 +36,7 @@ export function StreakIndicator({ variant = 'card', className }: StreakIndicator
       >
         <Flame className={cn('w-4 h-4', current > 0 && 'fill-orange-500/40')} />
         <span className="tabular-nums">{current}</span>
-        <span className="text-xs opacity-80">ימי רצף</span>
+        <span className="text-xs opacity-80">{t('streak.daysInARow')}</span>
       </div>
     );
   }
@@ -49,16 +51,16 @@ export function StreakIndicator({ variant = 'card', className }: StreakIndicator
       <CardContent className="p-5 relative">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">סטריק נוכחי</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t('streak.currentStreak')}</p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-3xl sm:text-4xl font-bold tabular-nums tracking-tight">
                 {current}
               </span>
-              <span className="text-sm text-muted-foreground">{current === 1 ? 'יום' : 'ימים'}</span>
+              <span className="text-sm text-muted-foreground">{current === 1 ? t('streak.day') : t('streak.days')}</span>
             </div>
             {longest > 0 && (
               <p className="text-xs text-muted-foreground mt-1.5">
-                שיא: <span className="font-semibold text-foreground">{longest}</span>
+                {t('streak.best')}: <span className="font-semibold text-foreground">{longest}</span>
               </p>
             )}
           </div>
@@ -93,7 +95,7 @@ export function StreakIndicator({ variant = 'card', className }: StreakIndicator
         {isAtRisk && current > 0 && (
           <div className="mt-3 pt-3 border-t border-border/50">
             <p className="text-xs text-orange-600 dark:text-orange-400 font-medium">
-              ⚠️ הסטריק שלך בסכנה — כדאי להיכנס היום!
+              ⚠️ {t('streak.atRisk')}
             </p>
           </div>
         )}
@@ -101,7 +103,7 @@ export function StreakIndicator({ variant = 'card', className }: StreakIndicator
         {current === 0 && (
           <div className="mt-3 pt-3 border-t border-border/50">
             <p className="text-xs text-muted-foreground">
-              להתחיל ללמוד היום כדי לצבור סטריק 🚀
+              {t('streak.startToday')} 🚀
             </p>
           </div>
         )}

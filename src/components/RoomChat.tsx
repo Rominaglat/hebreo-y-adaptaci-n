@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useRoomChat, ChatMessage } from '@/hooks/useRoomChat';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface RoomChatProps {
   roomId: string;
@@ -12,6 +13,7 @@ interface RoomChatProps {
 }
 
 const RoomChat = ({ roomId, userId, userName }: RoomChatProps) => {
+  const { t, language } = useLanguage();
   const { messages, loading, sendMessage } = useRoomChat({ roomId, userId, userName });
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -49,7 +51,12 @@ const RoomChat = ({ roomId, userId, userName }: RoomChatProps) => {
   };
 
   const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('he-IL', {
+    const localeMap: Record<'he' | 'en' | 'es', string> = {
+      he: 'he-IL',
+      en: 'en-US',
+      es: 'es-ES',
+    };
+    return new Date(dateString).toLocaleTimeString(localeMap[language], {
       hour: '2-digit',
       minute: '2-digit',
     });
@@ -79,7 +86,7 @@ const RoomChat = ({ roomId, userId, userName }: RoomChatProps) => {
         <div className="space-y-3 py-2">
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground text-sm py-8">
-              אין הודעות עדיין. התחילו את השיחה!
+              {t('roomChat.empty')}
             </div>
           ) : (
             messages.map((msg) => (
@@ -103,7 +110,7 @@ const RoomChat = ({ roomId, userId, userName }: RoomChatProps) => {
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="כתבו הודעה…"
+            placeholder={t('roomChat.placeholder')}
             className="flex-1 text-sm"
             disabled={sending}
             autoComplete="off"
@@ -113,7 +120,7 @@ const RoomChat = ({ roomId, userId, userName }: RoomChatProps) => {
             onClick={handleSend}
             disabled={!newMessage.trim() || sending}
             className="shrink-0 h-9 w-9"
-            aria-label="שליחת הודעה"
+            aria-label={t('roomChat.send')}
           >
             <Send className="w-4 h-4" />
           </Button>

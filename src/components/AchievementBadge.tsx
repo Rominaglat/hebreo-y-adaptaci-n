@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { useAchievements, type Achievement } from '@/hooks/useAchievements';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 
 interface AchievementBadgeProps {
@@ -18,6 +19,7 @@ interface AchievementBadgeProps {
 }
 
 export function AchievementBadge({ achievement, unlocked, size = 'md' }: AchievementBadgeProps) {
+  const { t } = useLanguage();
   const sizeClasses = {
     sm: 'w-12 h-12 text-2xl',
     md: 'w-16 h-16 text-3xl',
@@ -51,9 +53,9 @@ export function AchievementBadge({ achievement, unlocked, size = 'md' }: Achieve
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-[200px]">
           <div className="space-y-1">
-            <p className="font-semibold">{achievement.name}</p>
-            <p className="text-xs opacity-80">{achievement.description}</p>
-            {!unlocked && <p className="text-xs italic mt-1">🔒 עדיין לא נפתח</p>}
+            <p className="font-semibold">{t(achievement.nameKey)}</p>
+            <p className="text-xs opacity-80">{t(achievement.descriptionKey)}</p>
+            {!unlocked && <p className="text-xs italic mt-1">🔒 {t('achievements.locked')}</p>}
           </div>
         </TooltipContent>
       </Tooltip>
@@ -63,6 +65,7 @@ export function AchievementBadge({ achievement, unlocked, size = 'md' }: Achieve
 
 export function AchievementsGrid({ className }: { className?: string }) {
   const { achievements, isUnlocked, unlocked } = useAchievements();
+  const { t } = useLanguage();
   const totalUnlocked = unlocked.length;
 
   return (
@@ -72,10 +75,12 @@ export function AchievementsGrid({ className }: { className?: string }) {
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-sm">
             <Trophy className="w-5 h-5 text-white" />
           </div>
-          הישגים
+          {t('achievements.title')}
         </CardTitle>
         <CardDescription>
-          {totalUnlocked} מתוך {achievements.length} נפתחו
+          {t('achievements.unlockedCount')
+            .replace('{done}', String(totalUnlocked))
+            .replace('{total}', String(achievements.length))}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -97,6 +102,7 @@ export function AchievementsGrid({ className }: { className?: string }) {
  */
 export function AchievementToast() {
   const { recentUnlock, dismissRecentUnlock } = useAchievements();
+  const { t } = useLanguage();
 
   return (
     <AnimatePresence>
@@ -124,10 +130,10 @@ export function AchievementToast() {
               </motion.div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-primary uppercase tracking-wider">
-                  הישג חדש!
+                  {t('achievements.newAchievement')}
                 </p>
-                <p className="font-bold tracking-tight truncate">{recentUnlock.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{recentUnlock.description}</p>
+                <p className="font-bold tracking-tight truncate">{t(recentUnlock.nameKey)}</p>
+                <p className="text-xs text-muted-foreground truncate">{t(recentUnlock.descriptionKey)}</p>
               </div>
               <Button
                 variant="ghost"

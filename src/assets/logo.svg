@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Hebreo y Adaptación">
+  <rect width="64" height="64" rx="14" fill="#C4582A"/>
+  <path d="M0 0 H64 V64 H0 Z" fill="url(#warmth)" opacity="0.18"/>
+  <defs>
+    <radialGradient id="warmth" cx="0.3" cy="0.2" r="0.9">
+      <stop offset="0" stop-color="#F5C99A"/>
+      <stop offset="1" stop-color="#C4582A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <text x="32" y="42" text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', Times, serif"
+        font-size="26" font-weight="700"
+        fill="#FBF4DE"
+        letter-spacing="0.5">H<tspan fill="#1E40AF" dx="0" dy="-1" font-size="18" font-weight="400">&amp;</tspan>A</text>
+  <line x1="20" y1="50" x2="44" y2="50" stroke="#FBF4DE" stroke-width="1.5" stroke-linecap="round" opacity="0.85"/>
+</svg>

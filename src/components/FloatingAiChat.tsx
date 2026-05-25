@@ -9,6 +9,7 @@ import { VoiceWaveform, formatRecordingTime } from '@/components/VoiceWaveform';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTenant } from '@/contexts/TenantContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { useVoiceOutput } from '@/hooks/useVoiceOutput';
@@ -17,64 +18,51 @@ import ReactMarkdown from 'react-markdown';
 
 // Default mascot served from /public/jason.png + default name
 const DEFAULT_MASCOT = '/jason.png';
-const DEFAULT_NAME = 'ג\u0027ייסון';
+const DEFAULT_NAME = 'Aria';
 
 // ─── Contextual prompts ───
 interface QuickPrompt {
   icon: string;
-  text: string;
+  textKey: string;
 }
 
 function getContextualPrompts(pathname: string): QuickPrompt[] {
-  // Course detail page (specific lesson context)
   if (/^\/courses\/[a-f0-9-]+/.test(pathname) && !pathname.endsWith('/edit')) {
     return [
-      { icon: '📝', text: 'סכם לי את השיעור הנוכחי' },
-      { icon: '💡', text: 'הסבר את הקונספט בפשטות' },
-      { icon: '🎯', text: 'תן לי דוגמה מהעולם האמיתי' },
+      { icon: '📝', textKey: 'aiChat.prompts.lesson.summarize' },
+      { icon: '💡', textKey: 'aiChat.prompts.lesson.simplify' },
+      { icon: '🎯', textKey: 'aiChat.prompts.lesson.example' },
     ];
   }
-  // Courses list
   if (pathname.startsWith('/courses')) {
     return [
-      { icon: '🎓', text: 'אילו קורסים מומלצים בשבילי?' },
-      { icon: '🚀', text: 'מה כדאי ללמוד למתחילים?' },
-      { icon: '⏱️', text: 'איזה קורס קצר ויעיל?' },
+      { icon: '🎓', textKey: 'aiChat.prompts.courses.recommend' },
+      { icon: '🚀', textKey: 'aiChat.prompts.courses.beginners' },
+      { icon: '⏱️', textKey: 'aiChat.prompts.courses.short' },
     ];
   }
-  // Study rooms
   if (pathname.startsWith('/study-rooms')) {
     return [
-      { icon: '👥', text: 'מה הן שיטות לימוד יעילות בקבוצה?' },
-      { icon: '💬', text: 'תן לי טיפים לדיון מקצועי' },
+      { icon: '👥', textKey: 'aiChat.prompts.studyRooms.methods' },
+      { icon: '💬', textKey: 'aiChat.prompts.studyRooms.tips' },
     ];
   }
-  // Calendar
   if (pathname.startsWith('/calendar')) {
     return [
-      { icon: '📅', text: 'איך לנהל את הזמן שלי בלימוד?' },
-      { icon: '⏰', text: 'תן לי טיפ לתכנון יומי' },
+      { icon: '📅', textKey: 'aiChat.prompts.calendar.timeManagement' },
+      { icon: '⏰', textKey: 'aiChat.prompts.calendar.daily' },
     ];
   }
-  // Profile
   if (pathname.startsWith('/profile')) {
     return [
-      { icon: '🎯', text: 'איך לבנות מטרות למידה ברורות?' },
-      { icon: '📈', text: 'איך אפשר לעקוב אחרי ההתקדמות שלי?' },
+      { icon: '🎯', textKey: 'aiChat.prompts.profile.goals' },
+      { icon: '📈', textKey: 'aiChat.prompts.profile.track' },
     ];
   }
-  // Skills library
-  if (pathname.startsWith('/skills')) {
-    return [
-      { icon: '✨', text: 'אילו סקילים הכי מבוקשים בתחום שלי?' },
-      { icon: '🛠️', text: 'איך אני בונה סקיל איכותי?' },
-    ];
-  }
-  // Default — dashboard
   return [
-    { icon: '📚', text: 'מה כדאי לי ללמוד היום?' },
-    { icon: '💡', text: 'תן לי טיפ למידה לימוד' },
-    { icon: '🎯', text: 'איך אני יכול להתקדם מהר יותר?' },
+    { icon: '📚', textKey: 'aiChat.prompts.default.today' },
+    { icon: '💡', textKey: 'aiChat.prompts.default.tip' },
+    { icon: '🎯', textKey: 'aiChat.prompts.default.faster' },
   ];
 }
 
@@ -111,6 +99,7 @@ function useDraggable(initialPos: { x: number; y: number }) {
 export function FloatingAiChat() {
   const { user } = useAuth();
   const { tenantSettings } = useTenant();
+  const { t, language, isRTL } = useLanguage();
   const { completeStep } = useOnboarding();
   const navigate = useNavigate();
   const location = useLocation();
@@ -162,13 +151,26 @@ export function FloatingAiChat() {
     if (!isOpen) voiceOutput.stop();
   }, [isOpen, voiceOutput]);
 
-  // FAB drag — anchored to bottom-LEFT (user preference).
-  // FAB is 64px wide (w-16); +24px margin from edges; +110px above bottom edge
-  // so it never sits flush against the viewport.
-  const fab = useDraggable({
-    x: 24,
-    y: typeof window !== 'undefined' ? window.innerHeight - 110 : 600,
-  });
+  // FAB drag — anchored to the inline-end side (right for LTR, left for RTL).
+  // FAB is 64px wide (w-16); +24px margin from edges; +110px above bottom edge.
+  const getDefaultFabPosition = useCallback(() => {
+    const margin = 24;
+    const fabSize = 64;
+    const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const h = typeof window !== 'undefined' ? window.innerHeight : 600;
+    return {
+      x: isRTL ? margin : w - fabSize - margin,
+      y: h - 110,
+    };
+  }, [isRTL]);
+
+  const fab = useDraggable(getDefaultFabPosition());
+
+  // Reset FAB to the natural side when language direction flips.
+  useEffect(() => {
+    fab.setPos(getDefaultFabPosition());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language]);
 
   // Window drag
   const [windowPos, setWindowPos] = useState({ x: 0, y: 0 });
@@ -294,7 +296,7 @@ export function FloatingAiChat() {
           }}
           role="button"
           tabIndex={0}
-          aria-label={`פתיחת ${assistantName} - העוזר שלך`}
+          aria-label={t('aiChat.openAria').replace('{name}', assistantName)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -375,7 +377,7 @@ export function FloatingAiChat() {
               </div>
               <div className="flex flex-col">
                 <span className="font-semibold text-sm leading-tight">{assistantName}</span>
-                <span className="text-[10px] opacity-80 leading-tight">עוזר AI אישי</span>
+                <span className="text-[10px] opacity-80 leading-tight">{t('aiChat.subtitle')}</span>
               </div>
             </div>
             <div className="flex items-center gap-1 relative">
@@ -384,7 +386,7 @@ export function FloatingAiChat() {
                 size="icon"
                 className="h-8 w-8 text-primary-foreground hover:bg-white/20 rounded-lg"
                 onClick={() => { setShowHistory(!showHistory); }}
-                title="שיחות קודמות"
+                title={t('aiChat.history')}
               >
                 <MessageSquare className="w-4 h-4" />
               </Button>
@@ -393,7 +395,7 @@ export function FloatingAiChat() {
                 size="icon"
                 className="h-8 w-8 text-primary-foreground hover:bg-white/20 rounded-lg"
                 onClick={() => startNewChat()}
-                title="שיחה חדשה"
+                title={t('aiChat.newChat')}
               >
                 <Plus className="w-4 h-4" />
               </Button>
@@ -402,7 +404,7 @@ export function FloatingAiChat() {
                 size="icon"
                 className="h-8 w-8 text-primary-foreground hover:bg-white/20 rounded-lg"
                 onClick={handleClose}
-                title="סגור"
+                title={t('common.close')}
               >
                 <X className="w-4 h-4" />
               </Button>
@@ -415,7 +417,7 @@ export function FloatingAiChat() {
             {showHistory && (
               <div className="absolute inset-0 z-10 bg-card flex flex-col">
                 <div className="p-3 border-b border-border flex items-center justify-between">
-                  <span className="font-medium text-sm">שיחות קודמות</span>
+                  <span className="font-medium text-sm">{t('aiChat.history')}</span>
                   <Button variant="ghost" size="sm" onClick={() => setShowHistory(false)}>
                     <X className="w-4 h-4" />
                   </Button>
@@ -423,7 +425,7 @@ export function FloatingAiChat() {
                 <ScrollArea className="flex-1">
                   <div className="p-2 space-y-1">
                     {conversations.length === 0 ? (
-                      <p className="text-center text-muted-foreground text-sm py-8">אין שיחות קודמות</p>
+                      <p className="text-center text-muted-foreground text-sm py-8">{t('aiChat.noHistory')}</p>
                     ) : (
                       conversations.map(conv => (
                         <div
@@ -471,21 +473,24 @@ export function FloatingAiChat() {
                         />
                       </div>
                     </div>
-                    <p className="text-foreground font-bold text-base">היי, אני {assistantName}! 👋</p>
-                    <p className="text-muted-foreground text-xs mt-1.5 max-w-[240px]">שאל אותי כל שאלה על חומר הלימוד</p>
+                    <p className="text-foreground font-bold text-base">{t('aiChat.greeting').replace('{name}', assistantName)} 👋</p>
+                    <p className="text-muted-foreground text-xs mt-1.5 max-w-[240px]">{t('aiChat.greetingSubtitle')}</p>
 
                     {/* Quick action prompts — contextual to current page */}
                     <div className="mt-5 w-full space-y-2 px-2">
-                      {getContextualPrompts(location.pathname).map((prompt) => (
-                        <button
-                          key={prompt.text}
-                          onClick={() => sendMessage(prompt.text, currentCourseId)}
-                          className="w-full flex items-center gap-2.5 text-right text-xs px-3 py-2.5 rounded-xl border border-border/60 bg-background hover:bg-primary/5 hover:border-primary/40 transition-all duration-200 group"
-                        >
-                          <span className="text-base flex-shrink-0">{prompt.icon}</span>
-                          <span className="text-foreground group-hover:text-primary transition-colors text-right flex-1">{prompt.text}</span>
-                        </button>
-                      ))}
+                      {getContextualPrompts(location.pathname).map((prompt) => {
+                        const promptText = t(prompt.textKey);
+                        return (
+                          <button
+                            key={prompt.textKey}
+                            onClick={() => sendMessage(promptText, currentCourseId)}
+                            className="w-full flex items-center gap-2.5 text-start text-xs px-3 py-2.5 rounded-xl border border-border/60 bg-background hover:bg-primary/5 hover:border-primary/40 transition-all duration-200 group"
+                          >
+                            <span className="text-base flex-shrink-0">{prompt.icon}</span>
+                            <span className="text-foreground group-hover:text-primary transition-colors text-start flex-1">{promptText}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -547,7 +552,7 @@ export function FloatingAiChat() {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="שאל שאלה..."
+                  placeholder={t('aiChat.placeholder')}
                   className="flex-1 resize-none rounded-xl border bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 transition-colors min-h-[42px] max-h-[120px] shadow-sm border-border/60 focus-visible:ring-primary/30 focus-visible:border-primary/50"
                   dir="rtl"
                   rows={1}
@@ -566,7 +571,7 @@ export function FloatingAiChat() {
                   )}
                   onClick={voiceInput.toggle}
                   disabled={isLoading}
-                  title={voiceInput.isListening ? 'עצירת הקלטה' : 'הקלטה בקול'}
+                  title={voiceInput.isListening ? t('aiChat.stopRecording') : t('aiChat.startRecording')}
                 >
                   {voiceInput.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </Button>
@@ -587,7 +592,7 @@ export function FloatingAiChat() {
             <div
               className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
               onMouseDown={onResizeStart}
-              aria-label="שנה גודל"
+              aria-label={t('aiChat.resizeAria')}
             >
               <GripVertical className="w-3 h-3 text-muted-foreground rotate-45 translate-x-0.5 translate-y-0.5" />
             </div>
@@ -702,6 +707,7 @@ function MessageBubble({
   onNavigate: (path: string) => void;
   voiceOutput?: VoiceOutputControls;
 }) {
+  const { t } = useLanguage();
   const isUser = message.role === 'user';
   const isSpeaking = voiceOutput?.speakingId === messageId;
   const sources = message.sources?.filter((s: any) => s.lesson_id) || [];
@@ -783,17 +789,17 @@ function MessageBubble({
               ? "bg-primary/15 text-primary"
               : "text-muted-foreground hover:text-primary hover:bg-primary/5"
           )}
-          title={isSpeaking ? 'עצירת השמעה' : 'השמעה בקול'}
+          title={isSpeaking ? t('aiChat.stopPlayback') : t('aiChat.startPlayback')}
         >
           {isSpeaking ? (
             <>
               <VolumeX className="w-3 h-3" />
-              <span>עצירה</span>
+              <span>{t('aiChat.stop')}</span>
             </>
           ) : (
             <>
               <Volume2 className="w-3 h-3" />
-              <span>השמע</span>
+              <span>{t('aiChat.play')}</span>
             </>
           )}
         </button>
@@ -813,7 +819,7 @@ function MessageBubble({
               <span className="truncate max-w-[180px]">
                 {source.course_title && source.lesson_title
                   ? `${source.course_title} · ${source.lesson_title}`
-                  : source.lesson_title || source.course_title || 'מקור'}
+                  : source.lesson_title || source.course_title || t('aiChat.source')}
               </span>
             </Badge>
           ))}

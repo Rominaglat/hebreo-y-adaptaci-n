@@ -50,15 +50,15 @@ float fbm(vec2 p) {
 void main() {
     vec2 uv = gl_FragCoord.xy / uResolution.xy;
 
-    // Base purple background color
-    vec3 bgDark = vec3(0.05, 0.02, 0.12);
-    vec3 bgMid  = vec3(0.12, 0.04, 0.22);
+    // Warm brand background — deep editorial brown
+    vec3 bgDark = vec3(0.10, 0.05, 0.03);  // #1A0D08 deep brown
+    vec3 bgMid  = vec3(0.18, 0.10, 0.06);  // #2E1A0F warm brown
 
-    // Aurora colors - soft purples only
-    vec3 purple1 = vec3(0.20, 0.06, 0.40);  // deep purple
-    vec3 purple2 = vec3(0.35, 0.12, 0.60);  // medium purple
-    vec3 purple3 = vec3(0.50, 0.25, 0.75);  // bright purple
-    vec3 purple4 = vec3(0.40, 0.18, 0.55);  // warm purple
+    // Aurora colors — terracotta / cobalt / sand from logo
+    vec3 terracotta1 = vec3(0.42, 0.18, 0.10);  // deep terracotta (#6B2D1A)
+    vec3 terracotta2 = vec3(0.77, 0.34, 0.16);  // brand terracotta (#C4582A)
+    vec3 cobalt      = vec3(0.12, 0.25, 0.69);  // cobalt blue accent (#1E40AF)
+    vec3 warmSand    = vec3(0.55, 0.32, 0.18);  // sandy warm (#8B5230)
 
     // Slow time
     float t = uTime * 0.08;
@@ -73,18 +73,18 @@ void main() {
     float band2 = smoothstep(0.35, 0.65, f2);
     float band3 = smoothstep(0.4, 0.6, f3);
 
-    // Start with dark background gradient
+    // Start with dark warm background gradient
     vec3 col = mix(bgDark, bgMid, uv.y * 0.8 + f1 * 0.2);
 
-    // Layer the purple aurora bands
-    col = mix(col, purple1, band1 * 0.5);
-    col = mix(col, purple2, band2 * 0.35);
-    col = mix(col, purple3, band3 * 0.2);
-    col = mix(col, purple4, (band1 * band2) * 0.25);
+    // Layer the brand-coloured aurora bands — terracotta-led with a cobalt accent
+    col = mix(col, terracotta1, band1 * 0.55);
+    col = mix(col, terracotta2, band2 * 0.40);
+    col = mix(col, warmSand, band3 * 0.25);
+    col = mix(col, cobalt, (band1 * band2) * 0.18);
 
     // Subtle bright accent in flowing areas
     float highlight = smoothstep(0.55, 0.8, f1 * f2 + f3 * 0.3);
-    col += purple3 * highlight * 0.15;
+    col += terracotta2 * highlight * 0.18;
 
     // Gentle vignette
     vec2 vig = uv - 0.5;

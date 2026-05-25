@@ -70,7 +70,7 @@ interface CourseLesson {
 
 export default function StudyRooms() {
   const { user, profile, isAdmin, isAdminOrInstructor } = useAuth();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { completeStep } = useOnboarding();
 
   // Auto-complete study_room step on visit
@@ -259,8 +259,8 @@ export default function StudyRooms() {
     navigator.clipboard.writeText(roomLink);
     setCopiedRoomId(room.id);
     toast({
-      title: "הקישור הועתק!",
-      description: "לשתף את הקישור עם אחרים להזמנה לחדר",
+      title: t('studyRoomsPage.linkCopied'),
+      description: t('studyRoomsPage.linkCopiedDesc'),
     });
     setTimeout(() => setCopiedRoomId(null), 2000);
   };
@@ -285,8 +285,8 @@ export default function StudyRooms() {
       });
 
       toast({
-        title: "החדר עודכן בהצלחה",
-        description: "פרטי החדר עודכנו",
+        title: t('studyRoomsPage.roomUpdated'),
+        description: t('studyRoomsPage.roomUpdatedDesc'),
       });
 
       setEditDialogOpen(false);
@@ -348,7 +348,7 @@ export default function StudyRooms() {
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('studyRooms.title')}</h1>
               <p className="text-muted-foreground mt-1.5">
-                {language === 'he' ? 'הצטרפות או יצירה של חדר לימוד שיתופי' : 'Join or create a collaborative study room'}
+                {t('studyRoomsPage.headerSubtitle')}
               </p>
             </div>
 
@@ -470,7 +470,7 @@ export default function StudyRooms() {
           <div className="relative flex-1">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="חיפוש חדרים..."
+              placeholder={t('studyRoomsPage.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pr-10"
@@ -490,7 +490,7 @@ export default function StudyRooms() {
               size="sm"
               onClick={() => setSelectedCategory(null)}
             >
-              הכל
+              {t('studyRoomsPage.filterAll')}
             </Button>
             {CATEGORIES.map(cat => (
               <Button
@@ -510,7 +510,7 @@ export default function StudyRooms() {
               className="gap-1"
             >
               <Radio className="w-3 h-3" />
-              לייב
+              {t('studyRooms.live')}
             </Button>
           </div>
         </div>
@@ -518,28 +518,28 @@ export default function StudyRooms() {
         {/* Sort options */}
         <div className="flex items-center gap-2">
           <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">מיון:</span>
+          <span className="text-sm text-muted-foreground">{t('studyRoomsPage.sortLabel')}</span>
           <div className="flex gap-1">
             <Button
               variant={sortBy === 'newest' ? "secondary" : "ghost"}
               size="sm"
               onClick={() => setSortBy('newest')}
             >
-              חדשים
+              {t('studyRoomsPage.sortNewest')}
             </Button>
             <Button
               variant={sortBy === 'oldest' ? "secondary" : "ghost"}
               size="sm"
               onClick={() => setSortBy('oldest')}
             >
-              ישנים
+              {t('studyRoomsPage.sortOldest')}
             </Button>
             <Button
               variant={sortBy === 'participants' ? "secondary" : "ghost"}
               size="sm"
               onClick={() => setSortBy('participants')}
             >
-              משתתפים
+              {t('studyRoomsPage.sortParticipants')}
             </Button>
           </div>
         </div>
@@ -554,10 +554,10 @@ export default function StudyRooms() {
             <CardContent className="py-12 text-center">
               <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">
-                {rooms.length === 0 ? t('studyRooms.noRooms') : 'לא נמצאו חדרים'}
+                {rooms.length === 0 ? t('studyRooms.noRooms') : t('studyRoomsPage.noResults')}
               </h3>
               <p className="text-muted-foreground mb-4">
-                {rooms.length === 0 ? t('studyRooms.noRoomsDesc') : 'אפשר לשנות את החיפוש או הפילטר'}
+                {rooms.length === 0 ? t('studyRooms.noRoomsDesc') : t('studyRoomsPage.noResultsDesc')}
               </p>
               {rooms.length === 0 && (
                 <Button onClick={() => setDialogOpen(true)}>
@@ -570,7 +570,7 @@ export default function StudyRooms() {
                   variant="outline" 
                   onClick={() => { setSearchQuery(''); setSelectedCategory(null); setShowLiveOnly(false); }}
                 >
-                  נקה פילטרים
+                  {t('studyRoomsPage.clearFilters')}
                 </Button>
               )}
             </CardContent>
@@ -660,7 +660,7 @@ export default function StudyRooms() {
                           size="icon"
                           className="h-9 w-9"
                           onClick={() => handleCopyRoomLink(room)}
-                          title="העתק קישור לחדר"
+                          title={t('studyRoomsPage.copyRoomLink')}
                         >
                           {copiedRoomId === room.id ? (
                             <Check className="w-4 h-4 text-green-500" />
@@ -675,7 +675,7 @@ export default function StudyRooms() {
                           size="icon"
                           className="h-9 w-9"
                           onClick={() => handleEditRoom(room)}
-                          title="עריכת חדר"
+                          title={t('studyRoomsPage.editRoom')}
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -683,7 +683,7 @@ export default function StudyRooms() {
                       {(room.host_id === user?.id || isAdmin) && (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="icon" className="h-9 w-9" title={isAdmin && room.host_id !== user?.id ? 'מחיקה כאדמין' : undefined}>
+                            <Button variant="outline" size="icon" className="h-9 w-9" title={isAdmin && room.host_id !== user?.id ? t('studyRoomsPage.deleteAsAdmin') : undefined}>
                               {isAdmin && room.host_id !== user?.id ? (
                                 <Shield className="w-4 h-4 text-destructive" />
                               ) : (
@@ -698,7 +698,7 @@ export default function StudyRooms() {
                                 {t('studyRooms.deleteRoomDesc')}
                                 {isAdmin && room.host_id !== user?.id && (
                                   <span className="block mt-2 text-destructive font-medium">
-                                    מחיקת חדר זה כאדמין.
+                                    {t('studyRoomsPage.deleteAsAdminNote')}
                                   </span>
                                 )}
                               </AlertDialogDescription>
@@ -729,9 +729,9 @@ export default function StudyRooms() {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>עריכת חדר</DialogTitle>
+            <DialogTitle>{t('studyRoomsPage.editRoom')}</DialogTitle>
             <DialogDescription>
-              עדכון פרטי החדר
+              {t('studyRoomsPage.editRoomDesc')}
             </DialogDescription>
           </DialogHeader>
           {editingRoom && (
@@ -822,10 +822,10 @@ export default function StudyRooms() {
                 {isEditing ? (
                   <>
                     <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                    בעדכון...
+                    {t('studyRoomsPage.updating')}
                   </>
                 ) : (
-                  'עדכון חדר'
+                  t('studyRoomsPage.updateRoom')
                 )}
               </Button>
             </div>

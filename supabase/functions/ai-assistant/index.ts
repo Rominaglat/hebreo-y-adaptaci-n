@@ -30,6 +30,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// Single-tenant: every KG resource lives under this constant namespace,
+// matching the value baked into the frontend (src/constants/singleTenant.ts).
+const SINGLE_TENANT_ID = "00000000-0000-0000-0000-000000000000";
+
 const EMBED_MODEL = "gemini-embedding-001";
 const EMBED_DIM = 1024;
 const CHAT_MODEL = "gemini-2.5-flash";
@@ -320,16 +324,12 @@ serve(async (req: Request) => {
     const body = await req.json();
     const messages = body.messages as { role: string; content: string }[] | undefined;
     const conversation_id = body.conversation_id as string | undefined;
-    const tenant_id = body.tenant_id as string | undefined;
     const course_id = body.course_id as string | undefined;
+    // Single-tenant: server-side constant, no longer accepted from the body.
+    const tenant_id = SINGLE_TENANT_ID;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages array is required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!tenant_id) {
-      return new Response(JSON.stringify({ error: "tenant_id is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

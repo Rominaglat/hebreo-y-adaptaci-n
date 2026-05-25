@@ -8,8 +8,18 @@ export interface RecommendedCourse {
   description: string | null;
   thumbnail_url: string | null;
   module_count: number;
-  reason: string; // human-readable reason
+  reason: string; // human-readable reason (legacy/fallback)
   reasonType: 'popular' | 'new' | 'unfinished' | 'next' | 'kg_similar';
+  /**
+   * Translation-friendly metadata. The consumer should prefer rendering
+   * via i18n keyed off `reasonType` + this payload instead of the raw
+   * `reason` string above (which is left in Hebrew for fallback).
+   */
+  reasonData?: {
+    progress?: number; // for unfinished: rounded percent
+    sharedConcepts?: number; // for kg_similar concept-overlap
+    kgSource?: 'concept_overlap' | 'fallback' | string;
+  };
 }
 
 interface KgRecommendation {
@@ -45,10 +55,10 @@ interface CourseRow {
  * Generates personalized course recommendations.
  *
  * Strategy (in priority order):
- * 1. Unfinished courses (progress > 0 && < 100) → "אתה ב-X% — המשך"
+ * 1. Unfinished courses (progress > 0 && < 100) — continue progress
  * 2. KG-based "courses similar to what you've started" via the kg-recommend
  *    edge function (concept overlap with already-enrolled courses)
- * 3. Newest published courses the user hasn't enrolled in → "חדש בפלטפורמה"
+ * 3. Newest published courses the user hasn't enrolled in — new on platform
  *
  * The KG step is best-effort: if it fails (function down, tenant not in KG,
  * etc.) we silently fall through to the "newest courses" heuristic.
@@ -91,8 +101,10 @@ export function useRecommendations(limit = 4) {
             description: e.courses!.description,
             thumbnail_url: e.courses!.thumbnail_url,
             module_count: 0,
-            reason: `${Math.round(e.progress_percentage ?? 0)}% — להמשיך`,
+            // Legacy fallback: prefer translating via reasonType + reasonData in the consumer.
+            reason: `${Math.round(e.progress_percentage ?? 0)}%`,
             reasonType: 'unfinished' as const,
+            reasonData: { progress: Math.round(e.progress_percentage ?? 0) },
           }));
 
         let remaining = limit - unfinished.length;
@@ -124,11 +136,15 @@ export function useRecommendations(limit = 4) {
                   description: r.description,
                   thumbnail_url: r.thumbnail_url,
                   module_count: 0,
-                  reason:
-                    data.source === 'concept_overlap'
-                      ? `חולק ${r.shared_concepts} מושגים עם מה שלמדת`
-                      : 'תוכן נרחב',
+                  // Legacy fallback: prefer translating via reasonType + reasonData in the consumer.
+                  reason: data.source === 'concept_overlap'
+                    ? `${r.shared_concepts}`
+                    : '',
                   reasonType: 'kg_similar' as const,
+                  reasonData: {
+                    sharedConcepts: r.shared_concepts,
+                    kgSource: data.source,
+                  },
                 }));
             }
           } catch (e) {
@@ -159,7 +175,8 @@ export function useRecommendations(limit = 4) {
               description: c.description,
               thumbnail_url: c.thumbnail_url,
               module_count: 0,
-              reason: 'חדש בפלטפורמה',
+              // Legacy fallback: prefer translating via reasonType in the consumer.
+              reason: '',
               reasonType: 'new' as const,
             }));
         }

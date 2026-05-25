@@ -243,7 +243,7 @@ export default function LessonForm({
       const transcribeServiceUrl = import.meta.env.VITE_TRANSCRIBE_SERVICE_URL || 'https://yt-dlp-service-new.onrender.com';
 
       // Step 1: Submit job
-      setSummaryProgress('מתחיל...');
+      setSummaryProgress(t('lessonForm.progressStarting'));
       toast.info(t('lessonForm.transcribing'));
 
       const submitResp = await fetch(`${transcribeServiceUrl}/transcribe`, {
@@ -269,20 +269,20 @@ export default function LessonForm({
 
       // Step 2: Poll for status
       const progressLabels: Record<string, string> = {
-        queued: 'ממתין...',
-        downloading: 'מוריד סרטון...',
-        uploading: 'מעלה לתמלול...',
-        transcribing: 'מתמלל...',
-        saving: 'שומר תמלול...',
-        summarizing: 'מסכם עם AI...',
-        done: 'סיים!',
+        queued: t('lessonForm.progressQueued'),
+        downloading: t('lessonForm.progressDownloading'),
+        uploading: t('lessonForm.progressUploading'),
+        transcribing: t('lessonForm.progressTranscribing'),
+        saving: t('lessonForm.progressSaving'),
+        summarizing: t('lessonForm.progressSummarizing'),
+        done: t('lessonForm.progressDone'),
       };
 
       let data: any = null;
       while (true) {
         await new Promise(r => setTimeout(r, 3000));
         if (cancelSummaryRef.current) {
-          toast.info('בוטל');
+          toast.info(t('lessonForm.cancelled'));
           return;
         }
         const pollResp = await fetch(`${transcribeServiceUrl}/status/${job_id}`);
@@ -321,7 +321,7 @@ export default function LessonForm({
       // Add transcript file as resource
       if (data.transcript_file_url) {
         const transcriptResource: ResourceItem = {
-          name: summaryLang === 'he' ? 'תמלול' : 'Transcript',
+          name: summaryLang === 'he' ? t('lessonForm.transcript') : 'Transcript',
           url: data.transcript_file_url,
         };
         const updatedResources = [...resources, transcriptResource];
@@ -378,7 +378,7 @@ export default function LessonForm({
           {onMoveToModule && otherModules.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="העבר למודול">
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title={t('lessonForm.moveToModule')}>
                   <ArrowRightLeft className="w-3.5 h-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
@@ -509,7 +509,7 @@ export default function LessonForm({
                       type="button"
                       onClick={() => { cancelSummaryRef.current = true; }}
                       className="p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title="ביטול"
+                      title={t('common.cancel')}
                     >
                       <X className="w-4 h-4" />
                     </button>

@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Play, ChevronDown, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface CourseLesson {
   id: string;
@@ -45,6 +46,7 @@ const VideoSelectDialog = ({
   loading,
   onSelectVideo,
 }: VideoSelectDialogProps) => {
+  const { t } = useLanguage();
   // Track which courses are expanded. Default: all collapsed so users see a
   // compact list of courses and drill down only to the one they want.
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
@@ -96,7 +98,7 @@ const VideoSelectDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[80vh]">
         <DialogHeader>
-          <DialogTitle>בחירת סרטון לצפייה משותפת</DialogTitle>
+          <DialogTitle>{t('videoSelect.title')}</DialogTitle>
         </DialogHeader>
         <div className="max-h-[400px] overflow-y-auto pr-1">
           {loading ? (
@@ -105,7 +107,7 @@ const VideoSelectDialog = ({
             </div>
           ) : lessons.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">
-              אין סרטונים זמינים. יש להירשם לקורסים כדי לצפות בסרטונים.
+              {t('videoSelect.empty')}
             </p>
           ) : (
             <div className="space-y-2">

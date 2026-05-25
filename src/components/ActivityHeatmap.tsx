@@ -9,6 +9,7 @@ import {
 import { useStreak } from '@/hooks/useStreak';
 import { Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface ActivityHeatmapProps {
   className?: string;
@@ -20,12 +21,18 @@ function dateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function formatHe(d: Date): string {
-  return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+function formatDateForLocale(d: Date, language: 'he' | 'en' | 'es'): string {
+  const localeMap: Record<'he' | 'en' | 'es', string> = {
+    he: 'he-IL',
+    en: 'en-US',
+    es: 'es-ES',
+  };
+  return d.toLocaleDateString(localeMap[language], { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 export function ActivityHeatmap({ className, weeks = 26 }: ActivityHeatmapProps) {
   const { activityDates } = useStreak();
+  const { t, language } = useLanguage();
 
   const grid = useMemo(() => {
     const activitySet = new Set(activityDates);
@@ -71,10 +78,10 @@ export function ActivityHeatmap({ className, weeks = 26 }: ActivityHeatmapProps)
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary/15 to-accent/10 flex items-center justify-center">
             <Activity className="w-5 h-5 text-primary" />
           </div>
-          פעילות
+          {t('activityHeatmap.title')}
         </CardTitle>
         <CardDescription>
-          {totalActiveDays} ימי פעילות בחצי השנה האחרונה
+          {t('activityHeatmap.subtitle').replace('{count}', String(totalActiveDays))}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -97,8 +104,8 @@ export function ActivityHeatmap({ className, weeks = 26 }: ActivityHeatmapProps)
                       </TooltipTrigger>
                       <TooltipContent side="top">
                         <p className="text-xs">
-                          {day.active ? '✓ פעיל ' : 'ללא פעילות '}
-                          <span dir="rtl">{formatHe(day.date)}</span>
+                          {day.active ? `✓ ${t('activityHeatmap.activeDay')} ` : `${t('activityHeatmap.noActivity')} `}
+                          <span dir={language === 'he' ? 'rtl' : 'ltr'}>{formatDateForLocale(day.date, language)}</span>
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -111,14 +118,14 @@ export function ActivityHeatmap({ className, weeks = 26 }: ActivityHeatmapProps)
 
         {/* Legend */}
         <div className="flex items-center justify-end gap-2 mt-3 text-xs text-muted-foreground" dir="ltr">
-          <span>פחות</span>
+          <span>{t('activityHeatmap.less')}</span>
           <div className="flex gap-1">
             <div className="w-3 h-3 rounded-sm bg-muted" />
             <div className="w-3 h-3 rounded-sm bg-primary/40" />
             <div className="w-3 h-3 rounded-sm bg-primary/70" />
             <div className="w-3 h-3 rounded-sm bg-gradient-to-br from-primary to-accent" />
           </div>
-          <span>יותר</span>
+          <span>{t('activityHeatmap.more')}</span>
         </div>
       </CardContent>
     </Card>

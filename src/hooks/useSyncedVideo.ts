@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Json } from '@/integrations/supabase/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface VideoState {
   playing: boolean;
@@ -19,6 +20,7 @@ interface UseSyncedVideoProps {
 
 export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVideoProps) => {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [sharedVideoUrl, setSharedVideoUrl] = useState<string | null>(null);
   const [videoState, setVideoState] = useState<VideoState>({
     playing: false,
@@ -84,8 +86,8 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
             setSharedVideoUrl(newData.shared_video_url);
             if (newData.shared_video_url) {
               toast({
-                title: "סרטון משותף",
-                description: "סרטון חדש הופעל בחדר",
+                title: t('syncedVideo.sharedTitle'),
+                description: t('syncedVideo.sharedDesc'),
               });
             }
           }
@@ -132,7 +134,7 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomId, userId, sharedVideoUrl, lastSyncTime, toast]);
+  }, [roomId, userId, sharedVideoUrl, lastSyncTime, toast, t]);
 
   // Update video in database
   const updateSharedVideo = useCallback(async (url: string | null) => {

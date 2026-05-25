@@ -25,8 +25,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 export default function AcceptInvite() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { language } = useLanguage();
-  const isHe = language === 'he';
+  const { t } = useLanguage();
 
   const [sessionReady, setSessionReady] = useState<boolean | null>(null);
   const [email, setEmail] = useState<string | null>(null);
@@ -49,25 +48,21 @@ export default function AcceptInvite() {
         setEmail(data.session.user.email ?? null);
       } else {
         setSessionReady(false);
-        setError(
-          isHe
-            ? 'הקישור פג תוקף או שכבר נעשה בו שימוש. ניתן להיכנס באמצעות הסיסמה הזמנית שנשלחה במייל.'
-            : 'The invite link has expired or was already used. Please use the temporary password from your email.',
-        );
+        setError(t('acceptInvite.linkExpiredDetail'));
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [isHe]);
+  }, [t]);
 
   const schema = z
     .object({
-      password: z.string().min(12, isHe ? 'הסיסמה חייבת להכיל לפחות 12 תווים' : 'Min 12 chars'),
+      password: z.string().min(12, t('acceptInvite.passwordMinChars')),
       confirm: z.string(),
     })
     .refine((d) => d.password === d.confirm, {
-      message: isHe ? 'הסיסמאות אינן תואמות' : 'Passwords do not match',
+      message: t('auth.passwordsDontMatch'),
       path: ['confirm'],
     });
 
@@ -76,14 +71,14 @@ export default function AcceptInvite() {
     setError(null);
     const parsed = schema.safeParse({ password, confirm });
     if (!parsed.success) {
-      setError(parsed.error.errors[0]?.message ?? 'שגיאה');
+      setError(parsed.error.errors[0]?.message ?? t('common.error'));
       return;
     }
     // Policy + breach check (matches Profile / ManageUsers flows).
     const { validatePassword } = await import('@/lib/passwordPolicy');
     const check = await validatePassword(password);
     if (!check.ok) {
-      setError(check.error ?? (isHe ? 'הסיסמה לא תקפה' : 'Invalid password'));
+      setError(check.error ?? t('acceptInvite.invalidPassword'));
       return;
     }
 
@@ -92,12 +87,12 @@ export default function AcceptInvite() {
       const { error: updErr } = await supabase.auth.updateUser({ password });
       if (updErr) throw updErr;
       toast({
-        title: isHe ? 'הסיסמה הוגדרה' : 'Password set',
-        description: isHe ? 'נכנסים לפורטל…' : 'Signing you in…',
+        title: t('acceptInvite.passwordSet'),
+        description: t('acceptInvite.signingYouIn'),
       });
       navigate('/dashboard', { replace: true });
     } catch (e: any) {
-      setError(e?.message ?? (isHe ? 'שגיאה' : 'Error'));
+      setError(e?.message ?? t('common.error'));
     } finally {
       setSubmitting(false);
     }
@@ -119,16 +114,12 @@ export default function AcceptInvite() {
             <ShieldCheck className="w-6 h-6 text-primary" />
           </div>
           <CardTitle className="text-xl">
-            {isHe ? 'ברוכים הבאים' : 'Welcome'}
+            {t('acceptInvite.welcome')}
           </CardTitle>
           <CardDescription>
             {sessionReady
-              ? isHe
-                ? `נא להגדיר סיסמה אישית עבור ${email ?? ''}`
-                : `Set a personal password for ${email ?? ''}`
-              : isHe
-              ? 'הקישור פג תוקף'
-              : 'Link expired'}
+              ? `${t('acceptInvite.setPasswordFor')} ${email ?? ''}`
+              : t('acceptInvite.linkExpiredShort')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -141,7 +132,7 @@ export default function AcceptInvite() {
           {sessionReady ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="pw">{isHe ? 'סיסמה חדשה' : 'New password'}</Label>
+                <Label htmlFor="pw">{t('profile.newPassword')}</Label>
                 <div className="relative">
                   <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                   <Input
@@ -156,13 +147,11 @@ export default function AcceptInvite() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {isHe
-                    ? 'לפחות 12 תווים: אות, ספרה וסימן.'
-                    : 'At least 12 chars: letter, digit, symbol.'}
+                  {t('acceptInvite.passwordRequirements')}
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirm">{isHe ? 'אישור סיסמה' : 'Confirm password'}</Label>
+                <Label htmlFor="confirm">{t('auth.confirmPassword')}</Label>
                 <Input
                   id="confirm"
                   type="password"
@@ -174,12 +163,12 @@ export default function AcceptInvite() {
               </div>
               <Button type="submit" className="w-full" disabled={submitting}>
                 {submitting ? <Loader2 className="w-4 h-4 mx-2 animate-spin" /> : null}
-                {isHe ? 'הגדרת סיסמה והכניסה' : 'Set password & sign in'}
+                {t('acceptInvite.setPasswordSignIn')}
               </Button>
             </form>
           ) : (
             <Button onClick={() => navigate('/login')} className="w-full">
-              {isHe ? 'מעבר למסך הכניסה' : 'Go to sign-in'}
+              {t('acceptInvite.goToSignIn')}
             </Button>
           )}
         </CardContent>

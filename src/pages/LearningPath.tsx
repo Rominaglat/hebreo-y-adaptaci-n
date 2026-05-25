@@ -23,25 +23,25 @@ import { useLearningPath } from '@/hooks/useLearningPath';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
-const SAMPLE_GOALS = [
-  'אני רוצה להפוך ליועץ AI עצמאי',
-  'אני רוצה להקים סוכנות עצמאית',
-  'אני רוצה למכור יותר ולהגדיל את המכירות שלי',
-  'אני רוצה לבנות מוצר דיגיטלי וליצור הכנסה פסיבית',
-];
-
 export default function LearningPath() {
-  const { language } = useLanguage();
+  const { t } = useLanguage();
   const { tenantSettings } = useTenant();
-  const assistantName = tenantSettings?.ai_assistant_name?.trim() || (language === 'he' ? 'ג\u0027ייסון' : 'Jason');
+  const assistantName = tenantSettings?.ai_assistant_name?.trim() || t('learningPathPage.assistantName');
   const { toast } = useToast();
   const { path, loading, generating, generate, reset } = useLearningPath();
   const [goal, setGoal] = useState('');
 
+  const SAMPLE_GOALS = [
+    t('learningPathPage.sample1'),
+    t('learningPathPage.sample2'),
+    t('learningPathPage.sample3'),
+    t('learningPathPage.sample4'),
+  ];
+
   const handleGenerate = async () => {
     if (!goal.trim()) {
       toast({
-        title: language === 'he' ? 'נא להגדיר מטרה' : 'Please set a goal',
+        title: t('learningPathPage.pleaseSetGoal'),
         variant: 'destructive',
       });
       return;
@@ -49,11 +49,11 @@ export default function LearningPath() {
     try {
       await generate(goal.trim());
       toast({
-        title: language === 'he' ? 'המסלול שלך מוכן! 🎉' : 'Your path is ready! 🎉',
+        title: t('learningPathPage.pathReady'),
       });
     } catch (e) {
       toast({
-        title: language === 'he' ? 'שגיאה' : 'Error',
+        title: t('common.error'),
         description: e instanceof Error ? e.message : 'Failed to generate',
         variant: 'destructive',
       });
@@ -80,13 +80,11 @@ export default function LearningPath() {
               <GraduationCap className="w-5 h-5 text-primary-foreground" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              {language === 'he' ? 'מסלול הלמידה שלי' : 'My Learning Path'}
+              {t('learningPathPage.myPath')}
             </h1>
           </div>
           <p className="text-muted-foreground">
-            {language === 'he'
-              ? `${assistantName} יבנה מסלול אישי על בסיס המטרה שלך`
-              : `${assistantName} will build a personalized path based on your goal`}
+            {`${assistantName} ${t('learningPathPage.willBuildPath')}`}
           </p>
         </div>
       </div>
@@ -108,7 +106,7 @@ export default function LearningPath() {
                   <div className="flex items-center gap-2 mb-2">
                     <Target className="w-4 h-4 text-primary" />
                     <span className="text-xs font-semibold text-primary uppercase tracking-wider">
-                      {language === 'he' ? 'המטרה שלך' : 'Your goal'}
+                      {t('learningPathPage.yourGoal')}
                     </span>
                   </div>
                   <CardTitle className="text-xl tracking-tight leading-snug">{path.goal}</CardTitle>
@@ -122,21 +120,19 @@ export default function LearningPath() {
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>
-                        {language === 'he' ? 'לאפס את המסלול?' : 'Reset path?'}
+                        {t('learningPathPage.resetTitle')}
                       </AlertDialogTitle>
                       <AlertDialogDescription>
-                        {language === 'he'
-                          ? 'אפשר יהיה לבנות מסלול חדש לאחר מכן'
-                          : 'You can build a new path afterwards'}
+                        {t('learningPathPage.resetDesc')}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="flex-row-reverse gap-2">
-                      <AlertDialogCancel>{language === 'he' ? 'ביטול' : 'Cancel'}</AlertDialogCancel>
+                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={handleReset}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
-                        {language === 'he' ? 'אפס' : 'Reset'}
+                        {t('learningPathPage.resetAction')}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -147,7 +143,7 @@ export default function LearningPath() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground font-medium">
-                    {language === 'he' ? 'התקדמות' : 'Progress'}
+                    {t('courses.progress')}
                   </span>
                   <span className="font-semibold text-primary">
                     {path.current_step} / {path.steps.length}
@@ -226,13 +222,7 @@ export default function LearningPath() {
                             >
                               <Link to={`/courses/${step.course_id}`}>
                                 <BookOpen className="w-3.5 h-3.5 ml-1.5" />
-                                {isCompleted
-                                  ? language === 'he'
-                                    ? 'חזור לקורס'
-                                    : 'Revisit'
-                                  : language === 'he'
-                                  ? 'התחל'
-                                  : 'Start'}
+                                {isCompleted ? t('learningPathPage.revisit') : t('learningPathPage.start')}
                                 <ArrowLeft className="w-3.5 h-3.5 mr-1" />
                               </Link>
                             </Button>
@@ -252,25 +242,23 @@ export default function LearningPath() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 tracking-tight">
               <Sparkles className="w-5 h-5 text-primary" />
-              {language === 'he' ? 'מה המטרה שלך?' : "What's your goal?"}
+              {t('learningPathPage.whatsYourGoal')}
             </CardTitle>
             <CardDescription>
-              {language === 'he'
-                ? `תיאור במשפט אחד של המטרה הרצויה, ו${assistantName} יבנה מסלול מותאם`
-                : `Describe what you want to achieve in one sentence, and ${assistantName} will build a custom path`}
+              {`${t('learningPathPage.describeGoalPrefix')}${assistantName}${t('learningPathPage.describeGoalSuffix')}`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Textarea
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
-              placeholder={language === 'he' ? 'לדוגמה: אני רוצה ללמוד איך לבנות סוכנות AI...' : 'e.g., I want to learn how to build an AI agency...'}
+              placeholder={t('learningPathPage.goalPlaceholder')}
               className="min-h-[100px] resize-none border-border/60 focus-visible:ring-primary/30 focus-visible:border-primary/50"
             />
 
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                {language === 'he' ? 'דוגמאות' : 'Examples'}
+                {t('learningPathPage.examples')}
               </p>
               <div className="flex flex-wrap gap-2">
                 {SAMPLE_GOALS.map((sample) => (
@@ -294,12 +282,12 @@ export default function LearningPath() {
               {generating ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  {language === 'he' ? 'בונה את המסלול שלך...' : 'Building your path...'}
+                  {t('learningPathPage.buildingPath')}
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  {language === 'he' ? 'בניית המסלול שלי' : 'Build my path'}
+                  {t('learningPathPage.buildPath')}
                 </>
               )}
             </Button>
