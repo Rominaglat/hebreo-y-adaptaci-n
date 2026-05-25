@@ -27,8 +27,6 @@ verify_jwt = false
 [functions.transcribe-lesson]
 verify_jwt = false
 
-[functions.index-lessons]
-verify_jwt = false
 
 [functions.ai-assistant]
 verify_jwt = false

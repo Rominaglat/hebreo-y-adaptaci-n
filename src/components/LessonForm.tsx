@@ -240,7 +240,11 @@ export default function LessonForm({
       }
       console.log("✅ Session active, user:", session.user.id);
 
-      const transcribeServiceUrl = import.meta.env.VITE_TRANSCRIBE_SERVICE_URL || 'https://yt-dlp-service-new.onrender.com';
+      const transcribeServiceUrl = import.meta.env.VITE_TRANSCRIBE_SERVICE_URL;
+      if (!transcribeServiceUrl) {
+        toast.error('VITE_TRANSCRIBE_SERVICE_URL is not configured');
+        return;
+      }
 
       // Step 1: Submit job
       setSummaryProgress(t('lessonForm.progressStarting'));

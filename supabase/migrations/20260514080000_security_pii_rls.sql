@@ -30,7 +30,7 @@ CREATE POLICY "room_messages_members_read"
     AND EXISTS (
       SELECT 1 FROM public.room_participants p
       WHERE p.room_id = room_messages.room_id
-        AND p.user_id = (auth.uid())::text
+        AND p.user_id = auth.uid()
     )
   );
 
@@ -44,7 +44,7 @@ DROP POLICY IF EXISTS "room_participants_self_read" ON public.room_participants;
 
 CREATE POLICY "room_participants_self_read"
   ON public.room_participants FOR SELECT
-  USING (user_id = (auth.uid())::text);
+  USING (user_id = auth.uid());
 
 CREATE POLICY "room_participants_members_read"
   ON public.room_participants FOR SELECT
@@ -53,7 +53,7 @@ CREATE POLICY "room_participants_members_read"
     AND EXISTS (
       SELECT 1 FROM public.room_participants self
       WHERE self.room_id = room_participants.room_id
-        AND self.user_id = (auth.uid())::text
+        AND self.user_id = auth.uid()
     )
   );
 

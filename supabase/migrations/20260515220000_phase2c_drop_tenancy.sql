@@ -16,8 +16,16 @@ BEGIN;
 -- =============================================================================
 -- 1. Snapshot platform_settings before we drop it.
 -- =============================================================================
-CREATE TABLE IF NOT EXISTS _backup_phase2c_platform_settings AS
-  SELECT * FROM public.platform_settings;
+-- platform_settings backup skipped — table never existed in this fresh deployment.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'platform_settings'
+  ) THEN
+    EXECUTE 'CREATE TABLE IF NOT EXISTS _backup_phase2c_platform_settings AS SELECT * FROM public.platform_settings';
+  END IF;
+END $$;
 
 -- =============================================================================
 -- 2. Drop tenant_id from every user-data table.

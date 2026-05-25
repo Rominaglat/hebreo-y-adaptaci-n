@@ -16,7 +16,7 @@
 --
 -- Rollback SQL:
 --   DROP POLICY IF EXISTS room_participants_self_insert ON public.room_participants;
---   CREATE POLICY room_participants_self_insert ON public.room_participants FOR INSERT WITH CHECK (auth.uid() IS NOT NULL AND user_id = (auth.uid())::text);
+--   CREATE POLICY room_participants_self_insert ON public.room_participants FOR INSERT WITH CHECK (auth.uid() IS NOT NULL AND user_id = auth.uid());
 --   DROP TRIGGER IF EXISTS enforce_room_capacity ON public.room_participants;
 --   DROP FUNCTION IF EXISTS public.enforce_room_capacity();
 --   ALTER TABLE public.room_messages DROP CONSTRAINT IF EXISTS room_messages_length;
@@ -35,7 +35,7 @@ CREATE POLICY room_participants_self_insert ON public.room_participants
   FOR INSERT
   WITH CHECK (
     auth.uid() IS NOT NULL
-    AND user_id = (auth.uid())::text
+    AND user_id = auth.uid()
     -- Locked rooms — only the host may join (everyone else is blocked).
     AND NOT EXISTS (
       SELECT 1 FROM public.rooms r
@@ -131,17 +131,21 @@ CREATE INDEX IF NOT EXISTS webrtc_signals_created_at_idx
 -- =============================================================================
 DO $$
 DECLARE
-  service_url text := 'https://your-project-ref.supabase.co/functions/v1/cleanup-empty-rooms';
+  service_url text := 'https://gmepopxxvgcwiqlkpuwd.supabase.co/functions/v1/cleanup-empty-rooms';
 BEGIN
-  PERFORM 1 FROM cron.job WHERE jobname = 'invoke-cleanup-empty-rooms';
-  IF NOT FOUND THEN
-    PERFORM cron.schedule(
-      'invoke-cleanup-empty-rooms',
-      '*/5 * * * *',
-      format(
-        $cron$SELECT net.http_post(url := %L, headers := '{"Content-Type":"application/json"}'::jsonb, body := '{}'::jsonb) AS request_id;$cron$,
-        service_url
-      )
-    );
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM 1 FROM cron.job WHERE jobname = 'invoke-cleanup-empty-rooms';
+    IF NOT FOUND THEN
+      PERFORM cron.schedule(
+        'invoke-cleanup-empty-rooms',
+        '*/5 * * * *',
+        format(
+          $cron$SELECT net.http_post(url := %L, headers := '{"Content-Type":"application/json"}'::jsonb, body := '{}'::jsonb) AS request_id;$cron$,
+          service_url
+        )
+      );
+    END IF;
+  ELSE
+    RAISE NOTICE 'pg_cron not enabled — skipping cleanup-empty-rooms schedule.';
   END IF;
 END$$;

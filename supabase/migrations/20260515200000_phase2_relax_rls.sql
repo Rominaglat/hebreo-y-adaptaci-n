@@ -110,30 +110,13 @@ CREATE POLICY auth_audit_log_admin_read ON public.auth_audit_log
     AND (has_role(auth.uid(), 'admin'::app_role) OR is_super_admin(auth.uid()))
   );
 
-DROP POLICY IF EXISTS "personality_tenant_staff_select_all" ON public.personality_assessments;
-CREATE POLICY personality_staff_select_all ON public.personality_assessments
-  FOR SELECT
-  USING (
-    auth.uid() IS NOT NULL
-    AND (
-      is_admin_or_instructor(auth.uid())
-      OR is_super_admin(auth.uid())
-    )
-  );
+-- personality_assessments + skill_audit_log policies skipped — those features
+-- (Personality assessments, Skills Library) are not used in this deployment.
 
 DROP POLICY IF EXISTS "Admins can view all subscriptions in tenant" ON public.push_subscriptions;
 CREATE POLICY "Admins can view all push subscriptions" ON public.push_subscriptions
   FOR SELECT
   USING (is_admin_or_instructor(auth.uid()) OR is_super_admin(auth.uid()));
-
-DROP POLICY IF EXISTS "skill_audit_log_super_admin_read" ON public.skill_audit_log;
-DROP POLICY IF EXISTS "skill_audit_log_tenant_admin_read" ON public.skill_audit_log;
-CREATE POLICY skill_audit_log_admin_read ON public.skill_audit_log
-  FOR SELECT
-  USING (
-    auth.uid() IS NOT NULL
-    AND (has_role(auth.uid(), 'admin'::app_role) OR is_super_admin(auth.uid()))
-  );
 
 DROP POLICY IF EXISTS "Tenant admins can update their settings" ON public.tenant_settings;
 DROP POLICY IF EXISTS "Tenant admins can view their settings" ON public.tenant_settings;

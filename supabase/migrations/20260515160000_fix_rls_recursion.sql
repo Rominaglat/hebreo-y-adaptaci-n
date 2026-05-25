@@ -24,7 +24,7 @@
 --       (auth.uid() IS NOT NULL) AND EXISTS (
 --         SELECT 1 FROM public.room_participants self
 --         WHERE self.room_id = room_participants.room_id
---           AND self.user_id = (auth.uid())::text
+--           AND self.user_id = auth.uid()
 --       )
 --     );
 --   -- (the prior trigger function did not have SECURITY DEFINER)

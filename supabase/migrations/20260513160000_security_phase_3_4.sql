@@ -57,56 +57,6 @@ CREATE POLICY "auth_audit_log_admin_read"
     )
   );
 
--- ── 2. skill_audit_log tenant scoping (SEC-015) ─────────────────────────────
-ALTER TABLE public.skill_audit_log
-  ADD COLUMN IF NOT EXISTS tenant_id UUID;
-
--- Best-effort backfill: derive tenant_id from the actor's tenant_memberships.
--- The skill_audit_log column is `actor_id` (not user_id) — the admin who
--- performed the action. Skills themselves are global, so we use the actor's
--- admin tenant at audit time as the scoping signal. Rows whose actor has no
--- admin membership (deleted, demoted) remain NULL and are visible only to
--- super_admin via the fallback policy below.
-UPDATE public.skill_audit_log al
-SET tenant_id = (
-  SELECT m.tenant_id
-  FROM public.tenant_memberships m
-  WHERE m.user_id = al.actor_id
-    AND m.role IN ('admin', 'super_admin')
-  LIMIT 1
-)
-WHERE al.tenant_id IS NULL;
-
-CREATE INDEX IF NOT EXISTS skill_audit_log_tenant_id_idx
-  ON public.skill_audit_log (tenant_id, created_at DESC);
-
--- Drop the old global admin policy (if it exists under either name)
-DROP POLICY IF EXISTS "Admins can view audit log" ON public.skill_audit_log;
-DROP POLICY IF EXISTS "skill_audit_log_admin_read" ON public.skill_audit_log;
-DROP POLICY IF EXISTS "skill_audit_log_tenant_admin_read" ON public.skill_audit_log;
-DROP POLICY IF EXISTS "skill_audit_log_super_admin_read" ON public.skill_audit_log;
-
-CREATE POLICY "skill_audit_log_tenant_admin_read"
-  ON public.skill_audit_log FOR SELECT
-  USING (
-    auth.uid() IS NOT NULL
-    AND tenant_id IS NOT NULL
-    AND EXISTS (
-      SELECT 1 FROM public.tenant_memberships m
-      WHERE m.user_id = auth.uid()
-        AND m.tenant_id = public.skill_audit_log.tenant_id
-        AND m.role IN ('admin', 'super_admin')
-    )
-  );
-
--- Super-admins still see globally-scoped (NULL tenant_id) historical entries.
-CREATE POLICY "skill_audit_log_super_admin_read"
-  ON public.skill_audit_log FOR SELECT
-  USING (
-    auth.uid() IS NOT NULL
-    AND EXISTS (
-      SELECT 1 FROM public.tenant_memberships m
-      WHERE m.user_id = auth.uid()
-        AND m.role = 'super_admin'
-    )
-  );
+-- ── 2. skill_audit_log section removed — Skills Library feature is not used
+--      in this deployment. Original migration scoped skill_audit_log to
+--      tenant + applied RLS; skipped here because the table doesn't exist.

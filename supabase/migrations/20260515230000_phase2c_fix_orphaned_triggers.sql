@@ -84,24 +84,7 @@ BEGIN
 END;
 $function$;
 
--- 2. enforce_personality_cooldown — drop the tenant_id filter; cooldown is
---    per-user globally now.
-CREATE OR REPLACE FUNCTION public.enforce_personality_cooldown()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $function$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM public.personality_assessments
-    WHERE user_id = NEW.user_id
-      AND created_at > now() - interval '7 days'
-      AND voided_at IS NULL
-  ) THEN
-    RAISE EXCEPTION 'personality_cooldown_active' USING errcode = 'P0001';
-  END IF;
-  RETURN NEW;
-END;
-$function$;
+-- 2. enforce_personality_cooldown skipped — Personality feature unused.
 
 -- 3. audit_role_change — was attached to tenant_memberships (now dropped).
 --    Re-attach to user_roles, drop the tenant_id field from the audit row.

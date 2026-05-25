@@ -58,7 +58,7 @@ DROP POLICY IF EXISTS webrtc_signals_recipient_delete   ON public.webrtc_signals
 -- Recipient is the ONLY reader.
 CREATE POLICY webrtc_signals_recipient_read ON public.webrtc_signals
   FOR SELECT
-  USING (to_user = (auth.uid())::text);
+  USING (to_user = auth.uid());
 
 -- Sender must be the authenticated user AND both endpoints must be
 -- participants of the same room. Prevents impersonation and prevents random
@@ -66,11 +66,11 @@ CREATE POLICY webrtc_signals_recipient_read ON public.webrtc_signals
 CREATE POLICY webrtc_signals_sender_insert ON public.webrtc_signals
   FOR INSERT
   WITH CHECK (
-    from_user = (auth.uid())::text
+    from_user = auth.uid()
     AND EXISTS (
       SELECT 1 FROM public.room_participants p
       WHERE p.room_id = webrtc_signals.room_id
-        AND p.user_id = (auth.uid())::text
+        AND p.user_id = auth.uid()
     )
     AND EXISTS (
       SELECT 1 FROM public.room_participants p
@@ -84,8 +84,8 @@ CREATE POLICY webrtc_signals_sender_insert ON public.webrtc_signals
 CREATE POLICY webrtc_signals_recipient_delete ON public.webrtc_signals
   FOR DELETE
   USING (
-    to_user = (auth.uid())::text
-    OR from_user = (auth.uid())::text
+    to_user = auth.uid()
+    OR from_user = auth.uid()
   );
 
 -- =============================================================================
@@ -101,7 +101,7 @@ CREATE POLICY room_participants_self_insert ON public.room_participants
   FOR INSERT
   WITH CHECK (
     auth.uid() IS NOT NULL
-    AND user_id = (auth.uid())::text
+    AND user_id = auth.uid()
   );
 
 -- Host of the room may remove any participant (kick).
@@ -160,24 +160,30 @@ BEGIN
 END;
 $$;
 
--- Schedule (idempotent via guard).
+-- Schedule (idempotent via guard). pg_cron is optional — if the extension
+-- isn't available, skip the schedule and rely on edge functions / manual
+-- cleanup instead.
 DO $$
 BEGIN
-  PERFORM 1 FROM cron.job WHERE jobname = 'cleanup-stale-participants';
-  IF NOT FOUND THEN
-    PERFORM cron.schedule(
-      'cleanup-stale-participants',
-      '*/1 * * * *',  -- every minute (cron min granularity)
-      $cron$SELECT public.cleanup_stale_participants();$cron$
-    );
-  END IF;
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM 1 FROM cron.job WHERE jobname = 'cleanup-stale-participants';
+    IF NOT FOUND THEN
+      PERFORM cron.schedule(
+        'cleanup-stale-participants',
+        '*/1 * * * *',
+        $cron$SELECT public.cleanup_stale_participants();$cron$
+      );
+    END IF;
 
-  PERFORM 1 FROM cron.job WHERE jobname = 'cleanup-old-webrtc-signals';
-  IF NOT FOUND THEN
-    PERFORM cron.schedule(
-      'cleanup-old-webrtc-signals',
-      '*/1 * * * *',
-      $cron$SELECT public.cleanup_old_webrtc_signals();$cron$
-    );
+    PERFORM 1 FROM cron.job WHERE jobname = 'cleanup-old-webrtc-signals';
+    IF NOT FOUND THEN
+      PERFORM cron.schedule(
+        'cleanup-old-webrtc-signals',
+        '*/1 * * * *',
+        $cron$SELECT public.cleanup_old_webrtc_signals();$cron$
+      );
+    END IF;
+  ELSE
+    RAISE NOTICE 'pg_cron not enabled — skipping cleanup schedules. Enable via Supabase dashboard → Database → Extensions to activate.';
   END IF;
 END$$;
