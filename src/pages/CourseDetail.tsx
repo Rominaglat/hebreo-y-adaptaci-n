@@ -685,9 +685,9 @@ export default function CourseDetail() {
                         </TabsList>
                         <TabsContent value="description" className="mt-4">
                           {selectedLesson.content_text ? (
-                            <div 
+                            <div
                               className="rich-content text-muted-foreground"
-                              dir="rtl"
+                              dir={language === 'he' ? 'rtl' : 'ltr'}
                               dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedLesson.content_text) }}
                             />
                           ) : (
@@ -765,9 +765,9 @@ export default function CourseDetail() {
                     </CardHeader>
                     <CardContent>
                     {selectedLesson.content_text && (
-                          <div 
+                          <div
                             className="rich-content text-muted-foreground"
-                            dir="rtl"
+                            dir={language === 'he' ? 'rtl' : 'ltr'}
                             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedLesson.content_text) }}
                           />
                         )}
@@ -825,7 +825,7 @@ export default function CourseDetail() {
                   {modules.map(module => <Collapsible key={module.id} open={openModules.includes(module.id)} onOpenChange={() => toggleModule(module.id)}>
                       <CollapsibleTrigger className="w-full px-4 py-3 flex items-center justify-between hover:bg-secondary/50 border-b">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm text-right">{module.title}</span>
+                          <span className="font-medium text-sm text-start">{module.title}</span>
                           <NewBadge createdAt={module.created_at} />
                         </div>
                         {openModules.includes(module.id) ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
@@ -837,7 +837,7 @@ export default function CourseDetail() {
                         lesson.lesson_type === 'exam' ? ClipboardList : 
                         lesson.lesson_type === 'embed' ? FileInput : Play;
                       const lessonDuration = videoDurations[lesson.id];
-                      return <button key={lesson.id} onClick={() => { setShouldAutoplay(true); setSelectedLesson(lesson); }} className={cn("w-full px-4 py-2.5 flex items-center gap-3 text-right text-sm hover:bg-secondary/50 transition-colors", selectedLesson?.id === lesson.id && "bg-secondary", lesson.is_hidden && "opacity-50")}>
+                      return <button key={lesson.id} onClick={() => { setShouldAutoplay(true); setSelectedLesson(lesson); }} className={cn("w-full px-4 py-2.5 flex items-center gap-3 text-start text-sm hover:bg-secondary/50 transition-colors", selectedLesson?.id === lesson.id && "bg-secondary", lesson.is_hidden && "opacity-50")}>
                               <LessonIcon className={cn("w-4 h-4 flex-shrink-0", lesson.is_completed ? "text-success" : "text-muted-foreground")} />
                               <span className="flex-1 truncate">{lesson.title}</span>
                               {lesson.is_hidden && <EyeOff className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
