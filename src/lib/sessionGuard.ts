@@ -2,7 +2,7 @@
 //
 // Adds two safety nets:
 //   - idle timeout: sign the user out after N minutes of no user activity.
-//     Default 30 min; admins/super_admins get 15 min.
+//     Currently 8 hours for all users (configured in DashboardLayout).
 //   - sudo mode: track the last full-auth timestamp so high-risk operations
 //     (delete user, role change, key rotation, MFA changes) can require a
 //     fresh auth within the last 5 minutes.

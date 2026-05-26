@@ -67,12 +67,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     fetchAnnouncements();
   }, []);
 
-  // SEC — idle session timeout. Admins/super_admins get tighter limits.
+  // SEC — idle session timeout. 8 hours for everyone.
   useEffect(() => {
-    const idleMin = isSuperAdmin ? 10 : isAdmin ? 15 : 30;
-    startSessionGuard({ idleTimeoutMin: idleMin });
+    startSessionGuard({ idleTimeoutMin: 8 * 60 });
     return () => stopSessionGuard();
-  }, [isAdmin, isSuperAdmin]);
+  }, []);
 
   // SEC — Sentry user tag (anonymous id only, never email).
   useEffect(() => {
