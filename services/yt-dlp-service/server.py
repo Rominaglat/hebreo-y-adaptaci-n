@@ -169,6 +169,12 @@ def gemini_upload_file(file_path, mime_type):
     return uri
 
 
+class GeminiPermissionError(RuntimeError):
+    """Raised when Gemini returns 403 — typically for a YouTube URL that the
+    API key project isn't allowed to access (free-tier quota or feature not
+    enabled). The caller can fall back to yt-dlp + Files API upload."""
+
+
 def gemini_generate(file_uri, mime_type, system_prompt):
     """Call Gemini generateContent with the uploaded file. Returns {transcript, summary}."""
     payload = {
@@ -193,6 +199,8 @@ def gemini_generate(file_uri, mime_type, system_prompt):
         data=json.dumps(payload),
         timeout=600,
     )
+    if resp.status_code == 403:
+        raise GeminiPermissionError(f"Gemini denied (403): {resp.text[:300]}")
     if resp.status_code != 200:
         raise RuntimeError(f"Gemini generate failed: {resp.status_code} {resp.text[:400]}")
 
@@ -232,52 +240,66 @@ def system_prompt_for(language):
     return SYSTEM_PROMPT_EN
 
 
+def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir):
+    """Download audio with yt-dlp. Uses curl_cffi impersonation so YouTube
+    doesn't reject us as a bot from a cloud IP. Returns the local file path
+    or None on failure (with the error logged + stored in the job)."""
+    out_template = os.path.join(tmpdir, "audio.%(ext)s")
+    cmd = [
+        "yt-dlp",
+        "-f", "bestaudio/best",
+        "-x", "--audio-format", "mp3",
+        "--extractor-args", "youtube:player_client=web,android,ios",
+        "--impersonate", "chrome",
+        "-o", out_template,
+    ]
+    if referer_url:
+        cmd += ["--referer", referer_url]
+    cmd.append(video_url)
+
+    print(f"[{job_id}] yt-dlp cmd: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    print(f"[{job_id}] yt-dlp exit={result.returncode}")
+    if result.returncode != 0:
+        print(f"[{job_id}] yt-dlp stderr: {result.stderr[-500:]}")
+        raise RuntimeError(f"yt-dlp failed: {result.stderr.strip()[-300:]}")
+
+    files = glob.glob(os.path.join(tmpdir, "audio.*"))
+    if not files:
+        raise RuntimeError("yt-dlp produced no audio file")
+    return files[0]
+
+
 def process_job(job_id, video_url, referer_url, language, user_id):
     """Background worker — uses Gemini for transcription + summary.
-    YouTube URLs are passed straight to Gemini (no yt-dlp). Other sources
-    (Vimeo, direct files) are downloaded with yt-dlp first then uploaded
-    to the Gemini Files API."""
+    YouTube URLs try Gemini's native YouTube fileData first (no download).
+    If Gemini denies (403, free-tier or project-restriction), we fall back
+    to yt-dlp with browser impersonation and upload through the Files API.
+    Vimeo / direct files always go through yt-dlp + Files API."""
     job = jobs[job_id]
     tmpdir = tempfile.mkdtemp()
     try:
         system_prompt = system_prompt_for(language)
+        out = None
 
         if is_youtube_url(video_url):
             # ── YouTube fast path — Gemini accepts the URL natively ──
-            job["progress"] = "transcribing"
-            print(f"[{job_id}] YouTube native path: {video_url[:80]}")
-            out = gemini_generate(video_url, "video/*", system_prompt)
-        else:
-            # ── Step 1: Download audio with yt-dlp ──
+            try:
+                job["progress"] = "transcribing"
+                print(f"[{job_id}] YouTube native path: {video_url[:80]}")
+                out = gemini_generate(video_url, "video/*", system_prompt)
+            except GeminiPermissionError as e:
+                print(f"[{job_id}] Gemini denied YouTube URL, falling back to yt-dlp: {e}")
+
+        if out is None:
+            # ── Fallback / non-YouTube path: yt-dlp → Files API → generate ──
             job["progress"] = "downloading"
-            out_template = os.path.join(tmpdir, "audio.%(ext)s")
-            cmd = ["yt-dlp", "-f", "bestaudio/best", "-x", "--audio-format", "mp3", "-o", out_template]
-            if referer_url:
-                cmd += ["--referer", referer_url]
-            cmd.append(video_url)
+            audio_path = download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir)
 
-            print(f"[{job_id}] yt-dlp cmd: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-            print(f"[{job_id}] yt-dlp exit={result.returncode}")
-            if result.returncode != 0:
-                job["status"] = "error"
-                job["error"] = f"Download failed: {result.stderr.strip()[-300:]}"
-                print(f"[{job_id}] yt-dlp stderr: {result.stderr[-500:]}")
-                return
-
-            files = glob.glob(os.path.join(tmpdir, "audio.*"))
-            if not files:
-                job["status"] = "error"
-                job["error"] = "No audio file produced"
-                return
-            audio_path = files[0]
-
-            # ── Step 2: Upload to Gemini Files API ──
             job["progress"] = "uploading"
             file_uri = gemini_upload_file(audio_path, "audio/mp3")
             print(f"[{job_id}] Gemini file URI: {file_uri}")
 
-            # ── Step 3: Generate transcript + summary in one Gemini call ──
             job["progress"] = "transcribing"
             out = gemini_generate(file_uri, "audio/mp3", system_prompt)
 
