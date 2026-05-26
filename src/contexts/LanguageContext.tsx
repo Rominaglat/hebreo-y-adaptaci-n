@@ -347,6 +347,7 @@ const translations: Translations = {
   'lessonForm.summaryLanguage': { he: 'שפת הסיכום', en: 'Summary language', es: 'Idioma del resumen' },
   'lessonForm.hebrew': { he: 'עברית', en: 'Hebrew', es: 'Hebreo' },
   'lessonForm.english': { he: 'אנגלית', en: 'English', es: 'Inglés' },
+  'lessonForm.spanish': { he: 'ספרדית', en: 'Spanish', es: 'Español' },
   'lessonForm.hideFromStudents': { he: 'הסתרה מתלמידים', en: 'Hide from students', es: 'Ocultar a los alumnos' },
   'lessonForm.hiddenFromStudents': { he: 'מוסתר מתלמידים', en: 'Hidden from students', es: 'Oculto para los alumnos' },
 

@@ -69,6 +69,24 @@ Guidelines:
 Return the result as valid JSON only (no markdown fences, no extra text):
 {"transcript": "<full transcript text>", "summary": "<HTML summary>"}"""
 
+SYSTEM_PROMPT_ES = """Recibes el audio de una clase. Debes producir:
+1. Una transcripción completa y precisa de las palabras del docente.
+2. Un resumen estructurado en HTML limpio usando <h3>, <p>, <ul>, <li>, <strong>, con este formato:
+
+🎯 Objetivo de la clase — 2 oraciones sobre el tema y lo que los estudiantes deben aprender.
+📁 Recursos útiles — lista numerada de cada recurso mencionado (artículos, sitios web, libros, presentaciones) incluyendo enlaces si se mencionan. Si no hay — "No se mencionaron recursos en esta clase."
+📌 Puntos clave — entre 2 y 6 puntos, cada uno con un título corto y una explicación de hasta 5 oraciones.
+📝 Resumen de la clase — un párrafo breve (1–2 oraciones) que conecte el objetivo con lo realmente enseñado. Si se mencionó tarea, inclúyela aquí.
+
+Directrices:
+- Usa los iconos 🎯📁📌📝 exactamente como aparecen.
+- No uses citas directas; redacta como resumen.
+- Evita material irrelevante o conversación informal.
+- Escribe todo el resumen en español.
+
+Devuelve el resultado únicamente como JSON válido (sin bloques markdown, sin texto adicional):
+{"transcript": "<texto completo de la transcripción>", "summary": "<resumen HTML>"}"""
+
 
 def verify_supabase_auth(token):
     if not SUPABASE_URL:
@@ -159,7 +177,7 @@ def gemini_generate(file_uri, mime_type, system_prompt):
                 "role": "user",
                 "parts": [
                     {"fileData": {"fileUri": file_uri, "mimeType": mime_type}},
-                    {"text": "Transcribe and summarize this lesson audio."},
+                    {"text": "Transcribe and summarize this lesson."},
                 ],
             }
         ],
@@ -202,44 +220,67 @@ def gemini_generate(file_uri, mime_type, system_prompt):
     }
 
 
+def is_youtube_url(url):
+    return bool(re.search(r"(?:youtube\.com|youtu\.be)/", url or ""))
+
+
+def system_prompt_for(language):
+    if language == "he":
+        return SYSTEM_PROMPT_HE
+    if language == "es":
+        return SYSTEM_PROMPT_ES
+    return SYSTEM_PROMPT_EN
+
+
 def process_job(job_id, video_url, referer_url, language, user_id):
-    """Background worker — full pipeline using Gemini for transcription + summary."""
+    """Background worker — uses Gemini for transcription + summary.
+    YouTube URLs are passed straight to Gemini (no yt-dlp). Other sources
+    (Vimeo, direct files) are downloaded with yt-dlp first then uploaded
+    to the Gemini Files API."""
     job = jobs[job_id]
     tmpdir = tempfile.mkdtemp()
     try:
-        # ── Step 1: Download audio with yt-dlp ──
-        job["progress"] = "downloading"
-        out_template = os.path.join(tmpdir, "audio.%(ext)s")
-        cmd = ["yt-dlp", "-f", "bestaudio/best", "-x", "--audio-format", "mp3", "-o", out_template]
-        if referer_url:
-            cmd += ["--referer", referer_url]
-        cmd.append(video_url)
+        system_prompt = system_prompt_for(language)
 
-        print(f"[{job_id}] yt-dlp cmd: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        print(f"[{job_id}] yt-dlp exit={result.returncode}")
-        if result.returncode != 0:
-            job["status"] = "error"
-            job["error"] = f"Download failed: {result.stderr.strip()[-300:]}"
-            print(f"[{job_id}] yt-dlp stderr: {result.stderr[-500:]}")
-            return
+        if is_youtube_url(video_url):
+            # ── YouTube fast path — Gemini accepts the URL natively ──
+            job["progress"] = "transcribing"
+            print(f"[{job_id}] YouTube native path: {video_url[:80]}")
+            out = gemini_generate(video_url, "video/*", system_prompt)
+        else:
+            # ── Step 1: Download audio with yt-dlp ──
+            job["progress"] = "downloading"
+            out_template = os.path.join(tmpdir, "audio.%(ext)s")
+            cmd = ["yt-dlp", "-f", "bestaudio/best", "-x", "--audio-format", "mp3", "-o", out_template]
+            if referer_url:
+                cmd += ["--referer", referer_url]
+            cmd.append(video_url)
 
-        files = glob.glob(os.path.join(tmpdir, "audio.*"))
-        if not files:
-            job["status"] = "error"
-            job["error"] = "No audio file produced"
-            return
-        audio_path = files[0]
+            print(f"[{job_id}] yt-dlp cmd: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            print(f"[{job_id}] yt-dlp exit={result.returncode}")
+            if result.returncode != 0:
+                job["status"] = "error"
+                job["error"] = f"Download failed: {result.stderr.strip()[-300:]}"
+                print(f"[{job_id}] yt-dlp stderr: {result.stderr[-500:]}")
+                return
 
-        # ── Step 2: Upload to Gemini Files API ──
-        job["progress"] = "uploading"
-        file_uri = gemini_upload_file(audio_path, "audio/mp3")
-        print(f"[{job_id}] Gemini file URI: {file_uri}")
+            files = glob.glob(os.path.join(tmpdir, "audio.*"))
+            if not files:
+                job["status"] = "error"
+                job["error"] = "No audio file produced"
+                return
+            audio_path = files[0]
 
-        # ── Step 3: Generate transcript + summary in one Gemini call ──
-        job["progress"] = "transcribing"
-        system_prompt = SYSTEM_PROMPT_HE if language == "he" else SYSTEM_PROMPT_EN
-        out = gemini_generate(file_uri, "audio/mp3", system_prompt)
+            # ── Step 2: Upload to Gemini Files API ──
+            job["progress"] = "uploading"
+            file_uri = gemini_upload_file(audio_path, "audio/mp3")
+            print(f"[{job_id}] Gemini file URI: {file_uri}")
+
+            # ── Step 3: Generate transcript + summary in one Gemini call ──
+            job["progress"] = "transcribing"
+            out = gemini_generate(file_uri, "audio/mp3", system_prompt)
+
         transcript_text = out["transcript"]
         summary = out["summary"]
 

@@ -97,7 +97,7 @@ export default function LessonForm({
   const [uploadingResource, setUploadingResource] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [pendingResourceName, setPendingResourceName] = useState('');
-  const [summaryLang, setSummaryLang] = useState<'he' | 'en'>('he');
+  const [summaryLang, setSummaryLang] = useState<'he' | 'en' | 'es'>('he');
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [summaryProgress, setSummaryProgress] = useState('');
   const cancelSummaryRef = useRef(false);
@@ -479,13 +479,14 @@ export default function LessonForm({
               />
               {lesson.video_url && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Select value={summaryLang} onValueChange={(v: 'he' | 'en') => setSummaryLang(v)}>
+                  <Select value={summaryLang} onValueChange={(v: 'he' | 'en' | 'es') => setSummaryLang(v)}>
                     <SelectTrigger className="w-[120px] h-8 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="he">{t('lessonForm.hebrew')}</SelectItem>
                       <SelectItem value="en">{t('lessonForm.english')}</SelectItem>
+                      <SelectItem value="es">{t('lessonForm.spanish')}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
