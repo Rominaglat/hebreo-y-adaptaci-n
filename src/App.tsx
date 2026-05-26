@@ -1,4 +1,5 @@
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -45,6 +46,12 @@ const queryClient = new QueryClient({
   },
 });
 
+const PageFallback = () => (
+  <div className="flex items-center justify-center min-h-[60vh]">
+    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+  </div>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <LanguageProvider>
@@ -55,37 +62,39 @@ const App = () => (
           <BrowserRouter>
             <AuthProvider>
               <TenantProvider>
-                <Routes>
-                  {/* Public routes */}
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/accept-invite" element={<AcceptInvite />} />
+                <Suspense fallback={<PageFallback />}>
+                  <Routes>
+                    {/* Public routes */}
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/accept-invite" element={<AcceptInvite />} />
 
-                  {/* All protected routes share DashboardLayout (stays mounted) */}
-                  <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/courses" element={<Courses />} />
-                    <Route path="/courses/create" element={<ProtectedRoute requireAdmin>{<CreateCourse />}</ProtectedRoute>} />
-                    <Route path="/courses/favorites" element={<BookmarkedLessons />} />
-                    <Route path="/courses/watch-later" element={<BookmarkedLessons />} />
-                    <Route path="/courses/:id/edit" element={<ProtectedRoute requireAdminOrInstructor>{<EditCourse />}</ProtectedRoute>} />
-                    <Route path="/courses/:id" element={<CourseDetail />} />
-                    <Route path="/study-rooms" element={<StudyRooms />} />
-                    <Route path="/calendar" element={<CalendarPage />} />
-                    <Route path="/announcements" element={<Announcements />} />
-                    <Route path="/community-benefits" element={<CommunityBenefits />} />
-                    <Route path="/community-members" element={<CommunityMembers />} />
-                    <Route path="/profile" element={<Profile />} />
-                    <Route path="/settings/security" element={<SecuritySettings />} />
-                    <Route path="/install" element={<InstallApp />} />
-                    <Route path="/learning-path" element={<LearningPath />} />
-                    <Route path="/admin/users" element={<ProtectedRoute requireAdminOrInstructor>{<ManageUsers />}</ProtectedRoute>} />
-                    <Route path="/admin/settings" element={<PlatformSettings />} />
-                  </Route>
+                    {/* All protected routes share DashboardLayout (stays mounted) */}
+                    <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/courses" element={<Courses />} />
+                      <Route path="/courses/create" element={<ProtectedRoute requireAdmin>{<CreateCourse />}</ProtectedRoute>} />
+                      <Route path="/courses/favorites" element={<BookmarkedLessons />} />
+                      <Route path="/courses/watch-later" element={<BookmarkedLessons />} />
+                      <Route path="/courses/:id/edit" element={<ProtectedRoute requireAdminOrInstructor>{<EditCourse />}</ProtectedRoute>} />
+                      <Route path="/courses/:id" element={<CourseDetail />} />
+                      <Route path="/study-rooms" element={<StudyRooms />} />
+                      <Route path="/calendar" element={<CalendarPage />} />
+                      <Route path="/announcements" element={<Announcements />} />
+                      <Route path="/community-benefits" element={<CommunityBenefits />} />
+                      <Route path="/community-members" element={<CommunityMembers />} />
+                      <Route path="/profile" element={<Profile />} />
+                      <Route path="/settings/security" element={<SecuritySettings />} />
+                      <Route path="/install" element={<InstallApp />} />
+                      <Route path="/learning-path" element={<LearningPath />} />
+                      <Route path="/admin/users" element={<ProtectedRoute requireAdminOrInstructor>{<ManageUsers />}</ProtectedRoute>} />
+                      <Route path="/admin/settings" element={<PlatformSettings />} />
+                    </Route>
 
-                  {/* Catch-all */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
+                    {/* Catch-all */}
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
               </TenantProvider>
             </AuthProvider>
           </BrowserRouter>

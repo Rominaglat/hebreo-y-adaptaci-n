@@ -73,42 +73,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Track which user id we've already fetched data for, so we don't
+    // re-run the profile/role queries on every TOKEN_REFRESHED event
+    // (which fires every ~50min or on tab focus and was causing the UI
+    // to feel "stuck" while pending queries ran).
+    let lastFetchedUserId: string | null = null;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          // Log auth events
-          if (event === 'SIGNED_IN') {
-            setTimeout(() => {
-              logActivity(session.user.id, 'auth', 'התחברות למערכת', 'login', {
-                email: session.user.email,
-                provider: session.user.app_metadata?.provider
-              });
-            }, 0);
-          }
-          
-          setTimeout(() => {
-            fetchUserData(session.user.id);
-          }, 0);
-        } else {
+
+        if (!session?.user) {
+          lastFetchedUserId = null;
           setProfile(null);
           setRole(null);
           setTenantProfile(null);
           setTenantRole(null);
           setLoading(false);
+          return;
+        }
+
+        if (event === 'SIGNED_IN') {
+          setTimeout(() => {
+            logActivity(session.user.id, 'auth', 'התחברות למערכת', 'login', {
+              email: session.user.email,
+              provider: session.user.app_metadata?.provider
+            });
+          }, 0);
+        }
+
+        // Only fetch on the events that actually change identity.
+        // TOKEN_REFRESHED / USER_UPDATED keep the same user id and we
+        // already have their profile/role in memory.
+        const shouldFetch =
+          (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') &&
+          session.user.id !== lastFetchedUserId;
+
+        if (shouldFetch) {
+          lastFetchedUserId = session.user.id;
+          setTimeout(() => {
+            fetchUserData(session.user.id);
+          }, 0);
         }
       }
     );
 
+    // Safety: getSession resolves immediately from local storage, so this
+    // catches the case where onAuthStateChange's INITIAL_SESSION hasn't
+    // fired yet by the time the app mounts.
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
+      if (session?.user && session.user.id !== lastFetchedUserId) {
+        lastFetchedUserId = session.user.id;
         fetchUserData(session.user.id);
-      } else {
+      } else if (!session?.user) {
         setLoading(false);
       }
     });
