@@ -22,8 +22,7 @@ import {
   EyeOff,
   Upload,
   RefreshCw,
-  BarChart3,
-  Sparkles
+  BarChart3
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { he, enUS } from 'date-fns/locale';
@@ -150,8 +149,6 @@ export default function ManageUsers() {
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
-  const [resetPersonalityDialogOpen, setResetPersonalityDialogOpen] = useState(false);
-  const [isResettingPersonality, setIsResettingPersonality] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
@@ -753,11 +750,6 @@ export default function ManageUsers() {
     setResetPasswordDialogOpen(true);
   };
 
-  const openResetPersonalityDialog = (user: UserWithRole) => {
-    setSelectedUser(user);
-    setResetPersonalityDialogOpen(true);
-  };
-
   const openDeleteDialog = (user: UserWithRole) => {
     setSelectedUser(user);
     setDeleteDialogOpen(true);
@@ -843,44 +835,6 @@ export default function ManageUsers() {
       });
     } finally {
       setIsResettingPassword(false);
-    }
-  };
-
-  const handleResetPersonality = async () => {
-    if (!selectedUser) return;
-    setIsResettingPersonality(true);
-    try {
-      const { data, error } = await supabase.functions.invoke(
-        'personality-admin-actions',
-        {
-          body: {
-            action: 'reset_personality',
-            target_user_id: selectedUser.id,
-          },
-        },
-      );
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      toast({
-        title: t('manageUsers.assessmentReset'),
-        description: `${selectedUser.full_name} ${t('manageUsers.assessmentResetDesc')}`,
-      });
-      setResetPersonalityDialogOpen(false);
-    } catch (err: any) {
-      const code = err?.message || '';
-      let message = err?.message || t('manageUsers.resetFailed');
-      if (code.includes('no_active_assessment')) {
-        message = t('manageUsers.noActiveAssessment');
-      }
-      console.error('Error resetting personality:', err);
-      toast({
-        title: t('common.error'),
-        description: message,
-        variant: 'destructive',
-      });
-    } finally {
-      setIsResettingPersonality(false);
     }
   };
 
@@ -1443,12 +1397,6 @@ export default function ManageUsers() {
                                   {t('admin.resetPassword')}
                                 </DropdownMenuItem>
                               )}
-                              {canEdit && (
-                                <DropdownMenuItem onClick={() => openResetPersonalityDialog(user)}>
-                                  <Sparkles className="w-4 h-4 ml-2" />
-                                  {t('manageUsers.resetPersonality')}
-                                </DropdownMenuItem>
-                              )}
                               <DropdownMenuItem onClick={() => openActivityDialog(user)}>
                                 <History className="w-4 h-4 ml-2" />
                                 {t('admin.activityHistory')}
@@ -1552,12 +1500,6 @@ export default function ManageUsers() {
                               <DropdownMenuItem onClick={() => openResetPasswordDialog(user)}>
                                 <Key className="w-4 h-4 ml-2" />
                                 {t('admin.resetPassword')}
-                              </DropdownMenuItem>
-                            )}
-                            {canEdit && (
-                              <DropdownMenuItem onClick={() => openResetPersonalityDialog(user)}>
-                                <Sparkles className="w-4 h-4 ml-2" />
-                                {t('manageUsers.resetPersonality')}
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => openActivityDialog(user)}>
@@ -1904,42 +1846,6 @@ export default function ManageUsers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Reset Personality Assessment Dialog */}
-      <AlertDialog open={resetPersonalityDialogOpen} onOpenChange={setResetPersonalityDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('manageUsers.resetPersonality')}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {selectedUser && (
-                language === 'he'
-                  ? `השאלון האחרון של ${selectedUser.full_name} ייסגר ולא יוצג עוד בדוח. ${selectedUser.full_name} יוכל/תוכל למלא את השאלון מחדש מיד, ללא המתנה של 7 ימים. ההיסטוריה נשמרת לתיעוד.`
-                  : language === 'es'
-                    ? `La evaluación más reciente de ${selectedUser.full_name} se archivará y se eliminará de su informe. Podrá repetirla de inmediato, sin esperar el período de 7 días. El historial se conserva para auditoría.`
-                    : `${selectedUser.full_name}'s most recent assessment will be archived and removed from their report. They will be able to retake immediately, without waiting the 7-day cooldown. History is preserved for audit.`
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isResettingPersonality}>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleResetPersonality}
-              disabled={isResettingPersonality}
-            >
-              {isResettingPersonality ? (
-                <>
-                  <Loader2 className="w-4 h-4 mx-2 animate-spin" />
-                  {t('manageUsers.resetting')}
-                </>
-              ) : (
-                t('manageUsers.resetAssessment')
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Delete User Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
