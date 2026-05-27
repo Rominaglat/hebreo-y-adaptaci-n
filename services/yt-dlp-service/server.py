@@ -27,6 +27,21 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# YouTube cookies (Netscape cookies.txt format). Required for restricted /
+# age-gated / unlisted-w-bot-detection videos. Paste the full file contents
+# into the YT_DLP_COOKIES env var on Railway.
+YT_DLP_COOKIES = os.environ.get("YT_DLP_COOKIES", "")
+COOKIES_FILE = "/tmp/yt-dlp-cookies.txt"
+if YT_DLP_COOKIES:
+    try:
+        with open(COOKIES_FILE, "w", encoding="utf-8") as _fh:
+            _fh.write(YT_DLP_COOKIES)
+        print(f"  YT_DLP_COOKIES: written to {COOKIES_FILE}")
+    except Exception as _e:
+        print(f"  YT_DLP_COOKIES: failed to write — {_e}")
+        COOKIES_FILE = ""
+else:
+    COOKIES_FILE = ""
 
 GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_BASE = "https://generativelanguage.googleapis.com"
@@ -242,8 +257,9 @@ def system_prompt_for(language):
 
 def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir):
     """Download audio with yt-dlp. Uses curl_cffi impersonation so YouTube
-    doesn't reject us as a bot from a cloud IP. Returns the local file path
-    or None on failure (with the error logged + stored in the job)."""
+    doesn't reject us as a bot from a cloud IP, and a cookies file
+    (YT_DLP_COOKIES env var) when present for unlisted / age-restricted
+    videos. Returns the local audio file path."""
     out_template = os.path.join(tmpdir, "audio.%(ext)s")
     cmd = [
         "yt-dlp",
@@ -253,6 +269,8 @@ def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir):
         "--impersonate", "chrome",
         "-o", out_template,
     ]
+    if COOKIES_FILE:
+        cmd += ["--cookies", COOKIES_FILE]
     if referer_url:
         cmd += ["--referer", referer_url]
     cmd.append(video_url)
