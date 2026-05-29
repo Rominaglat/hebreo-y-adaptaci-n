@@ -33,6 +33,10 @@ const EMBED_MODEL = "gemini-embedding-001";
 const EMBED_DIM = 1024;
 
 const MODEL = "gemini-2.5-flash";
+
+// Single-tenant build: every Postgres row already belongs to this tenant
+// (phase2c dropped tenant_id from data tables) and the KG has one tenant.
+const SINGLE_TENANT_ID = "00000000-0000-0000-0000-000000000000";
 // Total context budget across all lessons for quiz generation
 const MAX_TOTAL_CHARS = 20_000;
 // Per-lesson cap so one giant lesson doesn't crowd out the rest
@@ -246,11 +250,19 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { course_id, tenant_id, num_questions = 5, lesson_ids, topic } = await req.json();
+    const body = await req.json();
+    const course_id = body.course_id;
+    const num_questions = body.num_questions ?? 5;
+    const lesson_ids = body.lesson_ids;
+    const topic = body.topic;
+    // Single-tenant build: tenant_id is the server-side constant. Callers
+    // (the frontend ExamManager) don't pass it. Accept overrides for
+    // multi-tenant migrations later.
+    const tenant_id = body.tenant_id ?? SINGLE_TENANT_ID;
 
-    if (!course_id || !tenant_id) {
+    if (!course_id) {
       return new Response(
-        JSON.stringify({ error: "course_id and tenant_id are required" }),
+        JSON.stringify({ error: "course_id is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

@@ -34,6 +34,7 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const EMBED_MODEL = "gemini-embedding-001";
 const EMBED_DIM = 1024;
+const SINGLE_TENANT_ID = "00000000-0000-0000-0000-000000000000";
 const ORDER_MODEL = "gemini-2.5-flash";
 const RETRIEVAL_K = 50; // pull 50 lesson hits to get good course coverage
 const MAX_CANDIDATES = 8; // narrow to top 8 courses before asking the LLM
@@ -235,10 +236,15 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { goal, tenant_id } = await req.json();
-    if (!goal || !tenant_id) {
+    const body = await req.json();
+    const goal = body.goal;
+    // Single-tenant build: callers (frontend useLearningPath) don't pass
+    // tenant_id. Default to the server-side constant; accept an override
+    // for multi-tenant migrations later.
+    const tenant_id = body.tenant_id ?? SINGLE_TENANT_ID;
+    if (!goal) {
       return new Response(
-        JSON.stringify({ error: "goal and tenant_id are required" }),
+        JSON.stringify({ error: "goal is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -270,11 +276,11 @@ serve(async (req: Request) => {
       });
     }
 
-    // 1. Fetch published courses (catalog)
+    // 1. Fetch published courses (catalog). phase2c dropped tenant_id from
+    // courses; in this single-tenant build all rows are this tenant.
     const { data: courses, error: coursesError } = await supabase
       .from("courses")
       .select("id, title, description")
-      .eq("tenant_id", tenant_id)
       .eq("is_published", true);
 
     if (coursesError || !courses || courses.length === 0) {
@@ -346,18 +352,16 @@ serve(async (req: Request) => {
       );
     }
 
-    // 7. Save (replace) learning path
+    // 7. Save (replace) learning path. Single-tenant: no tenant_id column.
     await supabase
       .from("learning_paths")
       .delete()
-      .eq("user_id", user.id)
-      .eq("tenant_id", tenant_id);
+      .eq("user_id", user.id);
 
     const { data: inserted, error: insertError } = await supabase
       .from("learning_paths")
       .insert({
         user_id: user.id,
-        tenant_id,
         goal,
         steps: validSteps,
         current_step: 0,
