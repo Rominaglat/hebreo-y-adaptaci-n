@@ -45,7 +45,7 @@ const PER_LESSON_CHARS = 3500;
 const QUIZ_TOOL = {
   name: "save_quiz_questions",
   description:
-    "Save a set of multiple-choice quiz questions in Hebrew based on the provided course content. Each question must have exactly 4 options with exactly 1 correct answer.",
+    "Save multiple-choice quiz questions based on the provided course content. Write them in the same language as the course material. Each question must have exactly 4 options with exactly 1 correct answer.",
   input_schema: {
     type: "object",
     properties: {
@@ -58,7 +58,7 @@ const QUIZ_TOOL = {
           properties: {
             question_text: {
               type: "string",
-              description: "The question text in Hebrew",
+              description: "The question text, in the same language as the course material.",
               minLength: 5,
               maxLength: 500,
             },
@@ -74,7 +74,7 @@ const QUIZ_TOOL = {
                   is_correct: { type: "boolean" },
                   explanation: {
                     type: "string",
-                    description: "Brief Hebrew explanation of why this option is correct or incorrect.",
+                    description: "Brief explanation of why this option is correct or incorrect — in the same language as the course material.",
                     maxLength: 250,
                   },
                 },
@@ -163,14 +163,14 @@ async function generateQuestions(
   numQuestions: number,
 ): Promise<GeneratedQuestion[]> {
   const systemPrompt =
-    `You are a learning assessment expert who creates multiple-choice quiz questions in Hebrew, grounded strictly in the provided course content. Always call save_quiz_questions. Never invent facts that aren't in the source.`;
+    `You are a learning assessment expert for Hebreo y Adaptación (Romina Glatstein's Hebrew-learning platform). Create multiple-choice quiz questions grounded strictly in the provided course content. Detect the language of the course material (typically Spanish, sometimes Hebrew) and write EVERY question, option, and explanation in that SAME language. Never invent facts that aren't in the source. Never switch languages mid-quiz.`;
 
   const userPrompt = [
     `# Course title`,
     courseTitle,
     ``,
     `# Task`,
-    `Generate exactly ${numQuestions} multiple-choice questions in Hebrew based on the course content below. Cover different parts of the content. Make distractors plausible but unambiguously wrong. Each correct answer's explanation should briefly cite WHICH lesson it came from.`,
+    `Generate exactly ${numQuestions} multiple-choice questions based on the course content below. Use the SAME language as the course content (do not translate). Cover different parts of the content. Make distractors plausible but unambiguously wrong. Each correct answer's explanation should briefly cite WHICH lesson it came from.`,
     ``,
     `# Course content`,
     contentBlock,

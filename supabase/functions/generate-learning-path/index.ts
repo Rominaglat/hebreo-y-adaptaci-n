@@ -137,7 +137,7 @@ const ORDER_TOOL = {
             reason: {
               type: "string",
               description:
-                "A single concise sentence in Hebrew explaining why this course fits and at which stage of the learning journey.",
+                "A single concise sentence (max ~200 chars) explaining why this course fits and at which stage of the learning journey. Write it in the same language as the user's goal.",
               maxLength: 200,
             },
           },
@@ -168,7 +168,7 @@ async function orderCourses(
     `# Candidate courses (pre-filtered by semantic similarity to the goal)`,
     catalog,
     ``,
-    `Build an ordered learning path of 3-6 courses from this candidate list. Order from foundational to advanced. Each reason must be a single Hebrew sentence.`,
+    `Build an ordered learning path of 3-6 courses from this candidate list. Order from foundational to advanced. CRITICAL: write each reason in the SAME LANGUAGE the user used in their goal above (if the goal is in Spanish, reasons are in Spanish; if Hebrew, Hebrew; if English, English). One concise sentence per reason.`,
     `Always call save_learning_path.`,
   ].join("\n");
 
@@ -200,7 +200,7 @@ async function orderCourses(
       systemInstruction: {
         parts: [{
           text:
-            "You are a learning advisor. You receive a user's goal and a list of pre-filtered candidate courses. Pick and order 3-6 of them into a coherent learning path from foundational to advanced. Each reason must be exactly one sentence in Hebrew. Only use courses from the candidate list — never invent course_ids.",
+            "You are a learning advisor for Hebreo y Adaptación (a Hebrew-learning platform by Romina Glatstein). You receive a user's goal and a pre-filtered list of candidate courses; pick and order 3-6 into a coherent path from foundational to advanced. Detect the language of the user's goal (typically Spanish, sometimes Hebrew or English) and write every `reason` in that SAME language — never switch languages. Each reason is exactly one concise sentence. Only use course_ids from the candidate list; never invent IDs.",
         }],
       },
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
