@@ -11,12 +11,10 @@
 // Closes SEC-007.
 
 const DEFAULT_ALLOWED_ORIGINS = [
-  // Primary production origin is the `app.` subdomain that Vercel serves.
-  "https://app.example.com",
-  // Marketing / apex; kept so a future split (marketing → app) keeps working
-  // out of the box.
-  "https://example.com",
-  "https://www.example.com",
+  // Hebreo y Adaptación production custom domain (Vercel).
+  "https://app.rominahebreo.com",
+  "https://rominahebreo.com",
+  "https://www.rominahebreo.com",
   // Local dev — Vite default port is 8080 per vite.config.ts; 5173 is the
   // upstream default and accepted for parity.
   "http://localhost:5173",
