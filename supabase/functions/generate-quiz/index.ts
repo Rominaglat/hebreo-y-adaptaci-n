@@ -172,24 +172,20 @@ async function generateQuestions(
     contentBlock,
   ].join("\n");
 
-  // Gemini structured-output schema — Gemini accepts a subset of JSON Schema
-  // via generationConfig.responseSchema. Drop the Anthropic-specific
-  // input_schema wrapper and inline the inner properties here.
+  // Gemini structured-output schema. Keep it lean — its constrained decoder
+  // explodes on deeply nested min/maxItems combos. We describe size limits
+  // (4 options, 3-N questions, 1 correct option) in the prompt instead.
   const responseSchema = {
     type: "OBJECT",
     properties: {
       questions: {
         type: "ARRAY",
-        minItems: 3,
-        maxItems: 15,
         items: {
           type: "OBJECT",
           properties: {
             question_text: { type: "STRING" },
             options: {
               type: "ARRAY",
-              minItems: 4,
-              maxItems: 4,
               items: {
                 type: "OBJECT",
                 properties: {

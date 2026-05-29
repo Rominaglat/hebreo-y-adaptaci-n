@@ -176,8 +176,6 @@ async function orderCourses(
     properties: {
       steps: {
         type: "ARRAY",
-        minItems: 3,
-        maxItems: 6,
         items: {
           type: "OBJECT",
           properties: {
