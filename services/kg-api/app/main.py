@@ -13,9 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Path
 from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import require_bearer, require_webhook_or_bearer
-from .config import (
-    KG_WEBHOOK_SECRET, assert_required, close_driver, get_driver, session,
-)
+from .config import assert_required, close_driver, get_driver, session
 from .models import (
     ConceptsSync, CourseSync, CypherRequest, DeleteSync, EmbeddingSync,
     LessonSync, ModuleSync, QueryRequest, RecommendRequest, TenantProvision,
@@ -144,10 +142,14 @@ async def stats(tenant_id: str = Path(...)) -> dict[str, Any]:
 # ────────────────────────────────────────────────────────────────────────────
 @app.post("/v1/t/{tenant_id}/sync/tenant", dependencies=[Depends(require_webhook_or_bearer)])
 async def sync_tenant(payload: TenantSync, tenant_id: str = Path(...)) -> dict[str, Any]:
-    assert_body_tenant(tenant_id, payload.tenant_id)
+    try:
+        body_id = payload.effective_id
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    assert_body_tenant(tenant_id, body_id)
     async with session() as s:
-        await upsert_tenant(s, payload.tenant_id, payload.name, payload.slug)
-    return {"rows": [{"id": payload.tenant_id}], "count": 1}
+        await upsert_tenant(s, body_id, payload.name, payload.slug)
+    return {"rows": [{"id": body_id}], "count": 1}
 
 
 @app.post("/v1/t/{tenant_id}/sync/course", dependencies=[Depends(require_webhook_or_bearer)])

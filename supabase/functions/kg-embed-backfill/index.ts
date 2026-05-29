@@ -139,12 +139,11 @@ serve(async (req: Request) => {
   const startedAt = Date.now();
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
+  // Single-tenant build: phase2c dropped tenant_id from courses/modules/lessons.
+  // Every lesson in the DB belongs to the one and only tenant — just iterate.
   const { data: lessons, error } = await supabase
     .from("lessons")
-    .select(
-      "id, title, content_text, file_url, resources_url, modules!inner(courses!inner(tenant_id))",
-    )
-    .eq("modules.courses.tenant_id", tenantId)
+    .select("id, title, content_text, file_url, resources_url")
     .order("id")
     .range(from, from + limit - 1);
 

@@ -24,10 +24,22 @@ class TenantProvision(BaseModel):
 # Sync upserts (one model per node type)
 # ────────────────────────────────────────────────────────────────────────────
 class TenantSync(BaseModel):
-    tenant_id: str
-    id: str | None = None        # falls back to tenant_id
+    # kg-sync edge function historically sends `id` (the tenants-table primary
+    # key) rather than `tenant_id` on this endpoint. Accept either — at least
+    # one is required and they must agree if both are present.
+    tenant_id: str | None = None
+    id: str | None = None
     name: str | None = None
     slug: str | None = None
+
+    @property
+    def effective_id(self) -> str:
+        eid = self.tenant_id or self.id
+        if not eid:
+            raise ValueError("tenant id required (provide `tenant_id` or `id`)")
+        if self.tenant_id and self.id and self.tenant_id != self.id:
+            raise ValueError(f"tenant_id/id mismatch: {self.tenant_id} vs {self.id}")
+        return eid
 
 
 class CourseSync(BaseModel):
