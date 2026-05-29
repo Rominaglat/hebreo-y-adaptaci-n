@@ -34,10 +34,10 @@ function esc(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// Light template per Learning Portal DESIGN-LANGUAGE.md. Inline CSS,
-// MSO-wrapped CTA, RTL Hebrew. Brand colors: #712FF1 violet → #DC1FFF magenta.
-// Layout iterations in docs/email-templates/invite-preview.html (review there
-// before changing this).
+// Hebreo y Adaptación brand: #C4582A (terracotta), #FBF4DE (cream),
+// #1E40AF (deep blue accent). LTR Spanish. Logo is the H&A monogram
+// rendered as styled text so every email client shows it (SVG support is
+// inconsistent in Gmail / Outlook).
 function buildHtml(opts: {
   fullName: string;
   tenantName: string;
@@ -48,24 +48,37 @@ function buildHtml(opts: {
   loginUrl: string;
   year: number;
 }): string {
-  const name = esc(opts.fullName || "👋");
+  const name = esc(opts.fullName || "");
   const tenant = esc(opts.tenantName);
-  const logo = esc(opts.logoUrl);
-  const link = opts.magicLink; // URL — already encoded by Supabase
-  const linkEsc = esc(link);
+  const linkEsc = esc(opts.magicLink);
   const emailEsc = esc(opts.email);
   const tempEsc = esc(opts.tempPassword);
   const loginUrl = esc(opts.loginUrl);
 
+  // Use the configured logo URL if available; otherwise render an inline
+  // monogram. (Most clients still strip SVG from <img>, so the text logo
+  // doubles as a guaranteed fallback either way.)
+  const logoBlock = opts.logoUrl
+    ? `<img src="${esc(opts.logoUrl)}" alt="${tenant}" width="84" height="84"
+            style="display:block;margin:0 auto 14px;border-radius:18px;border:0;outline:none;">`
+    : `<div style="display:inline-block;width:84px;height:84px;border-radius:18px;
+                    background:linear-gradient(135deg,#C4582A 0%,#A24818 100%);
+                    box-shadow:0 14px 36px rgba(196,88,42,0.35);
+                    font-family:Georgia,'Times New Roman',Times,serif;
+                    text-align:center;line-height:84px;color:#FBF4DE;
+                    font-size:38px;font-weight:700;letter-spacing:0.5px;">
+         H<span style="color:#1E40AF;font-size:28px;font-weight:400;">&amp;</span>A
+       </div>`;
+
   return `<!doctype html>
-<html lang="he" dir="rtl">
+<html lang="es" dir="ltr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="supported-color-schemes" content="light dark">
 <meta name="x-apple-disable-message-reformatting">
-<title>הזמנה לפורטל ${tenant}</title>
+<title>Bienvenida a ${tenant}</title>
 <!--[if mso]>
 <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
 <![endif]-->
@@ -77,59 +90,52 @@ function buildHtml(opts: {
     .h1{font-size:28px!important;line-height:1.2!important;}
     .lead{font-size:16px!important;}
     .cta-btn{font-size:16px!important;padding:15px 32px!important;}
-    .logo-lg{width:140px!important;height:auto!important;}
   }
-  a{color:#712FF1;text-decoration:none;}
+  a{color:#C4582A;text-decoration:none;}
   a:hover{text-decoration:underline;}
-  @media (prefers-color-scheme: dark){
-    .card{background:#FEFBFF!important;}
-    .body-text{color:#0A0820!important;}
-  }
 </style>
 </head>
-<body style="margin:0;padding:0;background:#F3F0FA;font-family:'Heebo','Assistant','Noto Sans Hebrew','Segoe UI',-apple-system,BlinkMacSystemFont,Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+<body style="margin:0;padding:0;background:#FBF4DE;font-family:Georgia,'Times New Roman',Times,'Segoe UI',-apple-system,BlinkMacSystemFont,Arial,serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
 
 <!-- pre-header -->
-<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#F3F0FA;opacity:0;">
-  המשתמש שלך לפורטל הקורסים מוכן. הגדרת סיסמה אישית לוקחת פחות מדקה.
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#FBF4DE;opacity:0;">
+  Tu cuenta en ${tenant} está lista. Configura tu contraseña en menos de un minuto.
 </div>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F3F0FA;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FBF4DE;">
   <tr>
     <td align="center" style="padding:32px 12px;">
 
       <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0"
-             style="width:600px;max-width:600px;background:#FEFBFF;border-radius:24px;overflow:hidden;
-                    box-shadow:0 20px 60px rgba(75,32,130,0.12);">
+             style="width:600px;max-width:600px;background:#FFFFFF;border-radius:24px;overflow:hidden;
+                    box-shadow:0 20px 60px rgba(196,88,42,0.18);">
 
-        <!-- HERO with centered logo on gradient -->
+        <!-- HERO with logo on warm gradient -->
         <tr>
-          <td style="background:linear-gradient(288deg,#DC1FFF 0%,#712FF1 60%,#4B2082 100%);padding:44px 40px 36px;text-align:center;position:relative;">
-            <div style="position:absolute;top:-40px;left:-40px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(220,31,255,0.4) 0%,transparent 70%);"></div>
-            <div style="position:absolute;bottom:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(113,47,241,0.35) 0%,transparent 70%);"></div>
+          <td style="background:linear-gradient(135deg,#F5C99A 0%,#E89A5E 55%,#C4582A 100%);padding:48px 40px 40px;text-align:center;position:relative;">
+            <div style="position:absolute;top:-40px;right:-40px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,0.30) 0%,transparent 70%);"></div>
+            <div style="position:absolute;bottom:-30px;left:-30px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,rgba(30,64,175,0.18) 0%,transparent 70%);"></div>
 
-            <img src="${logo}"
-                 alt="${tenant}"
-                 class="logo-lg"
-                 width="240" height="135"
-                 style="display:block;margin:0 auto;border:0;outline:none;max-width:240px;height:auto;">
+            ${logoBlock}
+            <p style="margin:0;color:#FBF4DE;font-size:14px;font-weight:600;letter-spacing:2px;text-transform:uppercase;font-family:Georgia,serif;">
+              ${tenant}
+            </p>
           </td>
         </tr>
 
         <!-- TITLE -->
         <tr>
-          <td class="px-40 py-hero" style="padding:52px 40px 24px;text-align:right;">
-            <h1 class="h1" style="margin:0 0 18px;font-size:36px;line-height:1.15;font-weight:800;
-                                   color:#0A0820;letter-spacing:-0.5px;font-family:'Heebo','Assistant',sans-serif;">
-              ברוך הבא לפורטל
-              <br>
-              <span style="background:linear-gradient(90deg,#712FF1 0%,#DC1FFF 100%);
-                           -webkit-background-clip:text;background-clip:text;color:#DC1FFF;
-                           -webkit-text-fill-color:transparent;">${tenant}</span>
+          <td class="px-40 py-hero" style="padding:48px 40px 20px;text-align:left;">
+            <h1 class="h1" style="margin:0 0 18px;font-size:32px;line-height:1.2;font-weight:700;
+                                   color:#1F2937;letter-spacing:-0.4px;font-family:Georgia,serif;">
+              ¡Bienvenida${name ? ", " : ""}<span style="color:#C4582A;">${name}</span>!
             </h1>
 
-            <p class="lead body-text" style="margin:0;font-size:18px;line-height:1.6;color:#555555;font-weight:400;">
-              שלום <strong style="color:#0A0820;font-weight:700;">${name}</strong>, נוצר עבורך חשבון חדש. הגדרת סיסמה אישית והכניסה לפורטל לוקחים פחות מדקה.
+            <p class="lead" style="margin:0 0 8px;font-size:17px;line-height:1.65;color:#4B5563;font-weight:400;">
+              Te damos la bienvenida a <strong style="color:#1F2937;">${tenant}</strong>, la plataforma de aprendizaje de hebreo de Romina Glatstein.
+            </p>
+            <p class="lead" style="margin:0;font-size:17px;line-height:1.65;color:#4B5563;font-weight:400;">
+              Tu cuenta está lista. Configura tu contraseña personal e ingresa en menos de un minuto.
             </p>
           </td>
         </tr>
@@ -140,28 +146,28 @@ function buildHtml(opts: {
             <!--[if mso]>
               <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
                            href="${linkEsc}"
-                           style="height:56px;v-text-anchor:middle;width:320px;" arcsize="100%"
-                           stroke="f" fillcolor="#712FF1">
+                           style="height:56px;v-text-anchor:middle;width:340px;" arcsize="100%"
+                           stroke="f" fillcolor="#C4582A">
                 <w:anchorlock/>
-                <center style="color:#FFFFFF;font-family:Arial,sans-serif;font-size:18px;font-weight:700;">הגדרת סיסמה והכניסה</center>
+                <center style="color:#FBF4DE;font-family:Georgia,serif;font-size:17px;font-weight:700;">Configurar contraseña</center>
               </v:roundrect>
             <![endif]-->
             <!--[if !mso]><!-- -->
             <a href="${linkEsc}"
                class="cta-btn"
                style="display:inline-block;
-                      background:linear-gradient(180deg,#712FF1 0%,#DC1FFF 100%);
-                      color:#FFFFFF;font-size:18px;font-weight:700;
-                      padding:17px 40px;border-radius:50px;
+                      background:linear-gradient(180deg,#C4582A 0%,#A24818 100%);
+                      color:#FBF4DE;font-size:17px;font-weight:700;
+                      padding:16px 36px;border-radius:50px;
                       text-decoration:none;
-                      box-shadow:0 12px 30px rgba(220,31,255,0.35),0 0 0 1px rgba(255,255,255,0.4) inset;
-                      font-family:'Heebo','Assistant',sans-serif;
+                      box-shadow:0 12px 30px rgba(196,88,42,0.40),0 0 0 1px rgba(255,255,255,0.4) inset;
+                      font-family:Georgia,serif;
                       letter-spacing:-0.1px;">
-              הגדרת סיסמה והכניסה
+              Configurar contraseña e ingresar
             </a>
             <!--<![endif]-->
-            <p style="margin:14px 0 0;font-size:13px;color:#777777;font-family:inherit;">
-              קישור חד-פעמי · תוקף 24 שעות
+            <p style="margin:14px 0 0;font-size:13px;color:#9CA3AF;font-family:inherit;">
+              Enlace de un solo uso · válido por 24 horas
             </p>
           </td>
         </tr>
@@ -169,30 +175,30 @@ function buildHtml(opts: {
         <!-- DIVIDER -->
         <tr>
           <td style="padding:32px 40px 12px;">
-            <div style="height:1px;background:linear-gradient(90deg,transparent 0%,#E8E6F0 50%,transparent 100%);"></div>
+            <div style="height:1px;background:linear-gradient(90deg,transparent 0%,#E5DDC5 50%,transparent 100%);"></div>
           </td>
         </tr>
 
         <!-- FALLBACK CREDS -->
         <tr>
-          <td class="px-40" style="padding:12px 40px 20px;text-align:right;">
-            <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#777777;font-family:inherit;">
-              קישור לא נטען? אפשר להיכנס ידנית
+          <td class="px-40" style="padding:12px 40px 20px;text-align:left;">
+            <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#6B7280;font-family:inherit;">
+              ¿El enlace no funciona? Ingresa manualmente:
             </p>
 
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-                   style="background:#FAFAFC;border:1px solid #EAE6F0;border-radius:12px;">
+                   style="background:#FBF4DE;border:1px solid #E5DDC5;border-radius:12px;">
               <tr>
-                <td style="padding:16px 18px;font-size:13px;color:#555555;line-height:1.9;font-family:inherit;">
-                  <strong style="color:#0A0820;display:inline-block;width:54px;">כניסה:</strong>
-                  <a href="${loginUrl}" style="color:#712FF1;direction:ltr;display:inline-block;">${loginUrl}</a>
+                <td style="padding:16px 18px;font-size:13px;color:#4B5563;line-height:1.9;font-family:inherit;">
+                  <strong style="color:#1F2937;display:inline-block;width:90px;">Sitio:</strong>
+                  <a href="${loginUrl}" style="color:#C4582A;display:inline-block;">${loginUrl}</a>
                   <br>
-                  <strong style="color:#0A0820;display:inline-block;width:54px;">דוא"ל:</strong>
-                  <code style="direction:ltr;display:inline-block;background:#FFFFFF;padding:2px 8px;border-radius:5px;border:1px solid #EAE6F0;font-size:12px;font-family:Menlo,Consolas,monospace;color:#0A0820;">${emailEsc}</code>
+                  <strong style="color:#1F2937;display:inline-block;width:90px;">Correo:</strong>
+                  <code style="display:inline-block;background:#FFFFFF;padding:2px 8px;border-radius:5px;border:1px solid #E5DDC5;font-size:12px;font-family:Menlo,Consolas,monospace;color:#1F2937;">${emailEsc}</code>
                   <br>
-                  <strong style="color:#0A0820;display:inline-block;width:54px;">סיסמה:</strong>
-                  <code style="direction:ltr;display:inline-block;background:#FFFFFF;padding:2px 8px;border-radius:5px;border:1px solid #EAE6F0;font-size:12px;font-family:Menlo,Consolas,monospace;color:#0A0820;">${tempEsc}</code>
-                  <span style="font-size:11px;color:#999999;margin-right:8px;">(להחליף מיד)</span>
+                  <strong style="color:#1F2937;display:inline-block;width:90px;">Contraseña:</strong>
+                  <code style="display:inline-block;background:#FFFFFF;padding:2px 8px;border-radius:5px;border:1px solid #E5DDC5;font-size:12px;font-family:Menlo,Consolas,monospace;color:#1F2937;">${tempEsc}</code>
+                  <span style="font-size:11px;color:#9CA3AF;margin-left:8px;">(cámbiala al ingresar)</span>
                 </td>
               </tr>
             </table>
@@ -201,24 +207,24 @@ function buildHtml(opts: {
 
         <!-- SIGN-OFF -->
         <tr>
-          <td class="px-40" style="padding:24px 40px 28px;text-align:right;">
-            <p style="margin:0 0 4px;font-size:15px;color:#1F2124;font-family:inherit;line-height:1.5;">
-              נתראה בפנים,
+          <td class="px-40" style="padding:24px 40px 28px;text-align:left;">
+            <p style="margin:0 0 4px;font-size:15px;color:#4B5563;font-family:inherit;line-height:1.5;font-style:italic;">
+              ¡Nos vemos adentro!
             </p>
-            <p style="margin:0;font-size:15px;color:#0A0820;font-weight:700;font-family:inherit;">
-              צוות ${tenant}
+            <p style="margin:0;font-size:15px;color:#1F2937;font-weight:700;font-family:Georgia,serif;">
+              Romina Glatstein · ${tenant}
             </p>
           </td>
         </tr>
 
         <!-- FOOTER -->
         <tr>
-          <td style="padding:24px 40px 28px;background:#F7F3FF;text-align:center;border-top:1px solid #EAE6F0;">
-            <p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:#777777;font-family:inherit;">
-              © ${opts.year} ${tenant} · פורטל הלמידה
+          <td style="padding:24px 40px 28px;background:#FBF4DE;text-align:center;border-top:1px solid #E5DDC5;">
+            <p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:#6B7280;font-family:inherit;">
+              © ${opts.year} ${tenant} · Plataforma de aprendizaje
             </p>
-            <p style="margin:0;font-size:11px;line-height:1.6;color:#999999;font-family:inherit;">
-              לא יזמת/ה את ההזמנה הזו? אפשר להתעלם — אף שינוי לא בוצע.
+            <p style="margin:0;font-size:11px;line-height:1.6;color:#9CA3AF;font-family:inherit;">
+              ¿No esperabas esta invitación? Puedes ignorar este correo — no se realizó ningún cambio.
             </p>
           </td>
         </tr>

@@ -22,7 +22,9 @@ import { getCorsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
+// Anthropic removed — ordering now goes through Gemini. Kept for any
+// legacy callers that read it from env. Safe to delete in a future pass.
+const _ANTHROPIC_API_KEY_UNUSED = Deno.env.get("ANTHROPIC_API_KEY");
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const KG_API_URL = Deno.env.get("KG_API_URL")!;
 const KG_API_TOKEN = Deno.env.get("KG_API_TOKEN")!;
@@ -32,7 +34,7 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const EMBED_MODEL = "gemini-embedding-001";
 const EMBED_DIM = 1024;
-const ORDER_MODEL = "claude-haiku-4-5-20251001";
+const ORDER_MODEL = "gemini-2.5-flash";
 const RETRIEVAL_K = 50; // pull 50 lesson hits to get good course coverage
 const MAX_CANDIDATES = 8; // narrow to top 8 courses before asking the LLM
 
@@ -169,34 +171,63 @@ async function orderCourses(
     `Always call save_learning_path.`,
   ].join("\n");
 
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
+  const responseSchema = {
+    type: "OBJECT",
+    properties: {
+      steps: {
+        type: "ARRAY",
+        minItems: 3,
+        maxItems: 6,
+        items: {
+          type: "OBJECT",
+          properties: {
+            course_id: { type: "STRING" },
+            course_title: { type: "STRING" },
+            reason: { type: "STRING" },
+          },
+          required: ["course_id", "course_title", "reason"],
+        },
+      },
     },
+    required: ["steps"],
+  };
+
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${ORDER_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: ORDER_MODEL,
-      max_tokens: 1500,
-      system:
-        "You are a learning advisor. You receive a user's goal and a list of pre-filtered candidate courses. You must pick and order 3-6 of them to form a coherent learning path from foundational to advanced. Reasons must be in Hebrew, exactly one sentence each. Only use courses from the candidate list.",
-      tools: [ORDER_TOOL],
-      tool_choice: { type: "tool", name: "save_learning_path" },
-      messages: [{ role: "user", content: userPrompt }],
+      systemInstruction: {
+        parts: [{
+          text:
+            "You are a learning advisor. You receive a user's goal and a list of pre-filtered candidate courses. Pick and order 3-6 of them into a coherent learning path from foundational to advanced. Each reason must be exactly one sentence in Hebrew. Only use courses from the candidate list — never invent course_ids.",
+        }],
+      },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema,
+        temperature: 0.3,
+        maxOutputTokens: 1500,
+      },
     }),
   });
 
   if (!resp.ok) {
-    throw new Error(`anthropic ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+    throw new Error(`gemini ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
   }
   const data = await resp.json();
   // deno-lint-ignore no-explicit-any
-  const toolUse = (data.content || []).find((b: any) => b.type === "tool_use" && b.name === "save_learning_path");
-  if (!toolUse) {
-    throw new Error("Claude did not call save_learning_path");
+  const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("");
+  if (!text) throw new Error("gemini returned empty text");
+  let parsed: { steps?: LearningStep[] };
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`gemini returned non-JSON: ${String(e).slice(0, 200)}`);
   }
-  return (toolUse.input?.steps ?? []) as LearningStep[];
+  return (parsed.steps ?? []) as LearningStep[];
 }
 
 serve(async (req: Request) => {

@@ -19,14 +19,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildLessonText } from "../_shared/lesson_text.ts";
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const KG_API_URL = Deno.env.get("KG_API_URL")!;
 const KG_API_TOKEN = Deno.env.get("KG_API_TOKEN")!;
 const KG_WEBHOOK_SECRET = Deno.env.get("KG_WEBHOOK_SECRET")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "gemini-2.5-flash";
 // Lessons with full transcripts can run 30K-100K chars. Cap at 40K (~13K tokens),
 // well within Haiku's window, predictable cost.
 const MAX_INPUT_CHARS = 40_000;
@@ -111,55 +111,75 @@ async function extractConcepts(
     truncated || "(no body)",
   ].join("\n");
 
+  const responseSchema = {
+    type: "OBJECT",
+    properties: {
+      concepts: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            name: { type: "STRING" },
+            confidence: { type: "NUMBER" },
+          },
+          required: ["name", "confidence"],
+        },
+      },
+    },
+    required: ["concepts"],
+  };
+
   const requestBody = JSON.stringify({
-    model: MODEL,
-    max_tokens: 2000,
-    system: SYSTEM_PROMPT,
-    tools: [EXTRACTION_TOOL],
-    tool_choice: { type: "tool", name: "save_concepts" },
-    messages: [{ role: "user", content: userPrompt }],
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema,
+      temperature: 0.2,
+      maxOutputTokens: 2000,
+    },
   });
+
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
   let resp: Response | null = null;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
+    resp = await fetch(url, {
       method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: requestBody,
     });
     if (resp.ok) break;
     if (resp.status !== 429 && resp.status < 500) {
-      // Non-retryable
-      throw new Error(`anthropic ${resp.status}: ${await resp.text()}`);
+      throw new Error(`gemini ${resp.status}: ${await resp.text()}`);
     }
-    // 429 or 5xx → backoff. Honor retry-after if present.
     const retryAfterHeader = resp.headers.get("retry-after");
     const retryAfterSec = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
     const backoffSec = Number.isFinite(retryAfterSec) && retryAfterSec > 0
       ? retryAfterSec
       : Math.min(60, Math.pow(2, attempt));
-    // Add small jitter to avoid thundering herd
     const jitter = Math.random() * 0.5;
     await new Promise((r) => setTimeout(r, (backoffSec + jitter) * 1000));
   }
 
   if (!resp || !resp.ok) {
-    throw new Error(`anthropic ${resp?.status ?? "no-response"}: ${resp ? await resp.text() : "no response"}`);
+    throw new Error(`gemini ${resp?.status ?? "no-response"}: ${resp ? await resp.text() : "no response"}`);
   }
 
   const data = await resp.json();
-  const toolUse = (data.content || []).find(
-    // deno-lint-ignore no-explicit-any
-    (block: any) => block.type === "tool_use" && block.name === "save_concepts",
-  );
-  if (!toolUse) {
-    throw new Error("Claude did not call save_concepts");
+  // deno-lint-ignore no-explicit-any
+  const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("");
+  if (!text) {
+    throw new Error("gemini returned empty text");
   }
-  const concepts = (toolUse.input?.concepts ?? []) as ExtractedConcept[];
+  let parsed: { concepts?: ExtractedConcept[] };
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`gemini returned non-JSON: ${String(e).slice(0, 200)}`);
+  }
+  const concepts = (parsed.concepts ?? []) as ExtractedConcept[];
 
   // Defensive sanitation
   return concepts

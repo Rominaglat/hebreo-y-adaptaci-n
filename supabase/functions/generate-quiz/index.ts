@@ -22,7 +22,6 @@ import { getCorsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const KG_API_URL = Deno.env.get("KG_API_URL")!;
 const KG_API_TOKEN = Deno.env.get("KG_API_TOKEN")!;
@@ -33,7 +32,7 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const EMBED_MODEL = "gemini-embedding-001";
 const EMBED_DIM = 1024;
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "gemini-2.5-flash";
 // Total context budget across all lessons for quiz generation
 const MAX_TOTAL_CHARS = 20_000;
 // Per-lesson cap so one giant lesson doesn't crowd out the rest
@@ -173,33 +172,75 @@ async function generateQuestions(
     contentBlock,
   ].join("\n");
 
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
+  // Gemini structured-output schema — Gemini accepts a subset of JSON Schema
+  // via generationConfig.responseSchema. Drop the Anthropic-specific
+  // input_schema wrapper and inline the inner properties here.
+  const responseSchema = {
+    type: "OBJECT",
+    properties: {
+      questions: {
+        type: "ARRAY",
+        minItems: 3,
+        maxItems: 15,
+        items: {
+          type: "OBJECT",
+          properties: {
+            question_text: { type: "STRING" },
+            options: {
+              type: "ARRAY",
+              minItems: 4,
+              maxItems: 4,
+              items: {
+                type: "OBJECT",
+                properties: {
+                  text: { type: "STRING" },
+                  is_correct: { type: "BOOLEAN" },
+                  explanation: { type: "STRING" },
+                },
+                required: ["text", "is_correct", "explanation"],
+              },
+            },
+            points: { type: "INTEGER" },
+          },
+          required: ["question_text", "options", "points"],
+        },
+      },
     },
+    required: ["questions"],
+  };
+
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 4000,
-      system: systemPrompt,
-      tools: [QUIZ_TOOL],
-      tool_choice: { type: "tool", name: "save_quiz_questions" },
-      messages: [{ role: "user", content: userPrompt }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema,
+        temperature: 0.3,
+        maxOutputTokens: 4000,
+      },
     }),
   });
 
   if (!resp.ok) {
-    throw new Error(`anthropic ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+    throw new Error(`gemini ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
   }
   const data = await resp.json();
-  // deno-lint-ignore no-explicit-any
-  const toolUse = (data.content || []).find((b: any) =>
-    b.type === "tool_use" && b.name === "save_quiz_questions"
-  );
-  if (!toolUse) throw new Error("Claude did not call save_quiz_questions");
-  return (toolUse.input?.questions ?? []) as GeneratedQuestion[];
+  const text =
+    // deno-lint-ignore no-explicit-any
+    (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p?.text ?? "").join("");
+  if (!text) throw new Error("gemini returned empty text");
+  let parsed: { questions?: GeneratedQuestion[] };
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`gemini returned non-JSON: ${String(e).slice(0, 200)}`);
+  }
+  return (parsed.questions ?? []) as GeneratedQuestion[];
 }
 
 serve(async (req: Request) => {
