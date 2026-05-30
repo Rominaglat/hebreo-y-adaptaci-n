@@ -169,18 +169,36 @@ def gemini_upload_file(file_path, mime_type):
 
     info = upload.json().get("file", {})
     uri = info.get("uri")
-    state = info.get("state", "ACTIVE")
+    name = info.get("name", "")
+    # IMPORTANT: do NOT default to ACTIVE. Video uploads almost always come
+    # back as PROCESSING, and if we skip the poll Gemini's generateContent
+    # immediately returns FAILED_PRECONDITION ("file is not in an ACTIVE
+    # state"). Treat a missing state as "needs polling".
+    state = info.get("state") or "PROCESSING"
     if not uri:
         raise RuntimeError(f"Gemini upload returned no URI: {info}")
 
-    # Step 3: wait for file processing if needed
-    if state == "PROCESSING":
-        name = info.get("name", "")
-        for _ in range(60):
+    # Step 3: poll until ACTIVE (or fail loudly). Large videos can take
+    # over a minute on Gemini's side; allow up to 5 minutes.
+    if state != "ACTIVE":
+        if not name:
+            raise RuntimeError(f"Gemini upload missing `name`, can't poll for state: {info}")
+        for _ in range(150):  # 150 * 2s = 5 min
             time.sleep(2)
-            poll = requests.get(f"{GEMINI_BASE}/v1beta/{name}?key={GEMINI_API_KEY}", timeout=10)
-            if poll.status_code == 200 and poll.json().get("state") == "ACTIVE":
+            poll = requests.get(
+                f"{GEMINI_BASE}/v1beta/{name}?key={GEMINI_API_KEY}", timeout=10,
+            )
+            if poll.status_code != 200:
+                continue
+            poll_state = (poll.json() or {}).get("state", "")
+            if poll_state == "ACTIVE":
+                state = "ACTIVE"
                 break
+            if poll_state == "FAILED":
+                err = poll.json().get("error", {})
+                raise RuntimeError(f"Gemini file processing FAILED: {err}")
+        else:
+            raise RuntimeError("Gemini file did not become ACTIVE within 5 minutes")
 
     return uri
 
