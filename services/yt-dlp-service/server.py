@@ -13,6 +13,7 @@ import tempfile
 import time
 import uuid
 import threading
+from urllib.parse import urlparse
 import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -255,6 +256,54 @@ def system_prompt_for(language):
     return SYSTEM_PROMPT_EN
 
 
+# Map of common audio/video file extensions to the MIME type Gemini wants.
+# Anything not in this map falls back to "application/octet-stream", which
+# Gemini will still accept for most cases.
+MIME_BY_EXT = {
+    ".mp3":  "audio/mpeg",
+    ".m4a":  "audio/mp4",
+    ".mp4":  "video/mp4",
+    ".mov":  "video/quicktime",
+    ".webm": "video/webm",
+    ".wav":  "audio/wav",
+    ".ogg":  "audio/ogg",
+    ".aac":  "audio/aac",
+    ".flac": "audio/flac",
+    ".mpeg": "video/mpeg",
+    ".mpg":  "video/mpeg",
+    ".avi":  "video/x-msvideo",
+    ".wmv":  "video/x-ms-wmv",
+    ".3gp":  "video/3gpp",
+    ".mkv":  "video/x-matroska",
+}
+
+
+def guess_mime_for(path):
+    ext = os.path.splitext(path)[1].lower()
+    return MIME_BY_EXT.get(ext, "application/octet-stream")
+
+
+def download_remote_file(job_id, url, tmpdir):
+    """Stream a remote file (Supabase Storage public URL, etc.) to disk so
+    we can hand it to Gemini's Files API. Returns the local path."""
+    parsed = urlparse(url)
+    name = os.path.basename(parsed.path) or "upload.bin"
+    name = re.sub(r"[^a-zA-Z0-9._-]", "_", name)[:120] or "upload.bin"
+    dest = os.path.join(tmpdir, f"source_{name}")
+    print(f"[{job_id}] downloading file from {url[:120]}")
+    with requests.get(url, stream=True, timeout=600) as r:
+        r.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+    size = os.path.getsize(dest)
+    print(f"[{job_id}] downloaded {size:,} bytes → {dest}")
+    if size == 0:
+        raise RuntimeError("downloaded file is empty")
+    return dest
+
+
 def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir):
     """Download audio with yt-dlp. Uses curl_cffi impersonation so YouTube
     doesn't reject us as a bot from a cloud IP, and a cookies file
@@ -288,19 +337,40 @@ def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir):
     return files[0]
 
 
-def process_job(job_id, video_url, referer_url, language, user_id):
+def process_job(job_id, video_url, file_url, referer_url, language, user_id):
     """Background worker — uses Gemini for transcription + summary.
-    YouTube URLs try Gemini's native YouTube fileData first (no download).
-    If Gemini denies (403, free-tier or project-restriction), we fall back
-    to yt-dlp with browser impersonation and upload through the Files API.
-    Vimeo / direct files always go through yt-dlp + Files API."""
+
+    Three input modes:
+      1. file_url set      → download the file directly (Supabase Storage,
+                              any HTTPS URL), upload to Gemini Files API,
+                              transcribe. This is the bulletproof path for
+                              unlisted / restricted videos — admins upload
+                              the source MP4/MP3 once instead of fighting
+                              YouTube's bot detection.
+      2. YouTube video_url → try Gemini's native YouTube fileData first;
+                              on 403 fall back to yt-dlp + Files API.
+      3. other video_url   → yt-dlp + Files API (Vimeo etc.).
+    """
     job = jobs[job_id]
     tmpdir = tempfile.mkdtemp()
     try:
         system_prompt = system_prompt_for(language)
         out = None
 
-        if is_youtube_url(video_url):
+        if file_url:
+            # ── Upload path: just download + transcribe, no YouTube at all ──
+            job["progress"] = "downloading"
+            local_path = download_remote_file(job_id, file_url, tmpdir)
+            mime = guess_mime_for(local_path)
+
+            job["progress"] = "uploading"
+            file_uri = gemini_upload_file(local_path, mime)
+            print(f"[{job_id}] Gemini file URI: {file_uri}")
+
+            job["progress"] = "transcribing"
+            out = gemini_generate(file_uri, mime, system_prompt)
+
+        elif is_youtube_url(video_url):
             # ── YouTube fast path — Gemini accepts the URL natively ──
             try:
                 job["progress"] = "transcribing"
@@ -393,8 +463,9 @@ def transcribe():
 
     data = request.json or {}
     video_url = data.get("video_url", "")
-    if not video_url:
-        return jsonify({"error": "video_url is required"}), 400
+    file_url = data.get("file_url", "")
+    if not video_url and not file_url:
+        return jsonify({"error": "video_url or file_url is required"}), 400
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {
@@ -408,7 +479,14 @@ def transcribe():
 
     threading.Thread(
         target=process_job,
-        args=(job_id, video_url, data.get("referer_url", ""), data.get("language", "he"), user.get("id", "")),
+        args=(
+            job_id,
+            video_url,
+            file_url,
+            data.get("referer_url", ""),
+            data.get("language", "he"),
+            user.get("id", ""),
+        ),
         daemon=True,
     ).start()
 

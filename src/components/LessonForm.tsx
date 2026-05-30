@@ -103,6 +103,8 @@ export default function LessonForm({
   const cancelSummaryRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resourceInputRef = useRef<HTMLInputElement>(null);
+  const sourceInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingSource, setUploadingSource] = useState(false);
 
   const getFileName = (url: string) => {
     try {
@@ -222,23 +224,22 @@ export default function LessonForm({
     onUpdate(moduleIndex, lessonIndex, 'resources_url', JSON.stringify(updatedResources));
   };
 
-  const handleGenerateSummary = async () => {
-    if (!lesson.video_url || generatingSummary) return;
-    
+  // Shared transcription pipeline. Pass EITHER `video_url` (YouTube/Vimeo)
+  // OR `file_url` (Supabase Storage URL of a directly uploaded MP4/MP3).
+  const runTranscribeJob = async (
+    source: { video_url?: string; file_url?: string },
+  ) => {
     setGeneratingSummary(true);
     cancelSummaryRef.current = false;
     try {
-      console.log("=== CLIENT: GENERATE SUMMARY START ===");
-      console.log("📥 Video URL:", lesson.video_url);
+      console.log("=== CLIENT: TRANSCRIBE START ===", source);
       console.log("🌐 Language:", summaryLang);
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        console.log("❌ No session");
         toast.error(t('auth.loginRequired'));
         return;
       }
-      console.log("✅ Session active, user:", session.user.id);
 
       const transcribeServiceUrl = import.meta.env.VITE_TRANSCRIBE_SERVICE_URL;
       if (!transcribeServiceUrl) {
@@ -257,7 +258,8 @@ export default function LessonForm({
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          video_url: lesson.video_url,
+          ...(source.video_url ? { video_url: source.video_url } : {}),
+          ...(source.file_url ? { file_url: source.file_url } : {}),
           language: summaryLang,
           referer_url: 'https://example.com/',
         }),
@@ -341,6 +343,47 @@ export default function LessonForm({
     } finally {
       setGeneratingSummary(false);
       setSummaryProgress('');
+    }
+  };
+
+  const handleGenerateSummary = async () => {
+    if (!lesson.video_url || generatingSummary) return;
+    await runTranscribeJob({ video_url: lesson.video_url });
+  };
+
+  // Upload the original lesson recording (MP4/MP3/etc.) straight to
+  // Supabase Storage, then hand its public URL to the transcribe service.
+  // This bypasses YouTube entirely — the bulletproof path for unlisted
+  // / age-restricted / private videos where yt-dlp can't reach.
+  const handleSourceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !user) return;
+    if (generatingSummary || uploadingSource) return;
+
+    setUploadingSource(true);
+    setSummaryProgress(t('lessonForm.progressStarting'));
+    try {
+      const fileExt = file.name.split('.').pop() || 'bin';
+      const baseName = file.name.replace(/\.[^/.]+$/, '');
+      const sanitizedName = sanitizeFileName(baseName);
+      const fileName = `lesson-sources/${user.id}/${Date.now()}_${sanitizedName}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('course-images')
+        .upload(fileName, file, { contentType: file.type || undefined });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('course-images')
+        .getPublicUrl(fileName);
+
+      await runTranscribeJob({ file_url: publicUrl });
+    } catch (err: any) {
+      console.error('Source upload + transcribe failed:', err);
+      toast.error(t('lessonForm.summaryError') + ': ' + (err.message || ''));
+    } finally {
+      setUploadingSource(false);
     }
   };
 
@@ -477,27 +520,27 @@ export default function LessonForm({
                 onChange={(e) => onUpdate(moduleIndex, lessonIndex, 'video_url', e.target.value)}
                 placeholder={t('createCourse.videoUrl')}
               />
-              {lesson.video_url && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Select value={summaryLang} onValueChange={(v: 'he' | 'en' | 'es') => setSummaryLang(v)}>
-                    <SelectTrigger className="w-[120px] h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="he">{t('lessonForm.hebrew')}</SelectItem>
-                      <SelectItem value="en">{t('lessonForm.english')}</SelectItem>
-                      <SelectItem value="es">{t('lessonForm.spanish')}</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={summaryLang} onValueChange={(v: 'he' | 'en' | 'es') => setSummaryLang(v)}>
+                  <SelectTrigger className="w-[120px] h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="he">{t('lessonForm.hebrew')}</SelectItem>
+                    <SelectItem value="en">{t('lessonForm.english')}</SelectItem>
+                    <SelectItem value="es">{t('lessonForm.spanish')}</SelectItem>
+                  </SelectContent>
+                </Select>
+                {lesson.video_url && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={handleGenerateSummary}
-                    disabled={generatingSummary}
+                    disabled={generatingSummary || uploadingSource}
                     className="gap-1.5"
                   >
-                    {generatingSummary ? (
+                    {generatingSummary && !uploadingSource ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         <span className="text-xs">{summaryProgress}</span>
@@ -509,18 +552,48 @@ export default function LessonForm({
                       </>
                     )}
                   </Button>
-                  {generatingSummary && (
-                    <button
-                      type="button"
-                      onClick={() => { cancelSummaryRef.current = true; }}
-                      className="p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      title={t('common.cancel')}
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                )}
+
+                {/* Upload-and-transcribe: bypasses YouTube entirely. */}
+                <input
+                  ref={sourceInputRef}
+                  type="file"
+                  accept="video/*,audio/*"
+                  onChange={handleSourceUpload}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => sourceInputRef.current?.click()}
+                  disabled={generatingSummary || uploadingSource}
+                  className="gap-1.5"
+                >
+                  {uploadingSource ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span className="text-xs">{summaryProgress || t('lessonForm.uploadingSource')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-3.5 h-3.5" />
+                      {t('lessonForm.uploadAndSummarize')}
+                    </>
                   )}
-                </div>
-              )}
+                </Button>
+
+                {generatingSummary && (
+                  <button
+                    type="button"
+                    onClick={() => { cancelSummaryRef.current = true; }}
+                    className="p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                    title={t('common.cancel')}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

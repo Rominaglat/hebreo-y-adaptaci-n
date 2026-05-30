@@ -339,6 +339,8 @@ const translations: Translations = {
   'lessonForm.resource': { he: 'משאב', en: 'Resource', es: 'Recurso' },
   'lessonForm.resourceName': { he: 'שם המשאב (אופציונלי)', en: 'Resource name (optional)', es: 'Nombre del recurso (opcional)' },
   'lessonForm.generateSummary': { he: 'יצירת סיכום', en: 'Generate Summary', es: 'Generar resumen' },
+  'lessonForm.uploadAndSummarize': { he: 'העלאה וסיכום', en: 'Upload & Summarize', es: 'Subir y resumir' },
+  'lessonForm.uploadingSource': { he: 'מעלה קובץ...', en: 'Uploading file...', es: 'Subiendo archivo...' },
   'lessonForm.downloadingVideo': { he: 'בהורדת סרטון...', en: 'Downloading video...', es: 'Descargando video...' },
   'lessonForm.transcribing': { he: 'בתמלול...', en: 'Transcribing...', es: 'Transcribiendo...' },
   'lessonForm.summarizing': { he: 'בסיכום...', en: 'Summarizing...', es: 'Resumiendo...' },
