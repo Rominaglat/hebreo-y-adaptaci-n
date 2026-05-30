@@ -210,7 +210,17 @@ class GeminiPermissionError(RuntimeError):
 
 
 def gemini_generate(file_uri, mime_type, system_prompt):
-    """Call Gemini generateContent with the uploaded file. Returns {transcript, summary}."""
+    """Call Gemini generateContent with the uploaded file. Returns {transcript, summary}.
+    Uses responseSchema so Gemini is forced to emit valid JSON — without it
+    long transcripts often contained an unescaped char and broke the parser."""
+    response_schema = {
+        "type": "OBJECT",
+        "properties": {
+            "transcript": {"type": "STRING"},
+            "summary":    {"type": "STRING"},
+        },
+        "required": ["transcript", "summary"],
+    }
     payload = {
         "contents": [
             {
@@ -224,7 +234,10 @@ def gemini_generate(file_uri, mime_type, system_prompt):
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "generationConfig": {
             "responseMimeType": "application/json",
-            "temperature": 0.2,
+            "responseSchema":   response_schema,
+            "temperature":      0.2,
+            # Gemini 2.5 Flash max. Long lessons need every token.
+            "maxOutputTokens":  8192,
         },
     }
     resp = requests.post(
@@ -242,10 +255,13 @@ def gemini_generate(file_uri, mime_type, system_prompt):
     candidates = data.get("candidates", [])
     if not candidates:
         raise RuntimeError(f"Gemini returned no candidates: {data}")
+    finish_reason = candidates[0].get("finishReason", "")
     parts = candidates[0].get("content", {}).get("parts", [])
     text = "".join(p.get("text", "") for p in parts).strip()
     if not text:
-        raise RuntimeError("Gemini returned empty text")
+        raise RuntimeError(
+            f"Gemini returned empty text (finishReason={finish_reason!r})",
+        )
 
     # Strip markdown code fences if the model added them
     text = re.sub(r"^```(?:json)?\s*", "", text)
@@ -253,13 +269,53 @@ def gemini_generate(file_uri, mime_type, system_prompt):
 
     try:
         parsed = json.loads(text)
+        return {
+            "transcript": (parsed.get("transcript") or "").strip(),
+            "summary":    (parsed.get("summary") or "").strip(),
+        }
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"Gemini returned non-JSON: {e}; first 200: {text[:200]}")
+        # Fallback: salvage at least the transcript so the admin doesn't
+        # lose the long-running job's output. The summary is optional.
+        salvaged = _salvage_json_fields(text)
+        if salvaged.get("transcript"):
+            print(
+                f"[gemini] JSON parse failed ({e}); salvaged "
+                f"transcript={len(salvaged['transcript'])} chars, "
+                f"summary={len(salvaged.get('summary',''))} chars"
+            )
+            return salvaged
+        raise RuntimeError(
+            f"Gemini returned non-JSON: {e}; finishReason={finish_reason!r}; first 200: {text[:200]}"
+        )
 
-    return {
-        "transcript": parsed.get("transcript", "").strip(),
-        "summary": parsed.get("summary", "").strip(),
-    }
+
+def _salvage_json_fields(blob):
+    """Best-effort extraction of `transcript` and `summary` from a
+    JSON-like blob that failed strict parsing. Used as a safety net
+    when Gemini emits an unescaped char inside a long string. We unescape
+    the typical JSON sequences (\", \\, \n, \r, \t) so the salvaged text
+    is human-readable."""
+    def _unescape(s):
+        return (
+            s.replace(r"\\", "\\")
+             .replace(r"\"", '"')
+             .replace(r"\/", "/")
+             .replace(r"\n", "\n")
+             .replace(r"\r", "\r")
+             .replace(r"\t", "\t")
+        )
+
+    out = {"transcript": "", "summary": ""}
+    # Greedy match across newlines — the transcript may legitimately
+    # contain unescaped \n at this point.
+    m = re.search(r'"transcript"\s*:\s*"(.+?)"\s*(?:,\s*"summary"|}\s*$)',
+                  blob, re.DOTALL)
+    if m:
+        out["transcript"] = _unescape(m.group(1)).strip()
+    m = re.search(r'"summary"\s*:\s*"(.+?)"\s*}\s*$', blob, re.DOTALL)
+    if m:
+        out["summary"] = _unescape(m.group(1)).strip()
+    return out
 
 
 def is_youtube_url(url):
