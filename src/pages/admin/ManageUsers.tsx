@@ -1652,26 +1652,28 @@ export default function ManageUsers() {
             <div className="space-y-2">
               <Label htmlFor="edit_email">{t('admin.userEmail')}</Label>
               <div className="relative">
-                <Mail className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Mail className="absolute end-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input
                   id="edit_email"
                   type="email"
+                  dir="ltr"
                   value={editUserForm.email}
                   onChange={(e) => setEditUserForm({ ...editUserForm, email: e.target.value })}
-                  className="ps-10"
+                  className="pe-10 text-start"
                 />
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit_phone">{t('manageUsers.phone')}</Label>
               <div className="relative">
-                <Phone className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Phone className="absolute end-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input
                   id="edit_phone"
                   type="tel"
+                  dir="ltr"
                   value={editUserForm.phone}
                   onChange={(e) => setEditUserForm({ ...editUserForm, phone: e.target.value })}
-                  className="ps-10"
+                  className="pe-10 text-start"
                   placeholder="050-1234567"
                 />
               </div>
