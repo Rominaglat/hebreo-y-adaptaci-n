@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { 
-  Calendar as CalendarIcon, 
-  Clock, 
-  MapPin, 
+import {
+  Calendar as CalendarIcon,
+  Clock,
+  MapPin,
   Link as LinkIcon,
   Users,
   Plus,
@@ -10,7 +10,8 @@ import {
   Loader2,
   RefreshCw,
   ExternalLink,
-  Settings
+  Settings,
+  Trash2
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, isToday, addMonths, subMonths, isPast } from 'date-fns';
 import { he, enUS, es } from 'date-fns/locale';
@@ -82,7 +83,7 @@ export default function CalendarPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [calendarUrl, setCalendarUrl] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const [deletingEvent, setDeletingEvent] = useState(false);
   const [rsvpAttendees, setRsvpAttendees] = useState<RsvpAttendee[]>([]);
   const [loadingAttendees, setLoadingAttendees] = useState(false);
   const [attendeesDialogOpen, setAttendeesDialogOpen] = useState(false);
@@ -181,7 +182,6 @@ export default function CalendarPage() {
     const { toastOnSuccess = false, focusOnSyncedEvents = false } = options;
 
     setSyncing(true);
-    setSyncError(null);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
@@ -199,17 +199,12 @@ export default function CalendarPage() {
       });
 
       console.log('Calendar sync result:', data);
-      
+
       // Check if response indicates success (even if there's a parsing error)
-      if (data?.success) {
-        setSyncError(null);
-      } else if (error) {
-        throw error;
-      } else if (data?.error) {
-        throw new Error(data.error);
+      if (!data?.success) {
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
       }
-      
-      setSyncError(null);
 
       const loadedEvents = await fetchEvents();
 
@@ -231,14 +226,17 @@ export default function CalendarPage() {
         });
       }
     } catch (error: any) {
+      // Sync failures are logged only. The toast is suppressed entirely for
+      // background/initial sync so the user is never interrupted by a
+      // destructive error when the iCal feed is offline or unconfigured.
       console.error('Error syncing calendar:', error);
-      const errorMessage = t('calendarPage.syncError');
-      setSyncError(errorMessage);
-      toast({
-        title: t('common.error'),
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      if (toastOnSuccess) {
+        toast({
+          title: t('common.error'),
+          description: t('calendarPage.syncError'),
+          variant: 'destructive',
+        });
+      }
     } finally {
       setSyncing(false);
     }
@@ -381,6 +379,41 @@ export default function CalendarPage() {
       });
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!isAdmin) return;
+    const confirmMessage = t('calendar.deleteConfirm');
+    if (!window.confirm(confirmMessage)) return;
+
+    setDeletingEvent(true);
+    try {
+      // Wipe RSVPs first so we don't leave orphaned rows; the events row
+      // delete may also cascade depending on FK policy, but doing it
+      // explicitly keeps this resilient to schema changes.
+      await supabase.from('event_rsvps').delete().eq('event_id', eventId);
+
+      const { error } = await supabase.from('events').delete().eq('id', eventId);
+      if (error) throw error;
+
+      toast({
+        title: t('calendar.eventDeleted'),
+        description: t('calendar.eventDeletedDesc'),
+      });
+
+      setEventDetailOpen(false);
+      setSelectedEvent(null);
+      fetchEvents();
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      toast({
+        title: t('common.error'),
+        description: t('calendar.eventDeleteError'),
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingEvent(false);
     }
   };
 
@@ -565,7 +598,31 @@ export default function CalendarPage() {
                   </DialogContent>
                 </Dialog>
                 
-                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <Dialog open={dialogOpen} onOpenChange={(open) => {
+                  setDialogOpen(open);
+                  // Prefill sensible local-event defaults when the dialog opens
+                  // so the Create button is enabled immediately — the user can
+                  // still adjust any field before saving.
+                  if (open && !newEvent.start_time && !newEvent.end_time) {
+                    const base = new Date(selectedDate);
+                    const now = new Date();
+                    if (isSameDay(base, now)) {
+                      base.setHours(now.getHours() + 1, 0, 0, 0);
+                    } else {
+                      base.setHours(10, 0, 0, 0);
+                    }
+                    const end = new Date(base.getTime() + 60 * 60 * 1000);
+                    const toLocalInput = (d: Date) => {
+                      const pad = (n: number) => String(n).padStart(2, '0');
+                      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                    };
+                    setNewEvent((prev) => ({
+                      ...prev,
+                      start_time: toLocalInput(base),
+                      end_time: toLocalInput(end),
+                    }));
+                  }
+                }}>
                   <DialogTrigger asChild>
                     <Button>
                       <Plus className="w-4 h-4 mx-2" />
@@ -1018,8 +1075,8 @@ export default function CalendarPage() {
                       setSelectedEvent({
                         ...selectedEvent,
                         user_rsvped: !selectedEvent.user_rsvped,
-                        rsvp_count: selectedEvent.user_rsvped 
-                          ? selectedEvent.rsvp_count - 1 
+                        rsvp_count: selectedEvent.user_rsvped
+                          ? selectedEvent.rsvp_count - 1
                           : selectedEvent.rsvp_count + 1
                       });
                     }}
@@ -1033,6 +1090,22 @@ export default function CalendarPage() {
                       <span className="truncate">{t('calendar.rsvp')}</span>
                     )}
                   </Button>
+                  {isAdmin && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleDeleteEvent(selectedEvent.id)}
+                      disabled={deletingEvent}
+                      className="flex-shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      aria-label={t('calendar.deleteEvent')}
+                    >
+                      {deletingEvent ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </Button>
+                  )}
                 </div>
               </>
             )}

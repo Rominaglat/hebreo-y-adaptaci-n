@@ -18,7 +18,7 @@ import LessonForm, { LessonFormData, createEmptyLesson } from '@/components/Less
 import RichTextEditor from '@/components/RichTextEditor';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { cn, withTimeout } from '@/lib/utils';
 
 interface ModuleForm {
   title: string;
@@ -129,21 +129,35 @@ export default function CreateCourse() {
   }, []);
 
   const fetchInstructors = async () => {
-    const { data: roles } = await supabase
-      .from('user_roles')
-      .select('user_id')
-      .in('role', ['instructor', 'admin']);
-    
-    if (roles && roles.length > 0) {
-      const userIds = roles.map(r => r.user_id);
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, avatar_url')
-        .in('id', userIds);
-      
-      if (profiles) {
-        setInstructors(profiles);
+    try {
+      const { data: roles } = await withTimeout(
+        supabase
+          .from('user_roles')
+          .select('user_id')
+          .in('role', ['instructor', 'admin']),
+        12000,
+        'fetchInstructors/roles'
+      );
+
+      if (roles && roles.length > 0) {
+        const userIds = roles.map(r => r.user_id);
+        const { data: profiles } = await withTimeout(
+          supabase
+            .from('profiles')
+            .select('id, full_name, email, avatar_url')
+            .in('id', userIds),
+          12000,
+          'fetchInstructors/profiles'
+        );
+
+        if (profiles) {
+          setInstructors(profiles);
+        }
       }
+    } catch (error) {
+      // Don't block the form — the user can still create a course without
+      // selecting a co-instructor. Just log and let the picker stay empty.
+      console.error('Error fetching instructors:', error);
     }
   };
 

@@ -81,6 +81,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { withTimeout } from '@/lib/utils';
 import { ImportUsersDialog } from '@/components/admin/ImportUsersDialog';
 import { StudentProgressDialog } from '@/components/admin/StudentProgressDialog';
 interface UserActivity {
@@ -113,7 +114,7 @@ interface Course {
 }
 
 export default function ManageUsers() {
-  const { isAdmin, isSuperAdmin, isInstructor } = useAuth();
+  const { isAdmin, isSuperAdmin, isInstructor, loading: authLoading } = useAuth();
   // Admin/super_admin can perform destructive actions; instructors are view-only.
   const canEdit = isAdmin;
   const canView = isAdmin || isInstructor;
@@ -194,18 +195,26 @@ export default function ManageUsers() {
   };
 
   useEffect(() => {
+    // Wait for auth to finish before deciding what to do. Without this gate
+    // the page would render with `loading=true` while `canView` is still
+    // false, and the spinner would never resolve if auth happens to error
+    // out or the user lacks permission.
+    if (authLoading) return;
     if (canView) {
       fetchUsers();
       fetchCourses();
+    } else {
+      setLoading(false);
     }
-  }, [canView]);
+  }, [authLoading, canView, currentTenant?.id]);
 
   const fetchCourses = async () => {
     try {
-      const { data } = await supabase
-        .from('courses')
-        .select('id, title')
-        .order('title');
+      const { data } = await withTimeout(
+        supabase.from('courses').select('id, title').order('title'),
+        12000,
+        'fetchCourses'
+      );
 
       if (data) {
         setCourses(data);
@@ -229,7 +238,11 @@ export default function ManageUsers() {
         rolesQuery = rolesQuery.neq('role', 'super_admin');
       }
 
-      const { data: roleRows, error: rolesError } = await rolesQuery;
+      const { data: roleRows, error: rolesError } = await withTimeout(
+        rolesQuery,
+        12000,
+        'fetchUsers/roles'
+      );
 
       if (rolesError) throw rolesError;
 
@@ -270,11 +283,15 @@ export default function ManageUsers() {
         // Loop until we get less than a full page back.
         // Hard cap of 50k rows as a safety net.
         while (from < 50000) {
-          const { data, error } = await supabase
-            .from('enrollments')
-            .select('user_id, course_id')
-            .in('user_id', userIds)
-            .range(from, from + PAGE - 1);
+          const { data, error } = await withTimeout(
+            supabase
+              .from('enrollments')
+              .select('user_id, course_id')
+              .in('user_id', userIds)
+              .range(from, from + PAGE - 1),
+            12000,
+            'fetchUsers/enrollments'
+          );
           if (error) throw error;
           if (!data || data.length === 0) break;
           all.push(...data);
@@ -285,11 +302,15 @@ export default function ManageUsers() {
       };
 
       const [profilesResult, enrollmentsData] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, email, join_date, avatar_url, full_name, phone')
-          .in('id', userIds)
-          .order('join_date', { ascending: false }),
+        withTimeout(
+          supabase
+            .from('profiles')
+            .select('id, email, join_date, avatar_url, full_name, phone')
+            .in('id', userIds)
+            .order('join_date', { ascending: false }),
+          12000,
+          'fetchUsers/profiles'
+        ),
         fetchAllEnrollments(),
       ]);
       const enrollmentsResult = { data: enrollmentsData, error: null as null };

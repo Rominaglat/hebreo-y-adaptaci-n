@@ -22,16 +22,16 @@ export function OnboardingFlow() {
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
 
   const INTERESTS = [
-    { id: 'ai', label: t('onboarding.interest.ai'), emoji: '🤖' },
-    { id: 'business', label: t('onboarding.interest.business'), emoji: '💼' },
-    { id: 'marketing', label: t('onboarding.interest.marketing'), emoji: '📈' },
-    { id: 'sales', label: t('onboarding.interest.sales'), emoji: '💰' },
-    { id: 'product', label: t('onboarding.interest.product'), emoji: '🎯' },
-    { id: 'design', label: t('onboarding.interest.design'), emoji: '🎨' },
-    { id: 'dev', label: t('onboarding.interest.dev'), emoji: '💻' },
-    { id: 'data', label: t('onboarding.interest.data'), emoji: '📊' },
-    { id: 'content', label: t('onboarding.interest.content'), emoji: '✍️' },
-    { id: 'leadership', label: t('onboarding.interest.leadership'), emoji: '🚀' },
+    { id: 'conversation', label: t('onboarding.interest.conversation'), emoji: '💬' },
+    { id: 'reading', label: t('onboarding.interest.reading'), emoji: '📖' },
+    { id: 'writing', label: t('onboarding.interest.writing'), emoji: '✍️' },
+    { id: 'listening', label: t('onboarding.interest.listening'), emoji: '👂' },
+    { id: 'grammar', label: t('onboarding.interest.grammar'), emoji: '📝' },
+    { id: 'vocabulary', label: t('onboarding.interest.vocabulary'), emoji: '🔤' },
+    { id: 'pronunciation', label: t('onboarding.interest.pronunciation'), emoji: '🗣️' },
+    { id: 'culture', label: t('onboarding.interest.culture'), emoji: '🇮🇱' },
+    { id: 'biblical', label: t('onboarding.interest.biblical'), emoji: '📜' },
+    { id: 'slang', label: t('onboarding.interest.slang'), emoji: '😎' },
   ];
 
   const firstName = ((tenantProfile?.full_name || profile?.full_name || '').trim().split(' ')[0]) || t('onboarding.fallbackName');

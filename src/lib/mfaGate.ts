@@ -12,6 +12,7 @@
 // enrolled (verify via the audit doc Secrets / status board).
 
 import { supabase } from '@/integrations/supabase/client';
+import { withTimeout } from '@/lib/utils';
 
 export interface MfaStatus {
   aal: 'aal1' | 'aal2' | 'unknown';
@@ -22,14 +23,27 @@ export interface MfaStatus {
 export async function getMfaStatus(): Promise<MfaStatus> {
   const required = (import.meta.env.VITE_REQUIRE_MFA_FOR_ADMINS as string) === '1';
   try {
-    const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    // Hard-bound these auth calls: the underlying GoTrue requests can stall
+    // forever on token-refresh races or transient outages. If they don't
+    // resolve quickly we fail-open below — never block the entire UI on the
+    // MFA gate while the rest of the app is ready to render.
+    const { data: aalData } = await withTimeout(
+      supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+      6000,
+      'mfa.getAuthenticatorAssuranceLevel'
+    );
     const aal = (aalData?.currentLevel as 'aal1' | 'aal2' | null) ?? 'unknown';
-    const { data: factors } = await supabase.auth.mfa.listFactors();
+    const { data: factors } = await withTimeout(
+      supabase.auth.mfa.listFactors(),
+      6000,
+      'mfa.listFactors'
+    );
     const hasVerifiedTotp = (factors?.totp ?? []).some((f) => f.status === 'verified');
     return { aal, hasVerifiedTotp, required };
   } catch {
     // Failing-open here is intentional — never lock users out because the
-    // MFA API call hiccupped. The Dashboard TOTP toggle is the real switch.
+    // MFA API call hiccupped (or timed out). The Dashboard TOTP toggle is
+    // the real switch.
     return { aal: 'unknown', hasVerifiedTotp: false, required };
   }
 }

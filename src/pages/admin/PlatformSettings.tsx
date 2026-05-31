@@ -20,6 +20,7 @@ import { ColorField } from '@/components/admin/ColorField';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 interface TenantSettingsData {
+  id: string | null;
   logo_url: string | null;
   primary_color: string | null;
   secondary_color: string | null;
@@ -109,6 +110,7 @@ export default function PlatformSettings() {
   const [livePreview, setLivePreview] = useState(false);
   const originalColorsRef = useRef<Map<string, string>>(new Map());
   const [settings, setSettings] = useState<TenantSettingsData>({
+    id: null,
     logo_url: null,
     primary_color: defaultColors.primary_color,
     secondary_color: defaultColors.secondary_color,
@@ -222,6 +224,7 @@ export default function PlatformSettings() {
       if (error) throw error;
       if (data) {
         setSettings({
+          id: data.id,
           logo_url: data.logo_url || currentTenant.logo_url,
           primary_color: data.primary_color || defaultColors.primary_color,
           secondary_color: data.secondary_color || defaultColors.secondary_color,
@@ -248,6 +251,7 @@ export default function PlatformSettings() {
         if (insertError) throw insertError;
         if (newSettings) {
           setSettings({
+            id: newSettings.id,
             logo_url: newSettings.logo_url,
             primary_color: newSettings.primary_color || defaultColors.primary_color,
             secondary_color: newSettings.secondary_color || defaultColors.secondary_color,
@@ -288,9 +292,7 @@ export default function PlatformSettings() {
     if (!user || !currentTenant) return;
     setSaving(true);
     try {
-      const {
-        error
-      } = await supabase.from('tenant_settings').update({
+      const payload = {
         logo_url: settings.logo_url,
         primary_color: settings.primary_color,
         secondary_color: settings.secondary_color,
@@ -310,7 +312,28 @@ export default function PlatformSettings() {
         ai_assistant_name: settings.ai_assistant_name,
         ai_assistant_avatar_url: settings.ai_assistant_avatar_url,
         ai_assistant_system_prompt: settings.ai_assistant_system_prompt,
-      } as any);
+      } as any;
+
+      // tenant_settings is now a singleton (post Phase 2C). Supabase rejects
+      // UPDATEs without a filter, so we scope by the row's id when known and
+      // fall back to upsert (insert-or-update) on first save.
+      let error;
+      if (settings.id) {
+        ({ error } = await supabase
+          .from('tenant_settings')
+          .update(payload)
+          .eq('id', settings.id));
+      } else {
+        const { data: inserted, error: upsertError } = await supabase
+          .from('tenant_settings')
+          .insert(payload)
+          .select('id')
+          .single();
+        error = upsertError;
+        if (inserted?.id) {
+          setSettings(prev => ({ ...prev, id: inserted.id }));
+        }
+      }
       if (error) throw error;
       await refreshTenantSettings();
       toast({
