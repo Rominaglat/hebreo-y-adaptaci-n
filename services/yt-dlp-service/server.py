@@ -49,9 +49,31 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com"
 
 jobs = {}
 
-SYSTEM_PROMPT_HE = """אתה מקבל אודיו של שיעור. עליך להפיק:
-1. תמלול מלא ומדויק של דברי המורה.
-2. סיכום מובנה לפי הפורמט הבא, ב־HTML נקי עם <h3>, <p>, <ul>, <li>, <strong>:
+# ────────────────────────────────────────────────────────────────
+# Two-pass transcribe + summarize:
+#   Pass 1 — audio → plain-text transcript      (65k-token budget)
+#   Pass 2 — transcript → structured HTML summary (16k-token budget)
+#
+# We previously packed both into one JSON response sharing an 8k-token
+# budget, which silently truncated long lessons mid-output — users got
+# a half summary, or transcript-only with an empty summary. Splitting
+# into two calls means neither side can starve the other.
+# ────────────────────────────────────────────────────────────────
+
+TRANSCRIBE_PROMPT_HE = (
+    "תמלל את האודיו/וידאו הזה של שיעור בעברית במלואו ובדיוק. "
+    "החזר אך ורק את הטקסט המתומלל — בלי כותרות, בלי הערות, בלי JSON, בלי markdown."
+)
+TRANSCRIBE_PROMPT_EN = (
+    "Transcribe this lesson audio/video verbatim. "
+    "Return only the transcript text — no headings, no commentary, no JSON, no markdown."
+)
+TRANSCRIBE_PROMPT_ES = (
+    "Transcribe este audio/video de la clase de forma íntegra y literal. "
+    "Devuelve solo el texto transcrito — sin encabezados, sin comentarios, sin JSON, sin markdown."
+)
+
+SUMMARIZE_PROMPT_HE = """אתה מקבל תמלול של שיעור. הפק סיכום מובנה ב־HTML נקי בלבד, באמצעות <h3>, <p>, <ul>, <li>, <strong>, בפורמט הבא:
 
 🎯 מטרת השיעור — 2 משפטים על הנושא ומה התלמידים אמורים ללמוד.
 📁 משאבים שימושיים — רשימה ממוספרת של כל משאב שהוזכר (מאמרים, אתרים, ספרים, מצגות) כולל קישור אם נזכר. אם אין — "לא צויינו משאבים במהלך השיעור."
@@ -63,13 +85,9 @@ SYSTEM_PROMPT_HE = """אתה מקבל אודיו של שיעור. עליך לה�
 - אל תשתמש בציטוטים ישירים, נסח בלשון סיכום.
 - הימנע ממידע לא רלוונטי או שיחות חולין.
 - כתוב את כל הסיכום בעברית.
+- החזר אך ורק את ה־HTML של הסיכום, ללא JSON וללא ```html fences."""
 
-החזר את התוצאה כ־JSON תקין בלבד (ללא markdown fences, ללא טקסט נוסף):
-{"transcript": "<full transcript text>", "summary": "<HTML summary>"}"""
-
-SYSTEM_PROMPT_EN = """You are given a lesson audio. Produce:
-1. A complete and accurate transcript of the speaker's words.
-2. A structured summary in clean HTML using <h3>, <p>, <ul>, <li>, <strong>, in this format:
+SUMMARIZE_PROMPT_EN = """You are given a lesson transcript. Produce a structured summary in clean HTML only, using <h3>, <p>, <ul>, <li>, <strong>, in this format:
 
 🎯 Lesson Goal — 2 sentences on the topic and what students should learn.
 📁 Useful Resources — numbered list of every resource mentioned (articles, websites, books, slides) including links if given. If none — "No resources were mentioned in this lesson."
@@ -81,13 +99,9 @@ Guidelines:
 - Do not use direct quotes; phrase as a summary.
 - Avoid irrelevant material or small talk.
 - Write the entire summary in English.
+- Return only the HTML for the summary — no JSON, no ```html fences."""
 
-Return the result as valid JSON only (no markdown fences, no extra text):
-{"transcript": "<full transcript text>", "summary": "<HTML summary>"}"""
-
-SYSTEM_PROMPT_ES = """Recibes el audio de una clase. Debes producir:
-1. Una transcripción completa y precisa de las palabras del docente.
-2. Un resumen estructurado en HTML limpio usando <h3>, <p>, <ul>, <li>, <strong>, con este formato:
+SUMMARIZE_PROMPT_ES = """Recibes la transcripción de una clase. Produce un resumen estructurado únicamente en HTML limpio, usando <h3>, <p>, <ul>, <li>, <strong>, con este formato:
 
 🎯 Objetivo de la clase — 2 oraciones sobre el tema y lo que los estudiantes deben aprender.
 📁 Recursos útiles — lista numerada de cada recurso mencionado (artículos, sitios web, libros, presentaciones) incluyendo enlaces si se mencionan. Si no hay — "No se mencionaron recursos en esta clase."
@@ -99,9 +113,7 @@ Directrices:
 - No uses citas directas; redacta como resumen.
 - Evita material irrelevante o conversación informal.
 - Escribe todo el resumen en español.
-
-Devuelve el resultado únicamente como JSON válido (sin bloques markdown, sin texto adicional):
-{"transcript": "<texto completo de la transcripción>", "summary": "<resumen HTML>"}"""
+- Devuelve solo el HTML del resumen — sin JSON, sin bloques ```html."""
 
 
 def verify_supabase_auth(token):
@@ -209,37 +221,10 @@ class GeminiPermissionError(RuntimeError):
     enabled). The caller can fall back to yt-dlp + Files API upload."""
 
 
-def gemini_generate(file_uri, mime_type, system_prompt):
-    """Call Gemini generateContent with the uploaded file. Returns {transcript, summary}.
-    Uses responseSchema so Gemini is forced to emit valid JSON — without it
-    long transcripts often contained an unescaped char and broke the parser."""
-    response_schema = {
-        "type": "OBJECT",
-        "properties": {
-            "transcript": {"type": "STRING"},
-            "summary":    {"type": "STRING"},
-        },
-        "required": ["transcript", "summary"],
-    }
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [
-                    {"fileData": {"fileUri": file_uri, "mimeType": mime_type}},
-                    {"text": "Transcribe and summarize this lesson."},
-                ],
-            }
-        ],
-        "systemInstruction": {"parts": [{"text": system_prompt}]},
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema":   response_schema,
-            "temperature":      0.2,
-            # Gemini 2.5 Flash max. Long lessons need every token.
-            "maxOutputTokens":  8192,
-        },
-    }
+def _gemini_call(payload, action_label):
+    """Shared Gemini POST + finishReason handling. Returns the response text.
+    Raises GeminiPermissionError on 403 and RuntimeError with a clear message
+    on MAX_TOKENS / empty / non-200 responses."""
     resp = requests.post(
         f"{GEMINI_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
         headers={"Content-Type": "application/json"},
@@ -249,85 +234,115 @@ def gemini_generate(file_uri, mime_type, system_prompt):
     if resp.status_code == 403:
         raise GeminiPermissionError(f"Gemini denied (403): {resp.text[:300]}")
     if resp.status_code != 200:
-        raise RuntimeError(f"Gemini generate failed: {resp.status_code} {resp.text[:400]}")
+        raise RuntimeError(
+            f"Gemini {action_label} failed: {resp.status_code} {resp.text[:400]}"
+        )
 
     data = resp.json()
     candidates = data.get("candidates", [])
     if not candidates:
-        raise RuntimeError(f"Gemini returned no candidates: {data}")
+        raise RuntimeError(f"Gemini {action_label} returned no candidates: {data}")
     finish_reason = candidates[0].get("finishReason", "")
     parts = candidates[0].get("content", {}).get("parts", [])
     text = "".join(p.get("text", "") for p in parts).strip()
+    if finish_reason == "MAX_TOKENS":
+        # Hard-fail instead of returning a half-baked result. Callers surface
+        # this to the user so they know to shorten the lesson or split it.
+        raise RuntimeError(
+            f"Gemini {action_label} hit the output-token cap — the lesson is "
+            f"too long for a single pass. Got {len(text)} chars before truncation."
+        )
     if not text:
         raise RuntimeError(
-            f"Gemini returned empty text (finishReason={finish_reason!r})",
+            f"Gemini {action_label} returned empty text (finishReason={finish_reason!r})"
         )
+    return text
 
-    # Strip markdown code fences if the model added them
-    text = re.sub(r"^```(?:json)?\s*", "", text)
+
+def gemini_transcribe(file_uri, mime_type, language):
+    """Pass 1: audio/video → plain-text transcript.
+
+    Uses the full 65,536-token output budget of Gemini 2.5 Flash so even
+    hour-long lessons fit in a single response. No JSON envelope — the
+    response is the transcript itself."""
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"fileData": {"fileUri": file_uri, "mimeType": mime_type}},
+                    {"text": transcribe_prompt_for(language)},
+                ],
+            }
+        ],
+        "generationConfig": {
+            "temperature":     0.0,
+            "maxOutputTokens": 65536,
+        },
+    }
+    text = _gemini_call(payload, "transcribe")
+    # Strip accidental markdown code fences if the model wrapped anything.
+    text = re.sub(r"^```(?:[a-z]+)?\s*", "", text)
     text = re.sub(r"\s*```\s*$", "", text)
-
-    try:
-        parsed = json.loads(text)
-        return {
-            "transcript": (parsed.get("transcript") or "").strip(),
-            "summary":    (parsed.get("summary") or "").strip(),
-        }
-    except json.JSONDecodeError as e:
-        # Fallback: salvage at least the transcript so the admin doesn't
-        # lose the long-running job's output. The summary is optional.
-        salvaged = _salvage_json_fields(text)
-        if salvaged.get("transcript"):
-            print(
-                f"[gemini] JSON parse failed ({e}); salvaged "
-                f"transcript={len(salvaged['transcript'])} chars, "
-                f"summary={len(salvaged.get('summary',''))} chars"
-            )
-            return salvaged
-        raise RuntimeError(
-            f"Gemini returned non-JSON: {e}; finishReason={finish_reason!r}; first 200: {text[:200]}"
-        )
+    return text.strip()
 
 
-def _salvage_json_fields(blob):
-    """Best-effort extraction of `transcript` and `summary` from a
-    JSON-like blob that failed strict parsing. Used as a safety net
-    when Gemini emits an unescaped char inside a long string. We unescape
-    the typical JSON sequences (\", \\, \n, \r, \t) so the salvaged text
-    is human-readable."""
-    def _unescape(s):
-        return (
-            s.replace(r"\\", "\\")
-             .replace(r"\"", '"')
-             .replace(r"\/", "/")
-             .replace(r"\n", "\n")
-             .replace(r"\r", "\r")
-             .replace(r"\t", "\t")
-        )
+def gemini_summarize(transcript_text, language):
+    """Pass 2: transcript → structured HTML summary.
 
-    out = {"transcript": "", "summary": ""}
-    # Greedy match across newlines — the transcript may legitimately
-    # contain unescaped \n at this point.
-    m = re.search(r'"transcript"\s*:\s*"(.+?)"\s*(?:,\s*"summary"|}\s*$)',
-                  blob, re.DOTALL)
-    if m:
-        out["transcript"] = _unescape(m.group(1)).strip()
-    m = re.search(r'"summary"\s*:\s*"(.+?)"\s*}\s*$', blob, re.DOTALL)
-    if m:
-        out["summary"] = _unescape(m.group(1)).strip()
-    return out
+    Lives in its own 16k-token output budget, completely independent of
+    the transcript pass — the summary can no longer be starved by a long
+    transcript."""
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"text": transcript_text},
+                    {"text": "Summarize the lesson transcript above using the format specified in the system instructions."},
+                ],
+            }
+        ],
+        "systemInstruction": {"parts": [{"text": summarize_prompt_for(language)}]},
+        "generationConfig": {
+            "temperature":     0.2,
+            "maxOutputTokens": 16384,
+        },
+    }
+    text = _gemini_call(payload, "summarize")
+    # Strip ```html / ```json fences just in case the model adds them.
+    text = re.sub(r"^```(?:[a-z]+)?\s*", "", text)
+    text = re.sub(r"\s*```\s*$", "", text)
+    return text.strip()
+
+
+def gemini_generate(file_uri, mime_type, language):
+    """Two-pass transcribe + summarize. Each pass has its own output-token
+    budget so the summary can never be truncated by a long transcript
+    (which was the root cause of half-summaries / empty summaries)."""
+    transcript = gemini_transcribe(file_uri, mime_type, language)
+    summary = gemini_summarize(transcript, language)
+    return {"transcript": transcript, "summary": summary}
 
 
 def is_youtube_url(url):
     return bool(re.search(r"(?:youtube\.com|youtu\.be)/", url or ""))
 
 
-def system_prompt_for(language):
+def transcribe_prompt_for(language):
     if language == "he":
-        return SYSTEM_PROMPT_HE
+        return TRANSCRIBE_PROMPT_HE
     if language == "es":
-        return SYSTEM_PROMPT_ES
-    return SYSTEM_PROMPT_EN
+        return TRANSCRIBE_PROMPT_ES
+    return TRANSCRIBE_PROMPT_EN
+
+
+def summarize_prompt_for(language):
+    if language == "he":
+        return SUMMARIZE_PROMPT_HE
+    if language == "es":
+        return SUMMARIZE_PROMPT_ES
+    return SUMMARIZE_PROMPT_EN
 
 
 # Map of common audio/video file extensions to the MIME type Gemini wants.
@@ -428,7 +443,6 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id):
     job = jobs[job_id]
     tmpdir = tempfile.mkdtemp()
     try:
-        system_prompt = system_prompt_for(language)
         out = None
 
         if file_url:
@@ -442,14 +456,14 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id):
             print(f"[{job_id}] Gemini file URI: {file_uri}")
 
             job["progress"] = "transcribing"
-            out = gemini_generate(file_uri, mime, system_prompt)
+            out = gemini_generate(file_uri, mime, language)
 
         elif is_youtube_url(video_url):
             # ── YouTube fast path — Gemini accepts the URL natively ──
             try:
                 job["progress"] = "transcribing"
                 print(f"[{job_id}] YouTube native path: {video_url[:80]}")
-                out = gemini_generate(video_url, "video/*", system_prompt)
+                out = gemini_generate(video_url, "video/*", language)
             except GeminiPermissionError as e:
                 print(f"[{job_id}] Gemini denied YouTube URL, falling back to yt-dlp: {e}")
 
@@ -463,7 +477,7 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id):
             print(f"[{job_id}] Gemini file URI: {file_uri}")
 
             job["progress"] = "transcribing"
-            out = gemini_generate(file_uri, "audio/mp3", system_prompt)
+            out = gemini_generate(file_uri, "audio/mp3", language)
 
         transcript_text = out["transcript"]
         summary = out["summary"]
