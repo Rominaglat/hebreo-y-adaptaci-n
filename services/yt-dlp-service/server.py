@@ -287,12 +287,19 @@ def gemini_transcribe(file_uri, mime_type, language):
     number — and triggered 400 INVALID_ARGUMENT). Long lessons can still
     blow this; _gemini_call surfaces finishReason=MAX_TOKENS so the
     caller fails loud instead of returning half a transcript."""
-    # Build fileData; OMIT mimeType when it's a YouTube URL (Gemini accepts
-    # the URL natively and rejects "video/*" wildcards). Also omit on
-    # application/octet-stream — Gemini wants a concrete type or nothing.
-    file_data = {"fileUri": file_uri}
-    if mime_type and mime_type not in ("video/*", "application/octet-stream"):
-        file_data["mimeType"] = mime_type
+    # Gemini's fileData rules (current API behavior, 2026):
+    #   - wildcards like "video/*" → 400 INVALID_ARGUMENT
+    #   - omitting mimeType on a YouTube URL → Gemini does a plain HTTP
+    #     GET, hits the YouTube watch page, returns "Unsupported MIME
+    #     type: text/html" 400. Counter-intuitive but verified empirically.
+    #   - application/octet-stream → also rejected.
+    # The safe answer is to always send a concrete mime. For YouTube URLs
+    # the caller passes "video/mp4" explicitly; for uploaded files we use
+    # MIME_BY_EXT. If the caller passes octet-stream / wildcard we default
+    # to "video/mp4" as a best-effort.
+    if not mime_type or mime_type == "video/*" or mime_type == "application/octet-stream":
+        mime_type = "video/mp4"
+    file_data = {"fileUri": file_uri, "mimeType": mime_type}
     payload = {
         "contents": [
             {
@@ -488,10 +495,12 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id):
 
         elif is_youtube_url(video_url):
             # ── YouTube fast path — Gemini accepts the URL natively ──
+            # The current API rejects "video/*" wildcards; "video/mp4"
+            # works and is what Google's own docs show for YouTube URLs.
             try:
                 job["progress"] = "transcribing"
                 print(f"[{job_id}] YouTube native path: {video_url[:80]}")
-                out = gemini_generate(video_url, "video/*", language)
+                out = gemini_generate(video_url, "video/mp4", language)
             except GeminiPermissionError as e:
                 print(f"[{job_id}] Gemini denied YouTube URL, falling back to yt-dlp: {e}")
 
