@@ -313,6 +313,11 @@ def gemini_transcribe(file_uri, mime_type, language):
         "generationConfig": {
             "temperature":     0.0,
             "maxOutputTokens": 8192,
+            # LOW res cuts video token use ~4x (~66 vs ~258 tokens/sec).
+            # Transcripts ride on the audio track, so this loses nothing
+            # for our use case and lets ~4-hour videos fit in the 1M-token
+            # input window instead of the ~hour cap at default resolution.
+            "mediaResolution": "MEDIA_RESOLUTION_LOW",
         },
     }
     text = _gemini_call(payload, "transcribe")
@@ -362,6 +367,19 @@ def gemini_generate(file_uri, mime_type, language):
 
 def is_youtube_url(url):
     return bool(re.search(r"(?:youtube\.com|youtu\.be)/", url or ""))
+
+
+def canonicalize_youtube_url(url):
+    """Strip everything except the video id so Gemini's YouTube ingestion
+    works. With extras like '&t=5s' Gemini returns 400 'Cannot fetch
+    content from the provided URL'. Handles both watch?v= and youtu.be/
+    short links."""
+    if not url:
+        return url
+    m = re.search(r"(?:youtube\.com/(?:watch\?[^#]*?v=|embed/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})", url)
+    if m:
+        return f"https://www.youtube.com/watch?v={m.group(1)}"
+    return url
 
 
 def transcribe_prompt_for(language):
@@ -495,12 +513,14 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id):
 
         elif is_youtube_url(video_url):
             # ── YouTube fast path — Gemini accepts the URL natively ──
-            # The current API rejects "video/*" wildcards; "video/mp4"
-            # works and is what Google's own docs show for YouTube URLs.
+            # Canonicalize the URL: query params like &t=5s, &list=...,
+            # &si=... make Gemini return 400 'Cannot fetch content from
+            # the provided URL'. We keep only the video id.
+            clean_url = canonicalize_youtube_url(video_url)
             try:
                 job["progress"] = "transcribing"
-                print(f"[{job_id}] YouTube native path: {video_url[:80]}")
-                out = gemini_generate(video_url, "video/mp4", language)
+                print(f"[{job_id}] YouTube native path: {clean_url[:80]}")
+                out = gemini_generate(clean_url, "video/mp4", language)
             except GeminiPermissionError as e:
                 print(f"[{job_id}] Gemini denied YouTube URL, falling back to yt-dlp: {e}")
 
