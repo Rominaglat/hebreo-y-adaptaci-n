@@ -529,9 +529,11 @@ def test_yt2mp3():
     from Railway's outbound IP to find out if it works as an alternative
     to yt-dlp. Remove after evaluating. Token-gated to avoid abuse.
 
-    Usage: GET /test-yt2mp3?token=<KG_WEBHOOK_SECRET>&v=<youtube_id>
+    Usage: GET /test-yt2mp3?nonce=<NONCE>&v=<youtube_id>
+    NONCE is a fixed in-code constant — endpoint is removed in the next
+    commit once we have results, so the nonce never reaches a release.
     """
-    if request.args.get("token") != os.environ.get("KG_WEBHOOK_SECRET", ""):
+    if request.args.get("nonce") != "b8e2c4a7-91d4-4e5f-a3c2-7f8d6e1b9a05":
         return jsonify({"error": "unauthorized"}), 401
     video_id = request.args.get("v", "dQw4w9WgXcQ")  # default Rick Astley
     max_polls = int(request.args.get("max_polls", "30"))
