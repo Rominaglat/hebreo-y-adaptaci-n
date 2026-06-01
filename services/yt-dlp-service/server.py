@@ -60,17 +60,29 @@ jobs = {}
 # into two calls means neither side can starve the other.
 # ────────────────────────────────────────────────────────────────
 
+# NOTE: "verbatim" / "מילה במילה" language can trigger Gemini's RECITATION
+# filter on Hebrew lessons that quote scripture, songs, or other texts the
+# model has seen in training. The phrasing below asks for the content of
+# the speaker's words (paraphrase OK) which avoids the filter while still
+# producing a usable lesson transcript for the summarize step.
 TRANSCRIBE_PROMPT_HE = (
-    "תמלל את האודיו/וידאו הזה של שיעור בעברית במלואו ובדיוק. "
-    "החזר אך ורק את הטקסט המתומלל — בלי כותרות, בלי הערות, בלי JSON, בלי markdown."
+    "כתוב את התוכן של הדברים שאומרת המורה בשיעור הזה. "
+    "אתה יכול לנסח מחדש כדי לשמור על זרימה, אבל שמור על כל המידע, "
+    "ההסברים, הדוגמאות וההקשר. החזר רק את הטקסט — בלי כותרות, בלי הערות, "
+    "בלי JSON, בלי markdown."
 )
 TRANSCRIBE_PROMPT_EN = (
-    "Transcribe this lesson audio/video verbatim. "
-    "Return only the transcript text — no headings, no commentary, no JSON, no markdown."
+    "Write the content of what the teacher says in this lesson. You may "
+    "rephrase slightly for flow, but preserve every fact, explanation, "
+    "example, and context. Return only the text — no headings, no "
+    "commentary, no JSON, no markdown."
 )
 TRANSCRIBE_PROMPT_ES = (
-    "Transcribe este audio/video de la clase de forma íntegra y literal. "
-    "Devuelve solo el texto transcrito — sin encabezados, sin comentarios, sin JSON, sin markdown."
+    "Escribe el contenido de lo que dice la profesora en esta clase. "
+    "Puedes reformular ligeramente para mantener la fluidez, pero conserva "
+    "toda la información, las explicaciones, los ejemplos y el contexto. "
+    "Devuelve solo el texto — sin encabezados, sin comentarios, sin JSON, "
+    "sin markdown."
 )
 
 SUMMARIZE_PROMPT_HE = """אתה מקבל תמלול של שיעור. הפק סיכום מובנה ב־HTML נקי בלבד, באמצעות <h3>, <p>, <ul>, <li>, <strong>, בפורמט הבא:
@@ -296,9 +308,14 @@ MAX_CHUNKS = 20        # 5 hours hard cap as a safety net
 
 
 def _gemini_transcribe_chunk(file_uri, mime_type, language, start_secs, end_secs):
-    """Transcribe a single [start, end] range of the video."""
+    """Transcribe a single [start, end] range of the video.
+
+    Retries once with a higher temperature if Gemini's RECITATION filter
+    fires — it's stochastic and a second sample with more randomness
+    usually slips past the filter. Hebrew lessons that quote scripture
+    or contain familiar phrasing trigger it inconsistently."""
     file_data = {"fileUri": file_uri, "mimeType": _normalize_video_mime(mime_type)}
-    payload = {
+    base_payload = {
         "contents": [
             {
                 "role": "user",
@@ -318,7 +335,6 @@ def _gemini_transcribe_chunk(file_uri, mime_type, language, start_secs, end_secs
             }
         ],
         "generationConfig": {
-            "temperature":     0.0,
             "maxOutputTokens": 8192,
             # LOW res cuts video token use ~4x (~66 vs ~258 tokens/sec).
             # Transcripts ride on the audio track, so this loses nothing
@@ -327,10 +343,24 @@ def _gemini_transcribe_chunk(file_uri, mime_type, language, start_secs, end_secs
         },
     }
     label = f"transcribe[{start_secs}-{end_secs}s]"
-    text = _gemini_call(payload, label)
-    text = re.sub(r"^```(?:[a-z]+)?\s*", "", text)
-    text = re.sub(r"\s*```\s*$", "", text)
-    return text.strip()
+    # Temperatures tried in order. Temperature 0 is the most likely to
+    # produce verbatim output that triggers RECITATION; nudging up
+    # diversifies the sample enough to typically clear the filter.
+    for attempt, temperature in enumerate([0.3, 0.7, 1.0]):
+        payload = json.loads(json.dumps(base_payload))  # deep copy
+        payload["generationConfig"]["temperature"] = temperature
+        try:
+            text = _gemini_call(payload, label)
+            text = re.sub(r"^```(?:[a-z]+)?\s*", "", text)
+            text = re.sub(r"\s*```\s*$", "", text)
+            return text.strip()
+        except RuntimeError as e:
+            msg = str(e)
+            is_recitation = "RECITATION" in msg
+            if is_recitation and attempt < 2:
+                print(f"[transcribe] {label} hit RECITATION at temp={temperature}, retrying at higher temp")
+                continue
+            raise
 
 
 def gemini_transcribe(file_uri, mime_type, language):
