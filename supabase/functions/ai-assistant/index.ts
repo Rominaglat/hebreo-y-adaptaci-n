@@ -138,6 +138,34 @@ interface RetrievalHit {
   source: string;
 }
 
+interface UserAccess {
+  enrolledCourseIds: Set<string>;
+  isFullAccess: boolean;  // admin/super_admin/instructor see all courses
+}
+
+// deno-lint-ignore no-explicit-any
+async function fetchUserAccess(supabase: any, userId: string): Promise<UserAccess> {
+  // Admin / super_admin / instructor have access to every course's content
+  // for retrieval purposes — they shouldn't be teased with paywall hints.
+  const { data: roleRows } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  const roles = new Set<string>(((roleRows ?? []) as { role: string }[]).map((r) => r.role));
+  if (roles.has("admin") || roles.has("super_admin") || roles.has("instructor")) {
+    return { enrolledCourseIds: new Set(), isFullAccess: true };
+  }
+
+  const { data: enrollRows } = await supabase
+    .from("enrollments")
+    .select("course_id")
+    .eq("user_id", userId);
+  const enrolledCourseIds = new Set<string>(
+    ((enrollRows ?? []) as { course_id: string }[]).map((r) => r.course_id),
+  );
+  return { enrolledCourseIds, isFullAccess: false };
+}
+
 async function retrieve(
   tenantId: string,
   embedding: number[],
@@ -186,6 +214,16 @@ Citas y enlaces a lecciones (cuando aplique):
 - Enlace en formato markdown exacto: [Curso - Lección](/courses/COURSE_ID?lesson=LESSON_ID)
 - No envuelvas la URL en comillas. El formato es exactamente [texto](/courses/uuid?lesson=uuid) — sin comillas, sin espacios, sin caracteres especiales dentro de los paréntesis.
 - No incluyas signos de puntuación dentro del texto del enlace — solo el nombre del curso y la lección.
+
+Acceso del estudiante a los cursos (crítico):
+Cada lección en el bloque de contexto tiene una línea **ACCESS_STATUS**:
+- **ACCESS_STATUS: ENROLLED** → el estudiante tiene acceso. Puedes usar el contenido entre BEGIN_LESSON_CONTENT / END_LESSON_CONTENT como fuente y enlazar a la lección con el formato de arriba.
+- **ACCESS_STATUS: LOCKED — el usuario NO está inscrito** → el estudiante **no** tiene acceso a esta lección.
+  - **No reveles** el contenido de la lección (no aparecerá en el contexto, pero tampoco lo inventes).
+  - **No enlaces** con /courses/<id>?lesson=<id> — la página le dará error de permiso.
+  - Sí puedes mencionar honestamente que el tema está cubierto en el curso, p.ej.: "Este tema está desarrollado en profundidad en el curso *Nombre del curso* — necesitarías inscribirte para acceder a esa lección."
+  - Mantén el tono cálido y de profesora, no de vendedora — una sola mención de la inscripción por respuesta es suficiente.
+- Si solo hay lecciones LOCKED relevantes a la pregunta, responde igualmente con tu conocimiento del idioma como profesora, y al final añade la sugerencia del curso al que el estudiante podría inscribirse para profundizar.
 
 Honestidad:
 - Si una respuesta podría ser ambigua o si hay variantes dialectales/registro, dilo brevemente.
@@ -254,7 +292,7 @@ function scrubInjection(text: string): string {
   return out;
 }
 
-function buildContextBlock(hits: RetrievalHit[]): string {
+function buildContextBlock(hits: RetrievalHit[], access: UserAccess): string {
   if (hits.length === 0) {
     // Explicit "use your teaching knowledge" hint — the empty-context state
     // used to lead Gemini to refuse even basic Hebrew-vocab questions.
@@ -268,21 +306,47 @@ function buildContextBlock(hits: RetrievalHit[]): string {
   }
   const parts: string[] = [];
   hits.forEach((h, i) => {
+    const isLocked =
+      !access.isFullAccess &&
+      !!h.course_id &&
+      !access.enrolledCourseIds.has(h.course_id);
+
+    const header = [
+      `## [${i + 1}] ${h.course_title ?? "—"} / ${h.module_title ?? "—"} / ${h.lesson_title ?? "—"}`,
+      `course_id: ${h.course_id ?? ""}`,
+      `lesson_id: ${h.lesson_id}`,
+    ];
+
+    if (isLocked) {
+      // LOCKED: the user is NOT enrolled in this course. We expose ONLY the
+      // titles + the access flag so the assistant can say "this topic is
+      // covered in <course> — you'd need to enroll" without leaking the
+      // actual lesson content and without linking to a page the user
+      // can't open.
+      header.push("ACCESS_STATUS: LOCKED — el usuario NO está inscrito en este curso");
+      header.push(
+        "(No incluyas el contenido de esta lección en tu respuesta y no enlaces a /courses/<id>?lesson=<id>. " +
+        "Puedes mencionar que el tema se cubre en este curso y sugerir inscribirse o adquirirlo.)",
+      );
+      parts.push(header.join("\n"));
+      return;
+    }
+
+    // ENROLLED (or full-access role): include the snippet for the model to
+    // ground on. We still scrub injection patterns from the lesson content
+    // before injection.
     const rawSnippet = stripHtml(h.content || "").slice(0, MAX_SNIPPET_CHARS);
     const snippet = scrubInjection(rawSnippet);
-    parts.push(
-      [
-        `## [${i + 1}] ${h.course_title ?? "—"} / ${h.module_title ?? "—"} / ${h.lesson_title ?? "—"}`,
-        `course_id: ${h.course_id ?? ""}`,
-        `lesson_id: ${h.lesson_id}`,
-        // Explicit delimiters around the (untrusted) lesson content. The
-        // system prompt above tells the model to treat anything between
-        // BEGIN_LESSON_CONTENT / END_LESSON_CONTENT as data, not instructions.
-        "BEGIN_LESSON_CONTENT",
-        snippet || "(אין תוכן טקסטואלי זמין)",
-        "END_LESSON_CONTENT",
-      ].join("\n"),
+    header.push("ACCESS_STATUS: ENROLLED");
+    header.push(
+      // Explicit delimiters around the (untrusted) lesson content. The
+      // system prompt above tells the model to treat anything between
+      // BEGIN_LESSON_CONTENT / END_LESSON_CONTENT as data, not instructions.
+      "BEGIN_LESSON_CONTENT",
+      snippet || "(אין תוכן טקסטואלי זמין)",
+      "END_LESSON_CONTENT",
     );
+    parts.push(header.join("\n"));
   });
   return parts.join("\n\n---\n\n");
 }
@@ -426,6 +490,17 @@ serve(async (req: Request) => {
       console.warn("tenant_settings assistant columns missing — skipping", e);
     }
 
+    // Resolve the asking user's course access (enrollments + role overrides)
+    // BEFORE retrieving hits — we use the access map to decide which hits
+    // contribute full content vs. a "locked, enroll to access" hint.
+    let access: UserAccess;
+    try {
+      access = await fetchUserAccess(supabase, user.id);
+    } catch (e) {
+      console.error("access lookup failed, defaulting to no enrollments:", e);
+      access = { enrolledCourseIds: new Set(), isFullAccess: false };
+    }
+
     // Retrieve from KG
     let hits: RetrievalHit[] = [];
     try {
@@ -443,7 +518,7 @@ serve(async (req: Request) => {
         : customSystemPrompt)
       : DEFAULT_SYSTEM;
 
-    const contextBlock = buildContextBlock(hits);
+    const contextBlock = buildContextBlock(hits, access);
     const systemInstruction =
       `${baseSystem}\n\n# חומרי לימוד רלוונטיים (ממוינים לפי רלוונטיות):\n${contextBlock}`;
 
@@ -458,9 +533,14 @@ serve(async (req: Request) => {
       geminiContents.push({ role: "user", parts: [{ text: lastUserMessage || " " }] });
     }
 
+    const lockedHits = access.isFullAccess
+      ? 0
+      : hits.filter((h) => h.course_id && !access.enrolledCourseIds.has(h.course_id)).length;
     console.log(
       `[ai-assistant] tenant=${tenant_id} conv=${conversation_id} ` +
-      `msgs_in=${messages.length} contents_out=${geminiContents.length} hits=${hits.length}`,
+      `msgs_in=${messages.length} contents_out=${geminiContents.length} ` +
+      `hits=${hits.length} locked=${lockedHits} ` +
+      `enrolled_courses=${access.enrolledCourseIds.size} full_access=${access.isFullAccess}`,
     );
 
     const geminiResp = await callGeminiStream(systemInstruction, geminiContents);
@@ -550,11 +630,16 @@ serve(async (req: Request) => {
           );
         }
 
-        // Build unique sources from retrieval hits (not from LLM output)
+        // Build unique sources from retrieval hits (not from LLM output).
+        // We only emit sources the user actually has access to — emitting a
+        // locked lesson would render as a clickable card that 403s on click.
         const seen = new Set<string>();
         const sources: { course_id: string; course_title: string; lesson_id: string; lesson_title: string | null }[] = [];
         for (const h of hits) {
           if (!h.course_id || !h.lesson_id) continue;
+          const isLocked =
+            !access.isFullAccess && !access.enrolledCourseIds.has(h.course_id);
+          if (isLocked) continue;
           const key = `${h.course_id}:${h.lesson_id}`;
           if (seen.has(key)) continue;
           seen.add(key);
