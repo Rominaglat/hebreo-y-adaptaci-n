@@ -123,11 +123,47 @@ export default function CourseDetail() {
   const allLessons = useMemo(() => {
     return modules.flatMap(m => m.lessons);
   }, [modules]);
-  
+
   const videoDurations = useVideoDuration(allLessons);
 
   const allLessonIds = useMemo(() => allLessons.map(l => l.id), [allLessons]);
   const { isBookmarked, toggleBookmark } = useLessonBookmarks(allLessonIds);
+
+  // Sequential unlock: each lesson is gated by completion of the previous
+  // one in the course (ordered by module.order_index then lesson.order_index).
+  // The first lesson is always open. Admins / instructors bypass entirely.
+  // Server-side mirror of this lives in is_lesson_unlocked() (migration
+  // 20260601100000) so completion writes are validated for tampering too.
+  const lockedLessonIds = useMemo(() => {
+    const locked = new Set<string>();
+    if (isAdminOrInstructor) return locked;
+    const ordered = [...modules]
+      .sort((a, b) => a.order_index - b.order_index)
+      .flatMap(m =>
+        [...m.lessons].sort((a, b) => a.order_index - b.order_index),
+      );
+    let prevCompleted = true; // virtual "lesson 0" is complete
+    for (const lesson of ordered) {
+      if (!prevCompleted) locked.add(lesson.id);
+      prevCompleted = lesson.is_completed;
+    }
+    return locked;
+  }, [modules, isAdminOrInstructor]);
+
+  const isLessonLocked = (lessonId: string) => lockedLessonIds.has(lessonId);
+
+  const handleSelectLesson = (lesson: Lesson, opts?: { autoplay?: boolean }) => {
+    if (isLessonLocked(lesson.id)) {
+      toast({
+        title: t('courseDetail.lessonLocked'),
+        description: t('courseDetail.lessonLockedDesc'),
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (opts?.autoplay) setShouldAutoplay(true);
+    setSelectedLesson(lesson);
+  };
 
   useEffect(() => {
     if (id) {
@@ -205,24 +241,50 @@ export default function CourseDetail() {
         const completedCount = processedModules.reduce((acc: number, m: Module) => acc + m.lessons.filter(l => l.is_completed).length, 0);
         setProgress(totalLessons > 0 ? Math.round(completedCount / totalLessons * 100) : 0);
         
+        // Compute lock state once for this fetch so initial selection
+        // (URL param, "first uncompleted", or fallback) can skip locked
+        // lessons — same rule as the lockedLessonIds memo, just inlined
+        // because the memo depends on the modules state we're about to set.
+        const orderedAll = [...processedModules]
+          .sort((a: Module, b: Module) => a.order_index - b.order_index)
+          .flatMap((m: Module) =>
+            [...m.lessons].sort((a, b) => a.order_index - b.order_index),
+          );
+        const lockedNow = new Set<string>();
+        if (!isAdminOrInstructor) {
+          let prevDone = true;
+          for (const l of orderedAll) {
+            if (!prevDone) lockedNow.add(l.id);
+            prevDone = l.is_completed;
+          }
+        }
+
         // Only auto-select lesson on initial load, not on refreshes
         if (!selectedLesson) {
           const lessonIdFromUrl = searchParams.get('lesson');
           let targetLesson: Lesson | undefined;
           if (lessonIdFromUrl) {
-            targetLesson = processedModules.flatMap((m: Module) => m.lessons).find((l: Lesson) => l.id === lessonIdFromUrl);
-            // Clear the query param after using it
-            if (targetLesson) {
+            const candidate = processedModules.flatMap((m: Module) => m.lessons).find((l: Lesson) => l.id === lessonIdFromUrl);
+            // Reject deep-linked locked lessons (e.g. from bot citations
+            // or stale tabs) — fall through to first-unlocked instead of
+            // landing on a paywall page.
+            if (candidate && !lockedNow.has(candidate.id)) {
+              targetLesson = candidate;
               setSearchParams({}, { replace: true });
-              // Open the module containing this lesson
               const parentModule = processedModules.find((m: Module) => m.lessons.some((l: Lesson) => l.id === lessonIdFromUrl));
               if (parentModule && !openModules.includes(parentModule.id)) {
                 setOpenModules(prev => [...prev, parentModule.id]);
               }
+            } else if (candidate && lockedNow.has(candidate.id)) {
+              // Drop the URL param so a refresh doesn't re-trigger the
+              // locked-target landing.
+              setSearchParams({}, { replace: true });
             }
           }
           if (!targetLesson) {
-            targetLesson = processedModules.flatMap((m: Module) => m.lessons).find((l: Lesson) => !l.is_completed);
+            // First lesson that's not completed AND not locked — for a
+            // fresh enrollee this is always the very first lesson.
+            targetLesson = orderedAll.find((l: Lesson) => !l.is_completed && !lockedNow.has(l.id));
           }
           setSelectedLesson(targetLesson || processedModules[0]?.lessons[0] || null);
         } else {
@@ -254,6 +316,16 @@ export default function CourseDetail() {
     if (lessonIdFromUrl && modules.length > 0) {
       const targetLesson = modules.flatMap(m => m.lessons).find(l => l.id === lessonIdFromUrl);
       if (targetLesson && targetLesson.id !== selectedLesson?.id) {
+        if (isLessonLocked(targetLesson.id)) {
+          // Locked deep-link — surface a toast instead of silently swapping.
+          toast({
+            title: t('courseDetail.lessonLocked'),
+            description: t('courseDetail.lessonLockedDesc'),
+            variant: 'destructive',
+          });
+          setSearchParams({}, { replace: true });
+          return;
+        }
         setSelectedLesson(targetLesson);
         const parentModule = modules.find(m => m.lessons.some(l => l.id === lessonIdFromUrl));
         if (parentModule && !openModules.includes(parentModule.id)) {
@@ -262,7 +334,7 @@ export default function CourseDetail() {
         setSearchParams({}, { replace: true });
       }
     }
-  }, [searchParams, modules]);
+  }, [searchParams, modules, lockedLessonIds]);
 
   useEffect(() => {
     if (selectedLesson) {
@@ -352,6 +424,11 @@ export default function CourseDetail() {
     }
 
     if (next) {
+      // Safety: after marking the current lesson complete the next one is
+      // unlocked, but if anything is off (admin re-ordered mid-watch,
+      // duplicate order_index, etc.) refuse to auto-jump into a locked
+      // lesson — better to stop than to send the user to a blocked page.
+      if (!isAdminOrInstructor && lockedLessonIds.has(next.id)) return;
       setShouldAutoplay(true);
       setSelectedLesson(next);
       if ('moduleId' in next) {
@@ -514,8 +591,17 @@ export default function CourseDetail() {
               <Button
                 variant="outline"
                 className="gap-2"
+                disabled={!isAdminOrInstructor && lockedLessonIds.has(getNextLesson.id)}
                 onClick={() => {
                   const next = getNextLesson;
+                  if (!isAdminOrInstructor && lockedLessonIds.has(next.id)) {
+                    toast({
+                      title: t('courseDetail.lessonLocked'),
+                      description: t('courseDetail.lessonLockedDesc'),
+                      variant: 'destructive',
+                    });
+                    return;
+                  }
                   setShouldAutoplay(true);
                   setSelectedLesson(next);
                   // Open the module containing the next lesson
@@ -832,21 +918,49 @@ export default function CourseDetail() {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         {module.lessons.map(lesson => {
-                      const LessonIcon = lesson.is_completed ? CheckCircle : 
-                        lesson.lesson_type === 'file' ? FileText : 
-                        lesson.lesson_type === 'exam' ? ClipboardList : 
+                      const locked = isLessonLocked(lesson.id);
+                      const LessonIcon = locked ? Lock :
+                        lesson.is_completed ? CheckCircle :
+                        lesson.lesson_type === 'file' ? FileText :
+                        lesson.lesson_type === 'exam' ? ClipboardList :
                         lesson.lesson_type === 'embed' ? FileInput : Play;
                       const lessonDuration = videoDurations[lesson.id];
-                      return <button key={lesson.id} onClick={() => { setShouldAutoplay(true); setSelectedLesson(lesson); }} className={cn("w-full px-4 py-2.5 flex items-center gap-3 text-start text-sm hover:bg-secondary/50 transition-colors", selectedLesson?.id === lesson.id && "bg-secondary", lesson.is_hidden && "opacity-50")}>
-                              <LessonIcon className={cn("w-4 h-4 flex-shrink-0", lesson.is_completed ? "text-success" : "text-muted-foreground")} />
-                              <span className="flex-1 truncate">{lesson.title}</span>
-                              {lesson.is_hidden && <EyeOff className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
-                              <NewBadge createdAt={lesson.created_at} />
-                              {lessonDuration && <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  {lessonDuration}
-                                </span>}
-                            </button>;
+                      return (
+                        <button
+                          key={lesson.id}
+                          onClick={() => handleSelectLesson(lesson, { autoplay: true })}
+                          aria-disabled={locked}
+                          title={locked ? t('courseDetail.lessonLockedTooltip') : undefined}
+                          className={cn(
+                            "w-full px-4 py-2.5 flex items-center gap-3 text-start text-sm transition-colors",
+                            locked
+                              ? "opacity-50 cursor-not-allowed hover:bg-transparent"
+                              : "hover:bg-secondary/50",
+                            selectedLesson?.id === lesson.id && !locked && "bg-secondary",
+                            lesson.is_hidden && "opacity-50",
+                          )}
+                        >
+                          <LessonIcon
+                            className={cn(
+                              "w-4 h-4 flex-shrink-0",
+                              locked
+                                ? "text-muted-foreground"
+                                : lesson.is_completed
+                                  ? "text-success"
+                                  : "text-muted-foreground",
+                            )}
+                          />
+                          <span className="flex-1 truncate">{lesson.title}</span>
+                          {lesson.is_hidden && <EyeOff className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
+                          <NewBadge createdAt={lesson.created_at} />
+                          {lessonDuration && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {lessonDuration}
+                            </span>
+                          )}
+                        </button>
+                      );
                     })}
                       </CollapsibleContent>
                     </Collapsible>)}
