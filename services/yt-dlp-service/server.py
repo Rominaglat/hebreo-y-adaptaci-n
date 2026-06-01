@@ -523,6 +523,134 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id):
             pass
 
 
+@app.route("/test-yt2mp3", methods=["GET"])
+def test_yt2mp3():
+    """Probe endpoint — runs the gammacloud.net (yt2mp3.ai backend) flow
+    from Railway's outbound IP to find out if it works as an alternative
+    to yt-dlp. Remove after evaluating. Token-gated to avoid abuse.
+
+    Usage: GET /test-yt2mp3?token=<KG_WEBHOOK_SECRET>&v=<youtube_id>
+    """
+    if request.args.get("token") != os.environ.get("KG_WEBHOOK_SECRET", ""):
+        return jsonify({"error": "unauthorized"}), 401
+    video_id = request.args.get("v", "dQw4w9WgXcQ")  # default Rick Astley
+    max_polls = int(request.args.get("max_polls", "30"))
+
+    base_headers = {
+        "Origin": "https://yt2mp3.ai",
+        "Referer": "https://yt2mp3.ai/",
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/148.0.0.0 Safari/537.36"
+        ),
+    }
+    def ts(): return str(int(time.time() * 1000))
+
+    timeline = []
+    try:
+        t0 = time.time()
+        auth = requests.get(
+            "https://gamma.gammacloud.net/api/v1/auth",
+            params={"_": ts()}, headers=base_headers, timeout=10,
+        )
+        timeline.append({"step": "auth", "status": auth.status_code,
+                         "ms": int((time.time() - t0) * 1000),
+                         "body": auth.text[:300]})
+        if auth.status_code != 200:
+            return jsonify({"timeline": timeline, "failed_at": "auth"})
+        key = auth.json().get("key")
+        if not key:
+            return jsonify({"timeline": timeline, "failed_at": "auth (no key)"})
+
+        h_auth = {**base_headers, "Authorization": f"Bearer {key}"}
+
+        t1 = time.time()
+        init = requests.get(
+            "https://gamma.gammacloud.net/api/v1/init",
+            params={"_": ts()}, headers=h_auth, timeout=10,
+        )
+        timeline.append({"step": "init", "status": init.status_code,
+                         "ms": int((time.time() - t1) * 1000),
+                         "body": init.text[:300]})
+        if init.status_code != 200:
+            return jsonify({"timeline": timeline, "failed_at": "init"})
+        convert_url = init.json().get("convertURL")
+        if not convert_url:
+            return jsonify({"timeline": timeline, "failed_at": "init (no convertURL)"})
+
+        # Chase convert redirects (the API uses one-hop load balancing)
+        url = f"{convert_url}&v={video_id}&f=mp3&_={ts()}"
+        progress_url = None
+        download_url = None
+        title = None
+        for hop in range(4):
+            tH = time.time()
+            r = requests.get(url, headers=h_auth, timeout=15)
+            try:
+                body = r.json()
+            except Exception:
+                body = {"_raw": r.text[:300]}
+            timeline.append({"step": f"convert hop {hop}", "status": r.status_code,
+                             "ms": int((time.time() - tH) * 1000),
+                             "body": str(body)[:400]})
+            if r.status_code != 200:
+                return jsonify({"timeline": timeline,
+                                "failed_at": f"convert hop {hop}"})
+            if body.get("redirect") and body.get("redirectURL"):
+                url = body["redirectURL"]
+                continue
+            progress_url = body.get("progressURL")
+            download_url = body.get("downloadURL")
+            title = body.get("title")
+            break
+
+        if not progress_url:
+            return jsonify({"timeline": timeline,
+                            "failed_at": "no progressURL after convert"})
+
+        # Poll progress
+        last_pct = -1
+        for i in range(max_polls):
+            tP = time.time()
+            p = requests.get(progress_url + f"&_={ts()}", headers=h_auth, timeout=10)
+            try:
+                pj = p.json()
+            except Exception:
+                pj = {"_raw": p.text[:200]}
+            pct = pj.get("progress", -1)
+            timeline.append({"step": f"progress {i}", "status": p.status_code,
+                             "ms": int((time.time() - tP) * 1000),
+                             "progress": pct, "title": pj.get("title", "")})
+            last_pct = pct if isinstance(pct, int) else last_pct
+            if pct == 100 or pj.get("error"):
+                break
+            time.sleep(2)
+
+        # Probe download with a GET requesting just 1 byte — proves the
+        # download is actually serving bytes without consuming bandwidth.
+        if download_url and last_pct == 100:
+            tD = time.time()
+            d = requests.get(
+                download_url + f"&_={ts()}",
+                headers={**h_auth, "Range": "bytes=0-1023"},
+                timeout=20, stream=True, allow_redirects=False,
+            )
+            timeline.append({"step": "download (Range 0-1023)",
+                             "status": d.status_code,
+                             "ms": int((time.time() - tD) * 1000),
+                             "content_type": d.headers.get("Content-Type"),
+                             "content_length": d.headers.get("Content-Length"),
+                             "location": d.headers.get("Location", "")[:200]})
+            d.close()
+
+        return jsonify({"ok": True, "title": title, "last_pct": last_pct,
+                        "timeline": timeline})
+    except Exception as e:
+        timeline.append({"step": "exception", "error": str(e)})
+        return jsonify({"timeline": timeline, "failed_at": "exception"}), 500
+
+
 @app.route("/health", methods=["GET"])
 def health():
     def preview(k):
