@@ -262,9 +262,11 @@ def _gemini_call(payload, action_label):
 def gemini_transcribe(file_uri, mime_type, language):
     """Pass 1: audio/video → plain-text transcript.
 
-    Uses the full 65,536-token output budget of Gemini 2.5 Flash so even
-    hour-long lessons fit in a single response. No JSON envelope — the
-    response is the transcript itself."""
+    Gemini 2.5 Flash's per-response output cap is 8192 tokens (an earlier
+    version of this file used 65536 by mistake — that's the 2.5 Pro
+    number — and triggered 400 INVALID_ARGUMENT). Long lessons can still
+    blow this; _gemini_call surfaces finishReason=MAX_TOKENS so the
+    caller fails loud instead of returning half a transcript."""
     payload = {
         "contents": [
             {
@@ -277,7 +279,7 @@ def gemini_transcribe(file_uri, mime_type, language):
         ],
         "generationConfig": {
             "temperature":     0.0,
-            "maxOutputTokens": 65536,
+            "maxOutputTokens": 8192,
         },
     }
     text = _gemini_call(payload, "transcribe")
@@ -290,9 +292,9 @@ def gemini_transcribe(file_uri, mime_type, language):
 def gemini_summarize(transcript_text, language):
     """Pass 2: transcript → structured HTML summary.
 
-    Lives in its own 16k-token output budget, completely independent of
-    the transcript pass — the summary can no longer be starved by a long
-    transcript."""
+    Same 8192-token output cap as transcribe — the summary is a fraction
+    of that in practice (~1-2k tokens of HTML) so it's never the
+    bottleneck."""
     payload = {
         "contents": [
             {
@@ -306,7 +308,7 @@ def gemini_summarize(transcript_text, language):
         "systemInstruction": {"parts": [{"text": summarize_prompt_for(language)}]},
         "generationConfig": {
             "temperature":     0.2,
-            "maxOutputTokens": 16384,
+            "maxOutputTokens": 8192,
         },
     }
     text = _gemini_call(payload, "summarize")
