@@ -234,8 +234,28 @@ def _gemini_call(payload, action_label):
     if resp.status_code == 403:
         raise GeminiPermissionError(f"Gemini denied (403): {resp.text[:300]}")
     if resp.status_code != 200:
+        # Diagnostic dump: 400s from Gemini are often generic ("invalid
+        # argument") with the real cause hidden in `error.details`. Print
+        # the full response + the parts we sent (minus file bytes) so the
+        # next failure leaves a paper trail in Railway logs.
+        try:
+            parts = payload.get("contents", [{}])[0].get("parts", [])
+            parts_summary = [
+                {"fileData": {"fileUri": p["fileData"].get("fileUri", "")[:120],
+                              "mimeType": p["fileData"].get("mimeType")}}
+                if "fileData" in p
+                else {"text_len": len(p.get("text", ""))}
+                for p in parts
+            ]
+        except Exception:
+            parts_summary = "(parts dump failed)"
+        print(
+            f"[gemini] {action_label} {resp.status_code} — model={GEMINI_MODEL} "
+            f"genConfig={payload.get('generationConfig')} parts={parts_summary}"
+        )
+        print(f"[gemini] {action_label} body: {resp.text}")
         raise RuntimeError(
-            f"Gemini {action_label} failed: {resp.status_code} {resp.text[:400]}"
+            f"Gemini {action_label} failed: {resp.status_code} {resp.text}"
         )
 
     data = resp.json()
