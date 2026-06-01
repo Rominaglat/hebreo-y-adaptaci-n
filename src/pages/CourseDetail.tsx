@@ -109,6 +109,7 @@ export default function CourseDetail() {
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  const [courseUnlocked, setCourseUnlocked] = useState<boolean>(true); // false when an earlier course isn't complete yet
   const [nextCourse, setNextCourse] = useState<{ id: string; title: string } | null>(null);
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState<boolean>(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem('lessonAutoAdvance') : null;
@@ -131,12 +132,20 @@ export default function CourseDetail() {
 
   // Sequential unlock: each lesson is gated by completion of the previous
   // one in the course (ordered by module.order_index then lesson.order_index).
-  // The first lesson is always open. Admins / instructors bypass entirely.
-  // Server-side mirror of this lives in is_lesson_unlocked() (migration
-  // 20260601100000) so completion writes are validated for tampering too.
+  // Cross-course gating: if the course itself is locked (an earlier-ordered
+  // enrolled course isn't finished), every lesson in this course is locked.
+  // Admins / instructors bypass entirely. Server-side mirrors live in
+  // is_lesson_unlocked() / is_course_unlocked() so completion writes can't
+  // be tampered with.
   const lockedLessonIds = useMemo(() => {
     const locked = new Set<string>();
     if (isAdminOrInstructor) return locked;
+    if (!courseUnlocked) {
+      // The course gate is closed — every lesson is locked until the
+      // previous course is complete.
+      modules.forEach(m => m.lessons.forEach(l => locked.add(l.id)));
+      return locked;
+    }
     const ordered = [...modules]
       .sort((a, b) => a.order_index - b.order_index)
       .flatMap(m =>
@@ -148,7 +157,7 @@ export default function CourseDetail() {
       prevCompleted = lesson.is_completed;
     }
     return locked;
-  }, [modules, isAdminOrInstructor]);
+  }, [modules, isAdminOrInstructor, courseUnlocked]);
 
   const isLessonLocked = (lessonId: string) => lockedLessonIds.has(lessonId);
 
@@ -198,6 +207,7 @@ export default function CourseDetail() {
         if (user) {
           if (isAdminOrInstructor) {
             setHasAccess(true);
+            setCourseUnlocked(true);
           } else {
             const { data: enrollment } = await supabase
               .from('enrollments')
@@ -206,9 +216,23 @@ export default function CourseDetail() {
               .eq('course_id', id)
               .single();
             setHasAccess(!!enrollment);
+            // Cross-course gating: this course is "unlocked" only if every
+            // earlier-ordered course the user is enrolled in is fully
+            // complete. The RPC mirrors the SQL rule used for completion
+            // RLS, so a stale UI can never disagree with the server.
+            if (enrollment) {
+              const { data: unlocked } = await supabase.rpc('is_course_unlocked', {
+                p_course_id: id,
+                p_user_id: user.id,
+              });
+              setCourseUnlocked(unlocked === true);
+            } else {
+              setCourseUnlocked(false);
+            }
           }
         } else {
           setHasAccess(false);
+          setCourseUnlocked(false);
         }
       }
       
@@ -583,6 +607,19 @@ export default function CourseDetail() {
           </div>
         </div>
 
+        {/* Course-level lock banner — fires when an earlier-ordered course
+            the user is enrolled in isn't fully complete yet. */}
+        {!isAdminOrInstructor && !courseUnlocked && (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+            <div className="w-9 h-9 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-sm">{t('courseDetail.courseGated')}</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">{t('courseDetail.courseGatedDesc')}</p>
+            </div>
+          </div>
+        )}
 
         {/* Next Lesson / Next Course Navigation */}
         {selectedLesson && (

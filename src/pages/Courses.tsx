@@ -110,6 +110,10 @@ export default function Courses() {
   const { completeStep } = useOnboarding();
   const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [enrolledCourses, setEnrolledCourses] = useState<EnrolledCourse[]>([]);
+  // course_id → is_unlocked under the cross-course sequential rule.
+  // Populated from the my_course_lock_states() RPC; admins/instructors are
+  // always-unlocked at the server, so this collapses to "all true" for them.
+  const [courseLockStates, setCourseLockStates] = useState<Record<string, boolean>>({});
   const [coursesWithLessons, setCoursesWithLessons] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -215,6 +219,18 @@ export default function Courses() {
       }
 
       if (user) {
+        // Pull the cross-course lock map alongside enrollments — one row
+        // per course in the catalog, so the listing can dim courses whose
+        // prerequisites aren't done yet.
+        const { data: lockRows } = await supabase.rpc('my_course_lock_states');
+        if (Array.isArray(lockRows)) {
+          const map: Record<string, boolean> = {};
+          for (const row of lockRows as Array<{ course_id: string; is_unlocked: boolean }>) {
+            map[row.course_id] = row.is_unlocked;
+          }
+          setCourseLockStates(map);
+        }
+
         const { data: enrollments } = await supabase
           .from('enrollments')
           .select('*, courses(*, modules(id, lessons(id, video_url, lesson_type)))')
@@ -617,7 +633,15 @@ export default function Courses() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredAllCourses.map((course) => {
                 const enrolled = enrolledCourses.find(c => c.id === course.id);
-                const isLocked = !enrolled;
+                // Cross-course gating: the catalog now distinguishes between
+                // (a) not-enrolled (needs admin / purchase) and
+                // (b) enrolled-but-gated (needs to finish the previous course
+                //     in the order_index sequence first).
+                // Admins/instructors bypass — for them the RPC returns true
+                // for every course and isGatedByProgress stays false.
+                const isGatedByProgress = !!enrolled && !isAdminOrInstructor &&
+                  courseLockStates[course.id] === false;
+                const isLocked = !enrolled || isGatedByProgress;
                 const progress = enrolled?.progress ?? 0;
 
                 const cardInner = (
@@ -726,7 +750,13 @@ export default function Courses() {
                   >
                     {isLocked ? (
                       <div
-                        onClick={() => toast.error(t('courses.contactAdmin'))}
+                        onClick={() =>
+                          toast.error(
+                            isGatedByProgress
+                              ? t('coursesPage.finishPreviousCourse')
+                              : t('courses.contactAdmin'),
+                          )
+                        }
                         className="block relative"
                       >
                         {cardInner}
@@ -736,7 +766,9 @@ export default function Courses() {
                             <Lock className="w-5 h-5 text-muted-foreground" strokeWidth={2.5} />
                           </div>
                           <span className="text-xs font-semibold text-muted-foreground">
-                            {t('coursesPage.accessRequired')}
+                            {isGatedByProgress
+                              ? t('coursesPage.finishPreviousCourse')
+                              : t('coursesPage.accessRequired')}
                           </span>
                         </div>
                       </div>
