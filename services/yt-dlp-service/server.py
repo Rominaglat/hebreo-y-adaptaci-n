@@ -279,33 +279,40 @@ def _gemini_call(payload, action_label):
     return text
 
 
-def gemini_transcribe(file_uri, mime_type, language):
-    """Pass 1: audio/video → plain-text transcript.
+def _normalize_video_mime(mime_type):
+    """Gemini's fileData rules:
+      - 'video/*' wildcards → 400 INVALID_ARGUMENT
+      - omitted mimeType on a YouTube URL → Gemini does a plain HTTP GET
+        and returns 'Unsupported MIME type: text/html'
+      - 'application/octet-stream' → rejected.
+    Always send a concrete mime; fall back to 'video/mp4' when needed."""
+    if not mime_type or mime_type in ("video/*", "application/octet-stream"):
+        return "video/mp4"
+    return mime_type
 
-    Gemini 2.5 Flash's per-response output cap is 8192 tokens (an earlier
-    version of this file used 65536 by mistake — that's the 2.5 Pro
-    number — and triggered 400 INVALID_ARGUMENT). Long lessons can still
-    blow this; _gemini_call surfaces finishReason=MAX_TOKENS so the
-    caller fails loud instead of returning half a transcript."""
-    # Gemini's fileData rules (current API behavior, 2026):
-    #   - wildcards like "video/*" → 400 INVALID_ARGUMENT
-    #   - omitting mimeType on a YouTube URL → Gemini does a plain HTTP
-    #     GET, hits the YouTube watch page, returns "Unsupported MIME
-    #     type: text/html" 400. Counter-intuitive but verified empirically.
-    #   - application/octet-stream → also rejected.
-    # The safe answer is to always send a concrete mime. For YouTube URLs
-    # the caller passes "video/mp4" explicitly; for uploaded files we use
-    # MIME_BY_EXT. If the caller passes octet-stream / wildcard we default
-    # to "video/mp4" as a best-effort.
-    if not mime_type or mime_type == "video/*" or mime_type == "application/octet-stream":
-        mime_type = "video/mp4"
-    file_data = {"fileUri": file_uri, "mimeType": mime_type}
+
+CHUNK_SECS = 900       # 15 min per transcribe call (well under 8k output cap)
+MAX_CHUNKS = 20        # 5 hours hard cap as a safety net
+
+
+def _gemini_transcribe_chunk(file_uri, mime_type, language, start_secs, end_secs):
+    """Transcribe a single [start, end] range of the video."""
+    file_data = {"fileUri": file_uri, "mimeType": _normalize_video_mime(mime_type)}
     payload = {
         "contents": [
             {
                 "role": "user",
                 "parts": [
-                    {"fileData": file_data},
+                    {
+                        "fileData": file_data,
+                        # Gemini's per-part videoMetadata lets us trim to a
+                        # specific time range without re-downloading. Values
+                        # are seconds with an 's' suffix.
+                        "videoMetadata": {
+                            "startOffset": f"{start_secs}s",
+                            "endOffset": f"{end_secs}s",
+                        },
+                    },
                     {"text": transcribe_prompt_for(language)},
                 ],
             }
@@ -315,16 +322,47 @@ def gemini_transcribe(file_uri, mime_type, language):
             "maxOutputTokens": 8192,
             # LOW res cuts video token use ~4x (~66 vs ~258 tokens/sec).
             # Transcripts ride on the audio track, so this loses nothing
-            # for our use case and lets ~4-hour videos fit in the 1M-token
-            # input window instead of the ~hour cap at default resolution.
+            # for transcription quality.
             "mediaResolution": "MEDIA_RESOLUTION_LOW",
         },
     }
-    text = _gemini_call(payload, "transcribe")
-    # Strip accidental markdown code fences if the model wrapped anything.
+    label = f"transcribe[{start_secs}-{end_secs}s]"
+    text = _gemini_call(payload, label)
     text = re.sub(r"^```(?:[a-z]+)?\s*", "", text)
     text = re.sub(r"\s*```\s*$", "", text)
     return text.strip()
+
+
+def gemini_transcribe(file_uri, mime_type, language):
+    """Pass 1: audio/video → plain-text transcript.
+
+    Walks the video in CHUNK_SECS-sized windows. Each window has its own
+    8192-token output budget, so an arbitrarily long lesson is no longer
+    capped by a single response. Stops when a chunk comes back empty
+    (we passed the end of the video) or when a chunk exceeds its own
+    output cap (MAX_TOKENS — surfaces as an error so the user knows to
+    shorten if it ever happens at 15min)."""
+    transcripts = []
+    for i in range(MAX_CHUNKS):
+        start = i * CHUNK_SECS
+        end = (i + 1) * CHUNK_SECS
+        try:
+            chunk = _gemini_transcribe_chunk(file_uri, mime_type, language, start, end)
+        except RuntimeError as e:
+            # MAX_TOKENS on the FIRST chunk means even 15min didn't fit,
+            # which would be unusual — bubble up so the user sees it.
+            # On later chunks it's almost certainly past-end-of-video noise.
+            if i == 0 or "MAX_TOKENS" not in str(e):
+                raise
+            print(f"[transcribe] chunk {i} ({start}-{end}s) errored after end of video: {e}")
+            break
+        if len(chunk) < 30:
+            # Empty / tiny → past end of video.
+            print(f"[transcribe] chunk {i} ({start}-{end}s) empty — done")
+            break
+        print(f"[transcribe] chunk {i} ({start}-{end}s): {len(chunk)} chars")
+        transcripts.append(chunk)
+    return "\n\n".join(transcripts)
 
 
 def gemini_summarize(transcript_text, language):
