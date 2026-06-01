@@ -287,12 +287,18 @@ def gemini_transcribe(file_uri, mime_type, language):
     number — and triggered 400 INVALID_ARGUMENT). Long lessons can still
     blow this; _gemini_call surfaces finishReason=MAX_TOKENS so the
     caller fails loud instead of returning half a transcript."""
+    # Build fileData; OMIT mimeType when it's a YouTube URL (Gemini accepts
+    # the URL natively and rejects "video/*" wildcards). Also omit on
+    # application/octet-stream — Gemini wants a concrete type or nothing.
+    file_data = {"fileUri": file_uri}
+    if mime_type and mime_type not in ("video/*", "application/octet-stream"):
+        file_data["mimeType"] = mime_type
     payload = {
         "contents": [
             {
                 "role": "user",
                 "parts": [
-                    {"fileData": {"fileUri": file_uri, "mimeType": mime_type}},
+                    {"fileData": file_data},
                     {"text": transcribe_prompt_for(language)},
                 ],
             }
