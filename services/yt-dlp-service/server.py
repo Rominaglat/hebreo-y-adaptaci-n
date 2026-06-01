@@ -236,13 +236,26 @@ class GeminiPermissionError(RuntimeError):
 def _gemini_call(payload, action_label):
     """Shared Gemini POST + finishReason handling. Returns the response text.
     Raises GeminiPermissionError on 403 and RuntimeError with a clear message
-    on MAX_TOKENS / empty / non-200 responses."""
-    resp = requests.post(
-        f"{GEMINI_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
-        headers={"Content-Type": "application/json"},
-        data=json.dumps(payload),
-        timeout=600,
-    )
+    on MAX_TOKENS / empty / non-200 responses.
+
+    Retries on 429 (rate limit) and 503 (overloaded) with exponential
+    backoff — Gemini's free tier and even paid tier hit these regularly
+    when many requests stack up during chunked transcription."""
+    backoffs = [5, 10, 20, 40, 60]  # 6 attempts total: ~2.5 min worst case
+    for attempt, wait in enumerate([0] + backoffs):
+        if wait:
+            print(f"[gemini] {action_label} retrying after {wait}s (attempt {attempt}/{len(backoffs)})")
+            time.sleep(wait)
+        resp = requests.post(
+            f"{GEMINI_BASE}/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
+            headers={"Content-Type": "application/json"},
+            data=json.dumps(payload),
+            timeout=600,
+        )
+        if resp.status_code in (429, 503) and attempt < len(backoffs):
+            print(f"[gemini] {action_label} got {resp.status_code} — will back off")
+            continue
+        break
     if resp.status_code == 403:
         raise GeminiPermissionError(f"Gemini denied (403): {resp.text[:300]}")
     if resp.status_code != 200:
