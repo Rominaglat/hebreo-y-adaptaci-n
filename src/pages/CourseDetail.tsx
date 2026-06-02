@@ -163,9 +163,17 @@ export default function CourseDetail() {
 
   const handleSelectLesson = (lesson: Lesson, opts?: { autoplay?: boolean }) => {
     if (isLessonLocked(lesson.id)) {
+      // Distinguish "previous lesson" (within-course gate) from "previous
+      // course" (cross-course gate) so the toast actually tells the user
+      // what to do. When courseUnlocked is false every lesson is locked
+      // for the same reason — there's an earlier course they haven't
+      // finished yet.
+      const reason = courseUnlocked
+        ? { title: t('courseDetail.lessonLocked'), desc: t('courseDetail.lessonLockedDesc') }
+        : { title: t('courseDetail.courseGated'), desc: t('courseDetail.courseGatedDesc') };
       toast({
-        title: t('courseDetail.lessonLocked'),
-        description: t('courseDetail.lessonLockedDesc'),
+        title: reason.title,
+        description: reason.desc,
         variant: 'destructive',
       });
       return;
@@ -607,19 +615,11 @@ export default function CourseDetail() {
           </div>
         </div>
 
-        {/* Course-level lock banner — fires when an earlier-ordered course
-            the user is enrolled in isn't fully complete yet. */}
-        {!isAdminOrInstructor && !courseUnlocked && (
-          <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-            <div className="w-9 h-9 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-              <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-sm">{t('courseDetail.courseGated')}</h3>
-              <p className="text-sm text-muted-foreground mt-0.5">{t('courseDetail.courseGatedDesc')}</p>
-            </div>
-          </div>
-        )}
+        {/* Course-level lock banner removed — courses are always enterable
+            now. Locked-lesson state continues to render in the sidebar
+            (icons + tooltip), and the cross-course rule still applies at
+            the lesson level (except for is_optional=true courses like
+            Hebreo Gratis). */}
 
         {/* Next Lesson / Next Course Navigation */}
         {selectedLesson && (

@@ -633,15 +633,13 @@ export default function Courses() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredAllCourses.map((course) => {
                 const enrolled = enrolledCourses.find(c => c.id === course.id);
-                // Cross-course gating: the catalog now distinguishes between
-                // (a) not-enrolled (needs admin / purchase) and
-                // (b) enrolled-but-gated (needs to finish the previous course
-                //     in the order_index sequence first).
-                // Admins/instructors bypass — for them the RPC returns true
-                // for every course and isGatedByProgress stays false.
-                const isGatedByProgress = !!enrolled && !isAdminOrInstructor &&
-                  courseLockStates[course.id] === false;
-                const isLocked = !enrolled || isGatedByProgress;
+                // Enrolled courses are always enterable now — the previous
+                // "enrolled-but-gated" lock card was removed because the
+                // course-level block was bad UX. Lesson-level gating still
+                // happens inside the course detail page (with Hebreo Gratis
+                // and other is_optional courses excluded from prerequisites).
+                const isGatedByProgress = false;
+                const isLocked = !enrolled;
                 const progress = enrolled?.progress ?? 0;
 
                 const cardInner = (
