@@ -21,6 +21,7 @@ import {
   Eye,
   EyeOff,
   Upload,
+  Download,
   RefreshCw,
   BarChart3
 } from 'lucide-react';
@@ -83,6 +84,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { withTimeout } from '@/lib/utils';
 import { ImportUsersDialog } from '@/components/admin/ImportUsersDialog';
+import ExcelJS from 'exceljs';
 import { StudentProgressDialog } from '@/components/admin/StudentProgressDialog';
 interface UserActivity {
   id: string;
@@ -345,6 +347,41 @@ export default function ManageUsers() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Export the visible (filtered) user list as an Excel file in the same
+  // shape the import dialog accepts — email, full_name, role, phone.
+  // Lets admins round-trip edit-and-reimport (e.g. set everyone's phone
+  // so the next import uses it as the initial password).
+  const handleExportUsers = async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Users');
+    ws.columns = [
+      { header: 'email', key: 'email', width: 30 },
+      { header: 'full_name', key: 'full_name', width: 24 },
+      { header: 'role', key: 'role', width: 14 },
+      { header: 'phone', key: 'phone', width: 16 },
+    ];
+    filteredUsers.forEach((u) => {
+      ws.addRow({
+        email: u.email || '',
+        full_name: u.full_name || '',
+        role: u.role || 'student',
+        phone: u.phone || '',
+      });
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `users-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const generatePassword = () => {
@@ -1190,6 +1227,13 @@ export default function ManageUsers() {
           <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
             <Upload className="w-4 h-4 mx-2" />
             {t('manageUsers.importFromFile')}
+          </Button>
+          )}
+
+          {canEdit && (
+          <Button variant="outline" onClick={handleExportUsers}>
+            <Download className="w-4 h-4 mx-2" />
+            {t('manageUsers.exportToFile')}
           </Button>
           )}
 
