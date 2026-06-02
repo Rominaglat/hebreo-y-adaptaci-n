@@ -283,7 +283,14 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
 
     for (let i = 0; i < users.length; i++) {
       const user = updatedUsers[i];
-      const tempPassword = generatePassword();
+      // Initial password = the user's phone number with non-digits stripped
+      // (so '+972 50-123-4567' becomes '972501234567'). The admin asked
+      // for this so users can log in with something memorable on first
+      // visit and reset to a real password from their profile after.
+      // Fall back to a random 16-char password if the phone is too short
+      // or missing — never create accounts with weak (<8 char) passwords.
+      const phoneDigits = (user.phone || '').replace(/\D/g, '');
+      const tempPassword = phoneDigits.length >= 8 ? phoneDigits : generatePassword();
 
       try {
         const response = await supabase.functions.invoke('admin-user-actions', {
