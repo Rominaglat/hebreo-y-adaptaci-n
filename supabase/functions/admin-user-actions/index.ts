@@ -16,6 +16,12 @@ interface AdminActionRequest {
   role?: "admin" | "instructor" | "student";
   tenantId?: string;
   phone?: string;
+  // When true on create_user, an EXISTING user with the same email has
+  // their password overwritten with newPassword. Default is the legacy
+  // idempotent behavior (existing user → no password change). Used by
+  // the bulk-import dialog so re-importing the same roster propagates
+  // the (newly phone-derived) password.
+  overwritePassword?: boolean;
   // For update_user action
   newEmail?: string;
 }
@@ -122,7 +128,7 @@ serve(async (req) => {
 
     console.log("Requester verified:", adminUserId, "admin:", requesterIsAdmin, "instructor:", requesterIsInstructor);
 
-    const { action, userId: targetUserId, newPassword, activityType, activityDescription, metadata, email, fullName, role, tenantId, phone, newEmail }: AdminActionRequest = await req.json();
+    const { action, userId: targetUserId, newPassword, activityType, activityDescription, metadata, email, fullName, role, tenantId, phone, newEmail, overwritePassword }: AdminActionRequest = await req.json();
 
     // SEC-026 — audit log helper for sensitive admin actions. Best-effort;
     // log failures must not block the action.
@@ -230,6 +236,26 @@ serve(async (req) => {
             .eq('role', role || 'student')
             .maybeSingle();
 
+          // If the caller asked to overwrite the password (e.g. an admin
+          // re-importing the same roster with phone-as-password), do that
+          // now BEFORE the early-return for already-has-role. SEC: only
+          // admins reach this code path (instructors are blocked above),
+          // so this matches their existing reset_password capability.
+          if (overwritePassword && newPassword) {
+            const { error: pwError } = await adminClient.auth.admin.updateUserById(
+              existingUser.id,
+              { password: newPassword },
+            );
+            if (pwError) {
+              console.error("Error overwriting password for existing user:", pwError);
+              return new Response(
+                JSON.stringify({ error: "Failed to update password: " + pwError.message }),
+                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+            console.log(`Password overwritten for existing user ${existingUser.id}`);
+          }
+
           if (existingRoleRow) {
             console.log(`User ${existingUser.id} already has role ${role || 'student'}`);
             return new Response(
@@ -238,6 +264,7 @@ serve(async (req) => {
                 message: "User already exists with this role",
                 userId: existingUser.id,
                 alreadyMember: true,
+                passwordUpdated: overwritePassword && !!newPassword,
               }),
               { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );

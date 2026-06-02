@@ -301,6 +301,10 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
             newPassword: tempPassword,
             role: user.role,
             phone: user.phone,
+            // Re-imports overwrite the password so an admin who edits a
+            // roster and re-imports gets the new (phone-derived) password
+            // applied to existing accounts too.
+            overwritePassword: true,
           },
           headers: {
             Authorization: `Bearer ${sessionData.session?.access_token}`,
