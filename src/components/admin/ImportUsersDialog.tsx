@@ -75,6 +75,8 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
   const [users, setUsers] = useState<ImportUser[]>([]);
   const [fileName, setFileName] = useState('');
   const [importProgress, setImportProgress] = useState(0);
+  const [importCounter, setImportCounter] = useState({ done: 0, total: 0 });
+  const [importCurrentEmail, setImportCurrentEmail] = useState('');
   const [importResults, setImportResults] = useState<{ success: number; failed: number; skipped: number }>({ success: 0, failed: 0, skipped: 0 });
 
   const resetState = () => {
@@ -273,6 +275,8 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
   const handleImport = async () => {
     setStep('importing');
     setImportProgress(0);
+    setImportCounter({ done: 0, total: users.length });
+    setImportCurrentEmail('');
 
     const { data: sessionData } = await supabase.auth.getSession();
     let successCount = 0;
@@ -283,6 +287,7 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
 
     for (let i = 0; i < users.length; i++) {
       const user = updatedUsers[i];
+      setImportCurrentEmail(user.email);
       // Initial password = the user's phone number with non-digits stripped
       // (so '+972 50-123-4567' becomes '972501234567'). The admin asked
       // for this so users can log in with something memorable on first
@@ -333,8 +338,10 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
       }
 
       setImportProgress(Math.round(((i + 1) / users.length) * 100));
+      setImportCounter({ done: i + 1, total: users.length });
       setUsers([...updatedUsers]);
     }
+    setImportCurrentEmail('');
 
     setImportResults({ success: successCount, failed: failedCount, skipped: skippedCount });
     setStep('results');
@@ -456,17 +463,28 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
         {step === 'importing' && (
           <div className="py-8 text-center space-y-4">
             <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
-            <div>
-              <p className="font-medium mb-2">
+            <div className="space-y-2">
+              <p className="font-medium">
                 {t('importUsers.importing')}
               </p>
               <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                <div 
+                <div
                   className="bg-primary h-full transition-all duration-300"
                   style={{ width: `${importProgress}%` }}
                 />
               </div>
-              <p className="text-sm text-muted-foreground mt-2">{importProgress}%</p>
+              <p className="text-sm text-muted-foreground">
+                {t('importUsers.progressCount')
+                  .replace('{done}', String(importCounter.done))
+                  .replace('{total}', String(importCounter.total))}
+                {' · '}
+                {importProgress}%
+              </p>
+              {importCurrentEmail && (
+                <p className="text-xs text-muted-foreground truncate" dir="ltr">
+                  {importCurrentEmail}
+                </p>
+              )}
             </div>
           </div>
         )}

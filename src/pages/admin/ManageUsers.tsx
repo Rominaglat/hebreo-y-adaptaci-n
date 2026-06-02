@@ -84,6 +84,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { withTimeout } from '@/lib/utils';
 import { ImportUsersDialog } from '@/components/admin/ImportUsersDialog';
+import { Progress } from '@/components/ui/progress';
 import ExcelJS from 'exceljs';
 import { StudentProgressDialog } from '@/components/admin/StudentProgressDialog';
 interface UserActivity {
@@ -146,6 +147,7 @@ export default function ManageUsers() {
   const [bulkSelectedCourses, setBulkSelectedCourses] = useState<Set<string>>(new Set());
   const [bulkAccessAction, setBulkAccessAction] = useState<'add' | 'remove'>('add');
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState({ done: 0, total: 0 });
   
   // Single user dialogs
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
@@ -960,15 +962,21 @@ export default function ManageUsers() {
     if (selectedUsers.size === 0) return;
 
     setIsBulkDeleting(true);
+    setBulkDeleteProgress({ done: 0, total: selectedUsers.size });
     let successCount = 0;
     let failedCount = 0;
 
     try {
       const { data: sessionData } = await supabase.auth.getSession();
 
+      let processed = 0;
       for (const userId of selectedUsers) {
         const user = users.find(u => u.id === userId);
-        if (!user) continue;
+        if (!user) {
+          processed++;
+          setBulkDeleteProgress({ done: processed, total: selectedUsers.size });
+          continue;
+        }
 
         try {
           // Post tenant_memberships drop: "remove from tenant" no longer exists.
@@ -1009,6 +1017,8 @@ export default function ManageUsers() {
           console.error(`Error deleting user ${userId}:`, error);
           failedCount++;
         }
+        processed++;
+        setBulkDeleteProgress({ done: processed, total: selectedUsers.size });
       }
 
       toast({
@@ -2015,7 +2025,15 @@ export default function ManageUsers() {
       </Dialog>
 
       {/* Bulk Delete Confirmation Dialog */}
-      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+      <AlertDialog
+        open={bulkDeleteDialogOpen}
+        onOpenChange={(open) => {
+          // Block close while delete is in flight so the user can't dismiss
+          // mid-loop and end up with a partial state plus no progress UI.
+          if (isBulkDeleting && !open) return;
+          setBulkDeleteDialogOpen(open);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -2027,8 +2045,23 @@ export default function ManageUsers() {
                 : t('manageUsers.bulkRemoveFromOrg')}
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {isBulkDeleting && bulkDeleteProgress.total > 0 && (
+            <div className="space-y-2 py-2">
+              <Progress
+                value={Math.round((bulkDeleteProgress.done / bulkDeleteProgress.total) * 100)}
+                className="h-2"
+              />
+              <p className="text-xs text-muted-foreground text-center">
+                {t('manageUsers.bulkProgress')
+                  .replace('{done}', String(bulkDeleteProgress.done))
+                  .replace('{total}', String(bulkDeleteProgress.total))}
+              </p>
+            </div>
+          )}
+
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogCancel disabled={isBulkDeleting}>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
               disabled={isBulkDeleting}
