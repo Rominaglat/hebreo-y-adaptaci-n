@@ -143,22 +143,35 @@ serve(async (req) => {
 
     apiKeyHash = hashApiKey(apiKey);
 
-    // Single-tenant: the global API key in developer_settings is the only
-    // accepted credential. Per-tenant API keys have been removed alongside
-    // tenant_memberships/tenants.
+    // Single-tenant: the API key the admin generates in PlatformSettings
+    // lands in tenant_settings.api_key (via the DeveloperSettings component).
+    // The legacy developer_settings table is unused and sits empty, so a
+    // lookup there was always returning null and 401'ing every caller.
+    // We check tenant_settings first; developer_settings stays as a
+    // back-compat fallback in case anyone still writes there.
     let isValidKey = false;
     let rateLimitEnabled = false;
     let rateLimitPerMinute = 60;
 
-    const { data: devSettings } = await supabase
-      .from('developer_settings')
-      .select('api_key, rate_limit_per_minute, rate_limit_enabled')
-      .single();
+    const { data: tenantSettings } = await supabase
+      .from('tenant_settings')
+      .select('api_key')
+      .limit(1)
+      .maybeSingle();
 
-    if (devSettings && devSettings.api_key === apiKey) {
+    if (tenantSettings && tenantSettings.api_key === apiKey) {
       isValidKey = true;
-      rateLimitEnabled = devSettings.rate_limit_enabled || false;
-      rateLimitPerMinute = devSettings.rate_limit_per_minute || 60;
+    } else {
+      // Legacy path — read from developer_settings if someone populates it.
+      const { data: devSettings } = await supabase
+        .from('developer_settings')
+        .select('api_key, rate_limit_per_minute, rate_limit_enabled')
+        .maybeSingle();
+      if (devSettings && devSettings.api_key === apiKey) {
+        isValidKey = true;
+        rateLimitEnabled = devSettings.rate_limit_enabled || false;
+        rateLimitPerMinute = devSettings.rate_limit_per_minute || 60;
+      }
     }
 
     if (!isValidKey) {
