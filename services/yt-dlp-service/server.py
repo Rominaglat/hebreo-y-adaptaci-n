@@ -560,26 +560,38 @@ def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir):
     return files[0]
 
 
-def process_job(job_id, video_url, file_url, referer_url, language, user_id):
+def process_job(job_id, video_url, file_url, referer_url, language, user_id, transcript_text=None):
     """Background worker — uses Gemini for transcription + summary.
 
-    Three input modes:
-      1. file_url set      → download the file directly (Supabase Storage,
-                              any HTTPS URL), upload to Gemini Files API,
-                              transcribe. This is the bulletproof path for
-                              unlisted / restricted videos — admins upload
-                              the source MP4/MP3 once instead of fighting
-                              YouTube's bot detection.
-      2. YouTube video_url → try Gemini's native YouTube fileData first;
-                              on 403 fall back to yt-dlp + Files API.
-      3. other video_url   → yt-dlp + Files API (Vimeo etc.).
+    Four input modes:
+      1. transcript_text set → admin uploaded a pre-made .txt transcript.
+                                Skip the audio-to-text pass entirely and
+                                feed the text straight into gemini_summarize.
+      2. file_url set        → download the file directly (Supabase Storage,
+                                any HTTPS URL), upload to Gemini Files API,
+                                transcribe. The bulletproof path for
+                                unlisted / restricted videos — admins upload
+                                the source MP4/MP3 once instead of fighting
+                                YouTube's bot detection.
+      3. YouTube video_url   → try Gemini's native YouTube fileData first;
+                                on 403 fall back to yt-dlp + Files API.
+      4. other video_url     → yt-dlp + Files API (Vimeo etc.).
     """
     job = jobs[job_id]
     tmpdir = tempfile.mkdtemp()
     try:
         out = None
 
-        if file_url:
+        if transcript_text:
+            # ── Pre-made-transcript path: bypass Gemini's audio pass ──
+            # The caller has already done (or paid someone else to do)
+            # the transcription. We just summarize.
+            print(f"[{job_id}] transcript_text path: {len(transcript_text)} chars")
+            job["progress"] = "summarizing"
+            summary = gemini_summarize(transcript_text, language)
+            out = {"transcript": transcript_text, "summary": summary}
+
+        elif file_url:
             # ── Upload path: just download + transcribe, no YouTube at all ──
             job["progress"] = "downloading"
             local_path = download_remote_file(job_id, file_url, tmpdir)
@@ -690,8 +702,16 @@ def transcribe():
     data = request.json or {}
     video_url = data.get("video_url", "")
     file_url = data.get("file_url", "")
-    if not video_url and not file_url:
-        return jsonify({"error": "video_url or file_url is required"}), 400
+    transcript_text = data.get("transcript_text", "") or ""
+    if not video_url and not file_url and not transcript_text:
+        return jsonify(
+            {"error": "video_url, file_url, or transcript_text is required"}
+        ), 400
+    # Guard against absurdly large payloads. 8MB of text is ~1.3M tokens
+    # at 6 chars/token, which is well over Gemini 2.5 Flash's input window
+    # — fail fast instead of letting the worker crash mid-summarize.
+    if transcript_text and len(transcript_text) > 8 * 1024 * 1024:
+        return jsonify({"error": "transcript_text is too large (>8MB)"}), 400
 
     job_id = str(uuid.uuid4())[:8]
     jobs[job_id] = {
@@ -705,14 +725,15 @@ def transcribe():
 
     threading.Thread(
         target=process_job,
-        args=(
-            job_id,
-            video_url,
-            file_url,
-            data.get("referer_url", ""),
-            data.get("language", "he"),
-            user.get("id", ""),
-        ),
+        kwargs={
+            "job_id": job_id,
+            "video_url": video_url,
+            "file_url": file_url,
+            "referer_url": data.get("referer_url", ""),
+            "language": data.get("language", "he"),
+            "user_id": user.get("id", ""),
+            "transcript_text": transcript_text,
+        },
         daemon=True,
     ).start()
 

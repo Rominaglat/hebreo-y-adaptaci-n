@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Trash2, Upload, Video, File, ClipboardCheck, FileInput, X, ExternalLink, FolderOpen, ChevronDown, ChevronUp, ArrowRightLeft, Sparkles, Loader2, EyeOff } from 'lucide-react';
+import { Trash2, Upload, Video, File, ClipboardCheck, FileInput, X, ExternalLink, FolderOpen, ChevronDown, ChevronUp, ArrowRightLeft, Sparkles, Loader2, EyeOff, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -104,7 +104,9 @@ export default function LessonForm({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resourceInputRef = useRef<HTMLInputElement>(null);
   const sourceInputRef = useRef<HTMLInputElement>(null);
+  const transcriptInputRef = useRef<HTMLInputElement>(null);
   const [uploadingSource, setUploadingSource] = useState(false);
+  const [uploadingTranscript, setUploadingTranscript] = useState(false);
 
   const getFileName = (url: string) => {
     try {
@@ -227,7 +229,7 @@ export default function LessonForm({
   // Shared transcription pipeline. Pass EITHER `video_url` (YouTube/Vimeo)
   // OR `file_url` (Supabase Storage URL of a directly uploaded MP4/MP3).
   const runTranscribeJob = async (
-    source: { video_url?: string; file_url?: string },
+    source: { video_url?: string; file_url?: string; transcript_text?: string },
   ) => {
     setGeneratingSummary(true);
     cancelSummaryRef.current = false;
@@ -260,6 +262,7 @@ export default function LessonForm({
         body: JSON.stringify({
           ...(source.video_url ? { video_url: source.video_url } : {}),
           ...(source.file_url ? { file_url: source.file_url } : {}),
+          ...(source.transcript_text ? { transcript_text: source.transcript_text } : {}),
           language: summaryLang,
           referer_url: 'https://example.com/',
         }),
@@ -304,8 +307,10 @@ export default function LessonForm({
       console.log("Summary length:", data.summary?.length, "Transcript length:", data.transcript_text?.length);
       console.log("Summary preview:", data.summary?.substring(0, 100));
 
-      // Download transcript as a file to the browser
-      if (data.transcript_text) {
+      // Download transcript as a file to the browser. Skip when the
+      // admin uploaded the transcript themselves — auto-downloading
+      // back the same file they just chose would be confusing.
+      if (data.transcript_text && !source.transcript_text) {
         const blob = new Blob([data.transcript_text], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -324,8 +329,11 @@ export default function LessonForm({
         onUpdate(moduleIndex, lessonIndex, 'content_text', cleanSummary);
       }
 
-      // Add transcript file as resource
-      if (data.transcript_file_url) {
+      // Add transcript file as resource. Skip when the user uploaded a
+      // pre-made transcript themselves — they already see their original
+      // .txt in resources from handleTranscriptUpload; the server's
+      // duplicate copy would just clutter the list.
+      if (data.transcript_file_url && !source.transcript_text) {
         const transcriptResource: ResourceItem = {
           name: summaryLang === 'he' ? t('lessonForm.transcript') : 'Transcript',
           url: data.transcript_file_url,
@@ -355,6 +363,69 @@ export default function LessonForm({
   // Supabase Storage, then hand its public URL to the transcribe service.
   // This bypasses YouTube entirely — the bulletproof path for unlisted
   // / age-restricted / private videos where yt-dlp can't reach.
+  // Upload a pre-made .txt / .md / .vtt / .srt transcript: attach it to
+  // the lesson's resources AND fast-path through Gemini (summarize only,
+  // no transcribe pass). Used when an admin already has the transcript
+  // and just wants the structured HTML summary.
+  const handleTranscriptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !user) return;
+    if (generatingSummary || uploadingSource || uploadingTranscript) return;
+
+    // 8 MB cap mirrors the server-side guard in /transcribe.
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error(t('lessonForm.transcriptTooLarge'));
+      return;
+    }
+
+    setUploadingTranscript(true);
+    setSummaryProgress(t('lessonForm.progressStarting'));
+    try {
+      const fileExt = (file.name.split('.').pop() || 'txt').toLowerCase();
+      const baseName = file.name.replace(/\.[^/.]+$/, '');
+      const sanitizedName = sanitizeFileName(baseName);
+      const storagePath = `resources/${user.id}/${Date.now()}_${sanitizedName}.${fileExt}`;
+
+      // Read the file as plain text. We deliberately don't try to parse
+      // VTT/SRT timing markers — the summarize prompt copes with raw
+      // text + timestamps just fine, and dropping them sometimes loses
+      // useful structural hints.
+      const transcriptText = await file.text();
+      if (!transcriptText.trim()) {
+        toast.error(t('lessonForm.transcriptEmpty'));
+        setUploadingTranscript(false);
+        return;
+      }
+
+      // Push the source .txt to Storage + add it to the lesson's
+      // resources so the student can also download it later.
+      const { error: uploadError } = await supabase.storage
+        .from('course-images')
+        .upload(storagePath, file, { contentType: file.type || 'text/plain' });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('course-images')
+        .getPublicUrl(storagePath);
+
+      const transcriptResource: ResourceItem = {
+        name: file.name || t('lessonForm.transcript'),
+        url: publicUrl,
+      };
+      const updatedResources = [...resources, transcriptResource];
+      onUpdate(moduleIndex, lessonIndex, 'resources_url', JSON.stringify(updatedResources));
+
+      // Skip Gemini's audio pass — feed the text straight into summarize.
+      await runTranscribeJob({ transcript_text: transcriptText });
+    } catch (err: any) {
+      console.error('Transcript upload + summarize failed:', err);
+      toast.error(t('lessonForm.summaryError') + ': ' + (err.message || ''));
+    } finally {
+      setUploadingTranscript(false);
+    }
+  };
+
   const handleSourceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -567,7 +638,7 @@ export default function LessonForm({
                   variant="outline"
                   size="sm"
                   onClick={() => sourceInputRef.current?.click()}
-                  disabled={generatingSummary || uploadingSource}
+                  disabled={generatingSummary || uploadingSource || uploadingTranscript}
                   className="gap-1.5"
                 >
                   {uploadingSource ? (
@@ -579,6 +650,38 @@ export default function LessonForm({
                     <>
                       <Upload className="w-3.5 h-3.5" />
                       {t('lessonForm.uploadAndSummarize')}
+                    </>
+                  )}
+                </Button>
+
+                {/* Upload a pre-made transcript file (.txt / .md / .vtt /
+                    .srt). The server skips Gemini's audio pass and goes
+                    straight to summarize — useful when the admin already
+                    has the lesson typed out. */}
+                <input
+                  ref={transcriptInputRef}
+                  type="file"
+                  accept=".txt,.md,.markdown,.vtt,.srt,text/plain"
+                  onChange={handleTranscriptUpload}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => transcriptInputRef.current?.click()}
+                  disabled={generatingSummary || uploadingSource || uploadingTranscript}
+                  className="gap-1.5"
+                >
+                  {uploadingTranscript ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span className="text-xs">{summaryProgress || t('lessonForm.uploadingTranscript')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-3.5 h-3.5" />
+                      {t('lessonForm.uploadTranscriptAndSummarize')}
                     </>
                   )}
                 </Button>
