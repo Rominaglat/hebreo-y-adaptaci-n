@@ -107,7 +107,7 @@ interface UserWithRole {
   phone: string | null;
   avatar_url: string | null;
   join_date: string;
-  role: 'admin' | 'instructor' | 'student' | 'super_admin';
+  role: 'admin' | 'instructor' | 'student' | 'super_admin' | 'lead';
   enrolledCourses?: string[];
 }
 
@@ -143,7 +143,7 @@ export default function ManageUsers() {
   const [bulkRoleDialogOpen, setBulkRoleDialogOpen] = useState(false);
   const [bulkAccessDialogOpen, setBulkAccessDialogOpen] = useState(false);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
-  const [bulkNewRole, setBulkNewRole] = useState<'admin' | 'instructor' | 'student'>('student');
+  const [bulkNewRole, setBulkNewRole] = useState<'admin' | 'instructor' | 'student' | 'lead'>('student');
   const [bulkSelectedCourses, setBulkSelectedCourses] = useState<Set<string>>(new Set());
   const [bulkAccessAction, setBulkAccessAction] = useState<'add' | 'remove'>('add');
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -157,7 +157,7 @@ export default function ManageUsers() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRole | null>(null);
-  const [newRole, setNewRole] = useState<'admin' | 'instructor' | 'student' | 'super_admin'>('student');
+  const [newRole, setNewRole] = useState<'admin' | 'instructor' | 'student' | 'super_admin' | 'lead'>('student');
   const [userCourseAccess, setUserCourseAccess] = useState<Set<string>>(new Set());
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
   const [isUpdatingAccess, setIsUpdatingAccess] = useState(false);
@@ -181,14 +181,14 @@ export default function ManageUsers() {
   const [inviteForm, setInviteForm] = useState({
     email: '',
     full_name: '',
-    role: 'student' as 'admin' | 'instructor' | 'student',
+    role: 'student' as 'admin' | 'instructor' | 'student' | 'lead',
     password: ''
   });
 
   const inviteSchema = z.object({
     email: z.string().email(t('admin.validEmail')),
     full_name: z.string().min(2, t('admin.nameMinLength')),
-    role: z.enum(['admin', 'instructor', 'student'])
+    role: z.enum(['admin', 'instructor', 'student', 'lead'])
   });
 
   const roleLabels: Record<string, string> = {
@@ -196,6 +196,7 @@ export default function ManageUsers() {
     instructor: t('admin.instructor'),
     student: t('admin.student'),
     super_admin: t('manageUsers.superAdmin'),
+    lead: t('admin.lead'),
   };
 
   useEffect(() => {
@@ -518,7 +519,7 @@ export default function ManageUsers() {
     }
   };
 
-  const handleUpdateRole = async (userId: string, newRole: 'admin' | 'instructor' | 'student' | 'super_admin') => {
+  const handleUpdateRole = async (userId: string, newRole: 'admin' | 'instructor' | 'student' | 'super_admin' | 'lead') => {
     if (newRole === 'super_admin' && !isMainTenant) {
       toast({
         title: t('admin.accessDenied'),
@@ -1182,7 +1183,7 @@ export default function ManageUsers() {
                   <Label htmlFor="role">{t('admin.selectRole')}</Label>
                   <Select
                     value={inviteForm.role}
-                    onValueChange={(value: 'admin' | 'instructor' | 'student') => 
+                    onValueChange={(value: 'admin' | 'instructor' | 'student' | 'lead') =>
                       setInviteForm({ ...inviteForm, role: value })
                     }
                   >
@@ -1190,6 +1191,7 @@ export default function ManageUsers() {
                       <SelectValue placeholder={t('admin.selectRole')} />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="lead">{t('admin.lead')}</SelectItem>
                       <SelectItem value="student">{t('admin.student')}</SelectItem>
                       <SelectItem value="instructor">{t('admin.instructor')}</SelectItem>
                       <SelectItem value="admin">{t('admin.admin')}</SelectItem>
@@ -1285,6 +1287,7 @@ export default function ManageUsers() {
                 <SelectItem value="admin">{t('admin.admin')}</SelectItem>
                 <SelectItem value="instructor">{t('admin.instructor')}</SelectItem>
                 <SelectItem value="student">{t('admin.student')}</SelectItem>
+                <SelectItem value="lead">{t('admin.lead')}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -1626,11 +1629,12 @@ export default function ManageUsers() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <Select value={newRole} onValueChange={(v: 'admin' | 'instructor' | 'student' | 'super_admin') => setNewRole(v)}>
+            <Select value={newRole} onValueChange={(v: 'admin' | 'instructor' | 'student' | 'super_admin' | 'lead') => setNewRole(v)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="lead">{t('admin.lead')}</SelectItem>
                 <SelectItem value="student">{t('admin.student')}</SelectItem>
                 <SelectItem value="instructor">{t('admin.instructor')}</SelectItem>
                 <SelectItem value="admin">{t('admin.admin')}</SelectItem>
@@ -1782,11 +1786,12 @@ export default function ManageUsers() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <Select value={bulkNewRole} onValueChange={(v: 'admin' | 'instructor' | 'student') => setBulkNewRole(v)}>
+            <Select value={bulkNewRole} onValueChange={(v: 'admin' | 'instructor' | 'student' | 'lead') => setBulkNewRole(v)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="lead">{t('admin.lead')}</SelectItem>
                 <SelectItem value="student">{t('admin.student')}</SelectItem>
                 <SelectItem value="instructor">{t('admin.instructor')}</SelectItem>
                 <SelectItem value="admin">{t('admin.admin')}</SelectItem>

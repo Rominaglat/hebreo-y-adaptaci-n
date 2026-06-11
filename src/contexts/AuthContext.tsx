@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-type AppRole = 'admin' | 'instructor' | 'student' | 'super_admin';
+type AppRole = 'admin' | 'instructor' | 'student' | 'super_admin' | 'lead';
 
 interface Profile {
   id: string;
@@ -37,6 +37,7 @@ interface AuthContextType {
   isInstructor: boolean;
   isAdminOrInstructor: boolean;
   isSuperAdmin: boolean;
+  isLead: boolean;
   // New: tenant-specific profile and role
   tenantProfile: TenantProfile | null;
   tenantRole: AppRole | null;
@@ -164,19 +165,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('role')
         .eq('user_id', userId);
 
-      const roleHierarchy: AppRole[] = ['super_admin', 'admin', 'instructor', 'student'];
-      let highestRole: AppRole = 'student';
+      // Highest privilege wins when a user has multiple rows. Order
+      // matters: leads are LOWEST, below student — a lead who later
+      // becomes a student keeps their lead row but the student row
+      // takes precedence and unlocks the rest of the portal.
+      const roleHierarchy: AppRole[] = ['super_admin', 'admin', 'instructor', 'student', 'lead'];
+      let highestRole: AppRole | null = null;
       for (const row of roleRows ?? []) {
         const r = row.role as AppRole;
-        if (roleHierarchy.indexOf(r) < roleHierarchy.indexOf(highestRole)) {
+        const idx = roleHierarchy.indexOf(r);
+        if (idx < 0) continue;
+        if (highestRole === null || idx < roleHierarchy.indexOf(highestRole)) {
           highestRole = r;
         }
       }
-      setRole(highestRole);
+      // No rows at all → default to student so existing behavior is
+      // preserved for legacy accounts. (A lead without a user_roles
+      // row would mis-default to full student access, but in practice
+      // every lead is created through the admin UI which writes a row.)
+      const finalRole: AppRole = highestRole ?? 'student';
+      setRole(finalRole);
       // Mirror to tenantRole so legacy consumers (DashboardLayout) keep
       // working — the distinction between global and tenant role no
       // longer exists.
-      setTenantRole(highestRole);
+      setTenantRole(finalRole);
       // The profile-row fields are now the single source of truth; the
       // tenant_memberships override is gone.
       if (profileResult.data) {
@@ -185,7 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           avatar_url: profileResult.data.avatar_url,
           phone: profileResult.data.phone,
           bio: profileResult.data.bio,
-          role: highestRole,
+          role: finalRole,
         });
       }
     } catch (error) {
@@ -241,6 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = effectiveRole === 'admin' || isSuperAdmin;
   const isInstructor = effectiveRole === 'instructor';
   const isAdminOrInstructor = isAdmin || isInstructor;
+  const isLead = effectiveRole === 'lead';
 
   return (
     <AuthContext.Provider value={{
@@ -256,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isInstructor,
       isAdminOrInstructor,
       isSuperAdmin,
+      isLead,
       tenantProfile,
       tenantRole,
       setCurrentTenantId,

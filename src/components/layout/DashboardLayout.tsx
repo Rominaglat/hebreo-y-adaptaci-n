@@ -58,7 +58,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, role, signOut, isAdmin, isSuperAdmin, isInstructor, tenantRole, tenantProfile } = useAuth();
+  const { profile, role, signOut, isAdmin, isSuperAdmin, isInstructor, isLead, tenantRole, tenantProfile } = useAuth();
   const { currentTenant, tenantSettings, loading: tenantsLoading, settingsLoading } = useTenant();
   const { t, language } = useLanguage();
   const { settings, theme, setTheme } = usePlatform();
@@ -112,16 +112,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   // Single-tenant mode: there is no "main tenant" branch any more — every
   // user (super-admin included) gets the same nav baseline.
-  const navItems = [
-    { icon: Home, label: t('nav.dashboard'), path: '/dashboard' },
-    { icon: BookOpen, label: t('nav.courses'), path: '/courses' },
-    { icon: GraduationCap, label: t('nav.learningPath'), path: '/learning-path' },
-    { icon: Video, label: t('nav.studyRooms'), path: '/study-rooms' },
-    { icon: Calendar, label: t('nav.calendar'), path: '/calendar' },
-    { icon: Megaphone, label: t('nav.announcements'), path: '/announcements' },
-    { icon: Gift, label: t('nav.communityBenefits'), path: '/community-benefits' },
-    { icon: UsersRound, label: t('nav.communityMembers'), path: '/community-members' },
-  ];
+  // Leads (preview/sales accounts) see ONLY the courses tab — no
+  // dashboard, no community, no calendar.
+  const navItems = isLead
+    ? [
+        { icon: BookOpen, label: t('nav.courses'), path: '/courses' },
+      ]
+    : [
+        { icon: Home, label: t('nav.dashboard'), path: '/dashboard' },
+        { icon: BookOpen, label: t('nav.courses'), path: '/courses' },
+        { icon: GraduationCap, label: t('nav.learningPath'), path: '/learning-path' },
+        { icon: Video, label: t('nav.studyRooms'), path: '/study-rooms' },
+        { icon: Calendar, label: t('nav.calendar'), path: '/calendar' },
+        { icon: Megaphone, label: t('nav.announcements'), path: '/announcements' },
+        { icon: Gift, label: t('nav.communityBenefits'), path: '/community-benefits' },
+        { icon: UsersRound, label: t('nav.communityMembers'), path: '/community-members' },
+      ];
 
   const isAdminInCurrentTenant = tenantRole === 'admin' || tenantRole === 'super_admin' || isAdmin;
   const isInstructorInCurrentTenant = tenantRole === 'instructor' || isInstructor;
@@ -464,11 +470,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </main>
       </div>
-      <FloatingAiChat />
-      <OnboardingFlow />
-      <OnboardingChecklist />
-      <AchievementToast />
-      <CommandPalette />
+      {/* Leads don't get the AI bot, the onboarding flows, the journey
+          checklist, or the achievements toast. They also lose the command
+          palette since most of its routes are off-limits. */}
+      {!isLead && (
+        <>
+          <FloatingAiChat />
+          <OnboardingFlow />
+          <OnboardingChecklist />
+          <AchievementToast />
+          <CommandPalette />
+        </>
+      )}
     </div>
   );
 }

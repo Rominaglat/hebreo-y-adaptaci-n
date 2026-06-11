@@ -453,6 +453,27 @@ serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
+    // Lead tier (preview / sales accounts) is not entitled to the AI
+    // assistant. The frontend hides the FAB but a determined lead could
+    // POST here directly with their session token — block them server-
+    // side so the assistant ToS / token cost stays paid-tier-only.
+    {
+      const { data: roleRows } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id);
+      const allRoles = new Set<string>(((roleRows ?? []) as { role: string }[]).map((r) => r.role));
+      const hasNonLeadRole = ["admin", "super_admin", "instructor", "student"].some((r) =>
+        allRoles.has(r),
+      );
+      if (!hasNonLeadRole && allRoles.has("lead")) {
+        return new Response(JSON.stringify({ error: "forbidden_for_lead" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // SEC-012 — per-user rate limit (20/min)
     const rl = await checkRateLimit(supabase, `ai-assistant:${user.id}`, 20);
     if (!rl.allowed) {

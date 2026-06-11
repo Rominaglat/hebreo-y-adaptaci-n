@@ -97,7 +97,7 @@ function useDraggable(initialPos: { x: number; y: number }) {
 
 // ─── Main Component ───
 export function FloatingAiChat() {
-  const { user } = useAuth();
+  const { user, isLead } = useAuth();
   const { tenantSettings } = useTenant();
   const { t, language, isRTL } = useLanguage();
   const { completeStep } = useOnboarding();
@@ -276,7 +276,10 @@ export function FloatingAiChat() {
     }, 350);
   }, [cancelStream]);
 
-  if (!user) return null;
+  // Leads (preview/sales tier) don't get the AI assistant — even when
+  // the DashboardLayout-level gate is removed by a future refactor, this
+  // belt-and-suspenders check keeps the bot off the page for them.
+  if (!user || isLead) return null;
 
   return (
     <>

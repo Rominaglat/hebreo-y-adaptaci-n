@@ -29,7 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 interface ImportUser {
   email: string;
   full_name: string;
-  role: 'admin' | 'instructor' | 'student';
+  role: 'admin' | 'instructor' | 'student' | 'lead';
   phone?: string;
   status?: 'pending' | 'success' | 'error';
   error?: string;
@@ -128,10 +128,11 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
     phone: 'phone', 'טלפון': 'phone',
   };
 
-  const ROLE_ALIASES: Record<string, 'admin' | 'instructor' | 'student'> = {
+  const ROLE_ALIASES: Record<string, 'admin' | 'instructor' | 'student' | 'lead'> = {
     admin: 'admin', 'מנהל': 'admin', 'אדמין': 'admin',
     instructor: 'instructor', 'מרצה': 'instructor', 'מדריך': 'instructor',
     student: 'student', 'תלמיד': 'student', 'סטודנט': 'student',
+    lead: 'lead', 'ליד': 'lead', 'מתעניין': 'lead', prospect: 'lead',
   };
 
   const parseCsv = (text: string): Record<string, string>[] => {
@@ -209,7 +210,7 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
       : await parseXlsx(await file.arrayBuffer());
 
     const parsedUsers: ImportUser[] = [];
-    const validRoles = ['admin', 'instructor', 'student'];
+    const validRoles = ['admin', 'instructor', 'student', 'lead'];
 
     for (const row of rawRows) {
       // Normalize header keys: lowercase, look up via aliases
@@ -225,8 +226,8 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
       const rawRole = (norm.role ?? 'student').toString().trim().toLowerCase();
       const phone = (norm.phone ?? '').toString().trim();
 
-      const role: 'admin' | 'instructor' | 'student' =
-        ROLE_ALIASES[rawRole] ?? (validRoles.includes(rawRole) ? (rawRole as 'admin' | 'instructor' | 'student') : 'student');
+      const role: 'admin' | 'instructor' | 'student' | 'lead' =
+        ROLE_ALIASES[rawRole] ?? (validRoles.includes(rawRole) ? (rawRole as 'admin' | 'instructor' | 'student' | 'lead') : 'student');
 
       if (email && fullName) {
         parsedUsers.push({
@@ -360,6 +361,7 @@ export function ImportUsersDialog({ open, onOpenChange, onImportComplete }: Impo
       case 'admin': return t('admin.admin');
       case 'instructor': return t('admin.instructor');
       case 'student': return t('admin.student');
+      case 'lead': return t('admin.lead');
       default: return role;
     }
   };

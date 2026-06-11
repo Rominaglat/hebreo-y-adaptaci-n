@@ -572,6 +572,7 @@ const translations: Translations = {
   'admin.student': { he: 'סטודנט/ית', en: 'Student', es: 'Estudiante' },
   'admin.instructor': { he: 'מרצה', en: 'Instructor', es: 'Instructor/a' },
   'admin.admin': { he: 'מנהל/ת', en: 'Admin', es: 'Administrador/a' },
+  'admin.lead': { he: 'ליד / מתעניין', en: 'Lead / Prospect', es: 'Lead / Prospecto' },
   'admin.sendInvite': { he: 'שליחת הזמנה', en: 'Send Invite', es: 'Enviar invitación' },
   'admin.sending': { he: 'בשליחה...', en: 'Inviting...', es: 'Invitando...' },
   'admin.existingUsers': { he: 'כל המשתמשים', en: 'All Users', es: 'Todos los usuarios' },

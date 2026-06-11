@@ -8,14 +8,17 @@ interface ProtectedRouteProps {
   children: ReactNode;
   requireAdmin?: boolean;
   requireAdminOrInstructor?: boolean;
+  /** When true, redirect leads away from this route (they only see Courses). */
+  denyLead?: boolean;
 }
 
 export function ProtectedRoute({
   children,
   requireAdmin = false,
   requireAdminOrInstructor = false,
+  denyLead = false,
 }: ProtectedRouteProps) {
-  const { user, loading, isAdmin, isAdminOrInstructor, isSuperAdmin } = useAuth();
+  const { user, loading, isAdmin, isAdminOrInstructor, isSuperAdmin, isLead } = useAuth();
   const location = useLocation();
 
   // SEC-013 — hard-enforce AAL2 for admins when the env flag is on. This
@@ -54,12 +57,21 @@ export function ProtectedRoute({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Lead tier: the only authenticated route they can reach is /courses
+  // (and its nested course-detail pages). Everything else — including
+  // /dashboard, calendar, community, study rooms, learning path — sends
+  // them straight to /courses so they never see content they shouldn't.
+  if (isLead && denyLead && !location.pathname.startsWith('/courses')) {
+    return <Navigate to="/courses" replace />;
+  }
+
   if (requireAdmin && !isAdmin) {
-    return <Navigate to="/dashboard" replace />;
+    // Leads can't read /dashboard either, fall through to /courses.
+    return <Navigate to={isLead ? '/courses' : '/dashboard'} replace />;
   }
 
   if (requireAdminOrInstructor && !isAdminOrInstructor) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={isLead ? '/courses' : '/dashboard'} replace />;
   }
 
   if (mfaCheck.redirect) {

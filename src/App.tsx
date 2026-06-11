@@ -68,25 +68,29 @@ const App = () => (
                     <Route path="/login" element={<Login />} />
                     <Route path="/accept-invite" element={<AcceptInvite />} />
 
-                    {/* All protected routes share DashboardLayout (stays mounted) */}
+                    {/* All protected routes share DashboardLayout (stays mounted).
+                        Leads (preview/sales accounts) are denied access to every
+                        route except the courses tab — including /dashboard and
+                        the community pages. The denyLead prop on individual
+                        Route guards routes them to /courses. */}
                     <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/dashboard" element={<ProtectedRoute denyLead><Dashboard /></ProtectedRoute>} />
                       <Route path="/courses" element={<Courses />} />
                       <Route path="/courses/create" element={<ProtectedRoute requireAdmin>{<CreateCourse />}</ProtectedRoute>} />
-                      <Route path="/courses/favorites" element={<BookmarkedLessons />} />
-                      <Route path="/courses/watch-later" element={<BookmarkedLessons />} />
+                      <Route path="/courses/favorites" element={<ProtectedRoute denyLead><BookmarkedLessons /></ProtectedRoute>} />
+                      <Route path="/courses/watch-later" element={<ProtectedRoute denyLead><BookmarkedLessons /></ProtectedRoute>} />
                       <Route path="/courses/:id/edit" element={<ProtectedRoute requireAdminOrInstructor>{<EditCourse />}</ProtectedRoute>} />
                       <Route path="/courses/:id" element={<CourseDetail />} />
-                      <Route path="/study-rooms" element={<StudyRooms />} />
-                      <Route path="/calendar" element={<CalendarPage />} />
-                      <Route path="/announcements" element={<Announcements />} />
-                      <Route path="/community-benefits" element={<CommunityBenefits />} />
-                      <Route path="/community-members" element={<CommunityMembers />} />
-                      <Route path="/profile" element={<Profile />} />
+                      <Route path="/study-rooms" element={<ProtectedRoute denyLead><StudyRooms /></ProtectedRoute>} />
+                      <Route path="/calendar" element={<ProtectedRoute denyLead><CalendarPage /></ProtectedRoute>} />
+                      <Route path="/announcements" element={<ProtectedRoute denyLead><Announcements /></ProtectedRoute>} />
+                      <Route path="/community-benefits" element={<ProtectedRoute denyLead><CommunityBenefits /></ProtectedRoute>} />
+                      <Route path="/community-members" element={<ProtectedRoute denyLead><CommunityMembers /></ProtectedRoute>} />
+                      <Route path="/profile" element={<ProtectedRoute denyLead><Profile /></ProtectedRoute>} />
                       <Route path="/settings/security" element={<SecuritySettings />} />
                       <Route path="/install" element={<InstallApp />} />
-                      <Route path="/learning-path" element={<LearningPath />} />
+                      <Route path="/learning-path" element={<ProtectedRoute denyLead><LearningPath /></ProtectedRoute>} />
                       <Route path="/admin/users" element={<ProtectedRoute requireAdminOrInstructor>{<ManageUsers />}</ProtectedRoute>} />
                       <Route path="/admin/settings" element={<PlatformSettings />} />
                     </Route>
