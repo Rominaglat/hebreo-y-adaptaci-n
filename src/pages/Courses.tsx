@@ -748,14 +748,24 @@ export default function Courses() {
                   >
                     {isLocked ? (
                       <div
-                        onClick={() =>
-                          toast.error(
-                            isGatedByProgress
-                              ? t('coursesPage.finishPreviousCourse')
-                              : t('courses.contactAdmin'),
-                          )
-                        }
-                        className="block relative"
+                        onClick={() => {
+                          // If the course has a payment URL configured,
+                          // a click on its locked card opens checkout in
+                          // a new tab — exactly what a lead / prospect
+                          // came here to do. Otherwise fall back to the
+                          // existing 'contact admin' / 'finish previous'
+                          // toast.
+                          if (isGatedByProgress) {
+                            toast.error(t('coursesPage.finishPreviousCourse'));
+                            return;
+                          }
+                          if (course.payment_url) {
+                            window.open(course.payment_url, '_blank', 'noopener,noreferrer');
+                            return;
+                          }
+                          toast.error(t('courses.contactAdmin'));
+                        }}
+                        className="block relative cursor-pointer"
                       >
                         {cardInner}
                         {/* Full-card lock overlay — sits above all content */}

@@ -72,6 +72,7 @@ const translations: Translations = {
   'nav.learningPath': { he: 'מסלול הלמידה', en: 'Learning Path', es: 'Ruta de aprendizaje' },
   'nav.communityBenefits': { he: 'הטבות לקהילה', en: 'Benefits', es: 'Beneficios' },
   'nav.communityMembers': { he: 'חברי הקהילה', en: 'Members', es: 'Miembros' },
+  'nav.lockedForLead': { he: 'זמין למנויים בלבד — שדרגי לחבילה כדי לפתוח', en: 'Members only — upgrade to unlock', es: 'Solo miembros — actualiza tu plan para desbloquear' },
   'nav.personalityResults': { he: 'תוצאות אישיות', en: 'Personality Results', es: 'Resultados de personalidad' },
 
   // a11y / common UI

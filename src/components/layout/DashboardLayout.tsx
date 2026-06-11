@@ -1,7 +1,7 @@
 import { ReactNode, Suspense, useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Home, BookOpen, Video, Calendar, User, LogOut, Menu, X, Bell, Settings, Megaphone, UserPlus, Sun, Moon, CheckCheck, Gift, UsersRound, GraduationCap, Search } from 'lucide-react';
+import { Home, BookOpen, Video, Calendar, User, LogOut, Menu, X, Bell, Settings, Megaphone, UserPlus, Sun, Moon, CheckCheck, Gift, UsersRound, GraduationCap, Search, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -112,22 +112,21 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   // Single-tenant mode: there is no "main tenant" branch any more — every
   // user (super-admin included) gets the same nav baseline.
-  // Leads (preview/sales accounts) see ONLY the courses tab — no
-  // dashboard, no community, no calendar.
-  const navItems = isLead
-    ? [
-        { icon: BookOpen, label: t('nav.courses'), path: '/courses' },
-      ]
-    : [
-        { icon: Home, label: t('nav.dashboard'), path: '/dashboard' },
-        { icon: BookOpen, label: t('nav.courses'), path: '/courses' },
-        { icon: GraduationCap, label: t('nav.learningPath'), path: '/learning-path' },
-        { icon: Video, label: t('nav.studyRooms'), path: '/study-rooms' },
-        { icon: Calendar, label: t('nav.calendar'), path: '/calendar' },
-        { icon: Megaphone, label: t('nav.announcements'), path: '/announcements' },
-        { icon: Gift, label: t('nav.communityBenefits'), path: '/community-benefits' },
-        { icon: UsersRound, label: t('nav.communityMembers'), path: '/community-members' },
-      ];
+  // Leads (preview/sales accounts) see the SAME list as everyone else,
+  // but every non-courses item is rendered locked (lock icon, no click,
+  // muted) so the surface area of the platform is visible to them as a
+  // "what you'll unlock when you upgrade" tease — without actually
+  // routing them into pages they shouldn't see.
+  const navItems = [
+    { icon: Home, label: t('nav.dashboard'), path: '/dashboard' },
+    { icon: BookOpen, label: t('nav.courses'), path: '/courses' },
+    { icon: GraduationCap, label: t('nav.learningPath'), path: '/learning-path' },
+    { icon: Video, label: t('nav.studyRooms'), path: '/study-rooms' },
+    { icon: Calendar, label: t('nav.calendar'), path: '/calendar' },
+    { icon: Megaphone, label: t('nav.announcements'), path: '/announcements' },
+    { icon: Gift, label: t('nav.communityBenefits'), path: '/community-benefits' },
+    { icon: UsersRound, label: t('nav.communityMembers'), path: '/community-members' },
+  ];
 
   const isAdminInCurrentTenant = tenantRole === 'admin' || tenantRole === 'super_admin' || isAdmin;
   const isInstructorInCurrentTenant = tenantRole === 'instructor' || isInstructor;
@@ -226,6 +225,28 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
             {allNavItems.map(item => {
               const isActive = location.pathname === item.path || (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
+              // For leads every nav item except /courses is locked: shown
+              // greyed out with a trailing lock icon and rendered as a
+              // <div> so it doesn't navigate. Clicking does nothing —
+              // the cursor change communicates "not interactive".
+              const isLockedForLead = isLead && item.path !== '/courses';
+
+              if (isLockedForLead) {
+                return (
+                  <div
+                    key={item.path}
+                    role="link"
+                    aria-disabled="true"
+                    title={t('nav.lockedForLead')}
+                    className="group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/35 cursor-not-allowed select-none"
+                  >
+                    <item.icon className="w-5 h-5 flex-shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                    <Lock className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
+                  </div>
+                );
+              }
+
               return (
                 <Link
                   key={item.path}
