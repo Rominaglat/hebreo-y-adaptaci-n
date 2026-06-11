@@ -201,6 +201,11 @@ export default function CourseDetail() {
     }
   }, [id, user]);
   const fetchCourseData = async () => {
+    // Local mirror of the cross-course gate so the lesson-selection
+    // block below can read it synchronously (React state setters are
+    // async and would lag a tick behind). Defaults to true; the access
+    // check inside `if (courseData)` overwrites it.
+    let courseUnlockedNow = true;
     try {
       const {
         data: courseData
@@ -228,11 +233,12 @@ export default function CourseDetail() {
           prerequisite_course_id: (courseData as any).prerequisite_course_id || null,
         });
         
-        // Check if user has access to this course
+        // Check if user has access to this course.
         if (user) {
           if (isAdminOrInstructor) {
             setHasAccess(true);
             setCourseUnlocked(true);
+            courseUnlockedNow = true;
           } else {
             const { data: enrollment } = await supabase
               .from('enrollments')
@@ -250,14 +256,17 @@ export default function CourseDetail() {
                 p_course_id: id,
                 p_user_id: user.id,
               });
-              setCourseUnlocked(unlocked === true);
+              courseUnlockedNow = unlocked === true;
+              setCourseUnlocked(courseUnlockedNow);
             } else {
+              courseUnlockedNow = false;
               setCourseUnlocked(false);
             }
           }
         } else {
           setHasAccess(false);
           setCourseUnlocked(false);
+          courseUnlockedNow = false;
         }
       }
       
@@ -299,17 +308,26 @@ export default function CourseDetail() {
           .flatMap((m: Module) =>
             [...m.lessons].sort((a, b) => a.order_index - b.order_index),
           );
-        // Free-order courses (lessons_in_order=false): no within-course
-        // gating, so nothing is locked here. Cross-course gating, if any,
-        // is enforced by the courseUnlocked state that lockedLessonIds
-        // consumes after this fetch settles.
+        // Lock set for the initial lesson auto-selection. THREE rules:
+        //   1. Admins / instructors: nothing is locked.
+        //   2. Cross-course gate (courseUnlockedNow === false): every
+        //      lesson is locked. This block was missing and caused the
+        //      first lesson to auto-play even when the previous course
+        //      wasn't finished.
+        //   3. Within-course sequential rule: locks anything after a
+        //      not-yet-completed lesson. Skipped for lessons_in_order=
+        //      false courses (Hebreo para todos, VIVOS).
         const courseLessonsInOrder = (courseData as any)?.lessons_in_order !== false;
         const lockedNow = new Set<string>();
-        if (!isAdminOrInstructor && courseLessonsInOrder) {
-          let prevDone = true;
-          for (const l of orderedAll) {
-            if (!prevDone) lockedNow.add(l.id);
-            prevDone = l.is_completed;
+        if (!isAdminOrInstructor) {
+          if (!courseUnlockedNow) {
+            orderedAll.forEach((l: Lesson) => lockedNow.add(l.id));
+          } else if (courseLessonsInOrder) {
+            let prevDone = true;
+            for (const l of orderedAll) {
+              if (!prevDone) lockedNow.add(l.id);
+              prevDone = l.is_completed;
+            }
           }
         }
 
@@ -340,7 +358,11 @@ export default function CourseDetail() {
             // fresh enrollee this is always the very first lesson.
             targetLesson = orderedAll.find((l: Lesson) => !l.is_completed && !lockedNow.has(l.id));
           }
-          setSelectedLesson(targetLesson || processedModules[0]?.lessons[0] || null);
+          // Fall back to the first NON-LOCKED lesson rather than the
+          // raw modules[0].lessons[0] — otherwise a course where every
+          // lesson is locked would silently auto-play lesson 1.
+          const firstUnlocked = orderedAll.find((l: Lesson) => !lockedNow.has(l.id));
+          setSelectedLesson(targetLesson || firstUnlocked || null);
         } else {
           // Update the current lesson's completion status
           const updatedLesson = processedModules.flatMap((m: Module) => m.lessons).find((l: Lesson) => l.id === selectedLesson.id);
