@@ -295,11 +295,13 @@ serve(async (req) => {
           return await sendResponse(errorResponse('Password must be at least 6 characters', 'VALIDATION_ERROR'), 'Password too short');
         }
 
+        const fullName = data.full_name || data.name || data.email;
+
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: data.email,
           password: data.password,
           email_confirm: true,
-          user_metadata: { full_name: data.full_name || data.name || data.email }
+          user_metadata: { full_name: fullName }
         });
 
         if (authError) {
@@ -311,20 +313,27 @@ serve(async (req) => {
 
         const userId = authData.user.id;
 
-        // Update profile with additional data (full_name, phone)
-        if (data.phone || data.name || data.full_name) {
-          await supabase.from('profiles').update({
-            full_name: data.full_name || data.name || data.email,
-            phone: data.phone || null
-          }).eq('id', userId);
+        // Upsert profile — admin.createUser does NOT reliably fire the
+        // public.profiles trigger, so a plain .update() leaves no row
+        // and the user vanishes from Manage Users (which reads from
+        // profiles). Upsert guarantees the row exists either way.
+        const { error: profileError } = await supabase.from('profiles').upsert({
+          id: userId,
+          email: data.email,
+          full_name: fullName,
+          phone: data.phone || null,
+        });
+        if (profileError) {
+          console.error('[API users.create] profile upsert failed:', profileError);
         }
 
-        // Grant the requested role (default student).
-        if (data.role && ['admin', 'instructor', 'student'].includes(data.role)) {
-          // Drop any pre-existing rows, insert the requested role.
-          await supabase.from('user_roles').delete().eq('user_id', userId);
-          await supabase.from('user_roles').insert({ user_id: userId, role: data.role });
-        }
+        // Grant the requested role (default student). 'lead' was missing
+        // from the whitelist — adding it so the API can mint preview/
+        // sales accounts directly.
+        const allowedRoles = ['admin', 'instructor', 'student', 'lead'];
+        const resolvedRole = data.role && allowedRoles.includes(data.role) ? data.role : 'student';
+        await supabase.from('user_roles').delete().eq('user_id', userId);
+        await supabase.from('user_roles').insert({ user_id: userId, role: resolvedRole });
 
         // Handle course enrollments
         if (data.courses) {
@@ -350,12 +359,45 @@ serve(async (req) => {
           }
         }
 
+        // Fire the invite email (best-effort — never fail the create on
+        // mail dispatch). admin-user-actions' dashboard path does the
+        // same. We send X-Internal-Secret because the external-api
+        // caller doesn't have a user JWT, and send-invite-email is
+        // normally JWT-gated to admin/instructor.
+        const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+        if (internalSecret) {
+          try {
+            const inviteResp = await fetch(`${supabaseUrl}/functions/v1/send-invite-email`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-internal-secret': internalSecret,
+              },
+              body: JSON.stringify({
+                email: data.email,
+                fullName,
+                tempPassword: data.password,
+              }),
+            });
+            if (!inviteResp.ok) {
+              console.warn(
+                `[API users.create] invite email dispatch returned ${inviteResp.status} for ${hashApiKey(data.email)} — user is created, admin can resend manually`,
+              );
+            }
+          } catch (e) {
+            console.warn('[API users.create] invite email dispatch error:', e);
+          }
+        } else {
+          console.warn('[API users.create] INTERNAL_FUNCTION_SECRET not configured — no invite email sent');
+        }
+
         return await sendResponse(jsonResponse({
           user: {
             id: userId,
             email: authData.user.email,
-            full_name: data.full_name || data.name || data.email,
+            full_name: fullName,
             phone: data.phone || null,
+            role: resolvedRole,
           },
           message: 'User created successfully',
         }));

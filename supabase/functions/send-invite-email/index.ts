@@ -284,37 +284,52 @@ serve(async (req) => {
       return jsonResp({ error: "email_not_configured" }, 500);
     }
 
-    // Caller must be authenticated admin/super_admin (or instructor — they
-    // can create student users per existing admin-user-actions rules; same
-    // restrictions apply here).
-    const authHeader = req.headers.get("Authorization") ?? "";
-    if (!authHeader.toLowerCase().startsWith("bearer ")) {
-      return jsonResp({ error: "Unauthorized" }, 401);
-    }
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
-    if (authError || !user) return jsonResp({ error: "Unauthorized" }, 401);
+    // Two auth modes:
+    //   1. User JWT: admin / super_admin / instructor calling from the
+    //      dashboard (admin-user-actions invokes us this way).
+    //   2. Internal service-to-service: another edge function (e.g.
+    //      external-api after users.create) presents x-internal-secret
+    //      matching INTERNAL_FUNCTION_SECRET. We skip the JWT + role
+    //      check then, because the calling function has already
+    //      authenticated its own API key holder.
+    const internalSecretEnv = Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "";
+    const internalSecretHeader = req.headers.get("x-internal-secret") ?? "";
+    const isInternal =
+      !!internalSecretEnv && internalSecretEnv === internalSecretHeader;
 
     const admin = createClient(supabaseUrl, serviceKey);
+    let callerIdForRl = "internal";
 
-    // Per-caller rate limit (10/min) so a stolen admin token can't blast.
-    const rl = await checkRateLimit(admin, `send-invite-email:${user.id}`, 10);
+    if (!isInternal) {
+      const authHeader = req.headers.get("Authorization") ?? "";
+      if (!authHeader.toLowerCase().startsWith("bearer ")) {
+        return jsonResp({ error: "Unauthorized" }, 401);
+      }
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: authError } = await userClient.auth.getUser();
+      if (authError || !user) return jsonResp({ error: "Unauthorized" }, 401);
+      callerIdForRl = user.id;
+
+      const { data: callerRoles } = await admin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .in("role", ["admin", "super_admin", "instructor"]);
+      if (!callerRoles || callerRoles.length === 0) {
+        return jsonResp({ error: "Forbidden" }, 403);
+      }
+    }
+
+    // Per-caller rate limit (10/min) — same bucket for both auth modes
+    // so an attacker who steals the internal secret can't blast either.
+    const rl = await checkRateLimit(admin, `send-invite-email:${callerIdForRl}`, 10);
     if (!rl.allowed) {
       return new Response(JSON.stringify({ error: "rate_limit" }), {
         status: 429,
         headers: { ...corsHeaders, ...rl.headers, "Content-Type": "application/json" },
       });
-    }
-
-    const { data: callerRoles } = await admin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .in("role", ["admin", "super_admin", "instructor"]);
-    if (!callerRoles || callerRoles.length === 0) {
-      return jsonResp({ error: "Forbidden" }, 403);
     }
 
     const body = await req.json().catch(() => ({})) as {
