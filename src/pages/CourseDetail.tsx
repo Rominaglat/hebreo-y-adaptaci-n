@@ -39,6 +39,10 @@ interface Course {
   // false → lessons can be watched in any order (community / open
   // tracks like Hebreo para todos or VIVOS). Default true — sequential.
   lessons_in_order: boolean;
+  // Single explicit prerequisite course. When set, every lesson of
+  // this course is gated until the user (if enrolled there too)
+  // completes every lesson in the referenced course.
+  prerequisite_course_id: string | null;
 }
 interface Module {
   id: string;
@@ -221,6 +225,7 @@ export default function CourseDetail() {
           // Default to true if the column is missing from the row (older
           // courses created before the migration land in this branch).
           lessons_in_order: (courseData as any).lessons_in_order !== false,
+          prerequisite_course_id: (courseData as any).prerequisite_course_id || null,
         });
         
         // Check if user has access to this course

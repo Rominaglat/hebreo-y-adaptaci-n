@@ -120,7 +120,16 @@ export default function EditCourse() {
     thumbnail_url: '',
     payment_url: '',
     is_published: false,
+    // Linear (default) = sequential lessons + optional prerequisite course.
+    // Open = lessons in any order + standalone (no prerequisite).
+    lessons_in_order: true,
+    prerequisite_course_id: null as string | null,
   });
+
+  // All other published courses (admin sees unpublished too) — the
+  // candidate list for the prerequisite dropdown. Loaded once on mount,
+  // self is filtered out at render time.
+  const [otherCourses, setOtherCourses] = useState<{ id: string; title: string }[]>([]);
 
   const [modules, setModules] = useState<ModuleForm[]>([]);
   const [collapsedModules, setCollapsedModules] = useState<Set<number>>(new Set());
@@ -218,7 +227,17 @@ export default function EditCourse() {
           thumbnail_url: course.thumbnail_url || '',
           payment_url: course.payment_url || '',
           is_published: course.is_published,
+          // Default true if the column is missing (older row pre-migration).
+          lessons_in_order: (course as any).lessons_in_order !== false,
+          prerequisite_course_id: (course as any).prerequisite_course_id || null,
         });
+
+        // Pull the candidate list for the prerequisite dropdown.
+        const { data: candidates } = await supabase
+          .from('courses')
+          .select('id, title')
+          .order('title');
+        setOtherCourses(((candidates ?? []) as { id: string; title: string }[]).filter(c => c.id !== id));
 
         // Fetch course instructors
         const { data: courseInstructors } = await supabase
@@ -412,7 +431,14 @@ export default function EditCourse() {
           payment_url: courseData.payment_url || null,
           is_published: courseData.is_published,
           instructor_id: selectedInstructors[0] || null,
-        })
+          lessons_in_order: courseData.lessons_in_order,
+          // Open courses are standalone — prerequisite is meaningless
+          // and we force-null it so a stale dropdown selection doesn't
+          // ghost-gate a course the admin just flipped to Open.
+          prerequisite_course_id: courseData.lessons_in_order
+            ? (courseData.prerequisite_course_id || null)
+            : null,
+        } as any)
         .eq('id', id);
 
       if (courseError) throw courseError;
@@ -774,6 +800,61 @@ export default function EditCourse() {
                   onCheckedChange={(checked) => setCourseData({ ...courseData, is_published: checked })}
                 />
                 <Label htmlFor="published">{t('createCourse.publishNow')}</Label>
+              </div>
+
+              {/* Gating mode: Linear (sequential + optional prerequisite)
+                  vs Open (any order, standalone). The prereq dropdown is
+                  hidden when Open since it can't apply there. */}
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="lessons-in-order" className="text-base">
+                      {t('editCourse.linearLabel')}
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      {courseData.lessons_in_order
+                        ? t('editCourse.linearOnDesc')
+                        : t('editCourse.linearOffDesc')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="lessons-in-order"
+                    checked={courseData.lessons_in_order}
+                    onCheckedChange={(checked) =>
+                      setCourseData({
+                        ...courseData,
+                        lessons_in_order: checked,
+                        // Flipping to Open clears the prereq selection.
+                        prerequisite_course_id: checked ? courseData.prerequisite_course_id : null,
+                      })
+                    }
+                  />
+                </div>
+
+                {courseData.lessons_in_order && (
+                  <div className="space-y-2">
+                    <Label htmlFor="prerequisite">{t('editCourse.prerequisiteLabel')}</Label>
+                    <select
+                      id="prerequisite"
+                      value={courseData.prerequisite_course_id ?? ''}
+                      onChange={(e) =>
+                        setCourseData({
+                          ...courseData,
+                          prerequisite_course_id: e.target.value || null,
+                        })
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">{t('editCourse.prerequisiteNone')}</option>
+                      {otherCourses.map((c) => (
+                        <option key={c.id} value={c.id}>{c.title}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      {t('editCourse.prerequisiteHint')}
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

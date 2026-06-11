@@ -121,12 +121,29 @@ export default function CreateCourse() {
     thumbnail_url: '',
     payment_url: '',
     is_published: false,
+    lessons_in_order: true,
+    prerequisite_course_id: null as string | null,
   });
   const [selectedInstructors, setSelectedInstructors] = useState<string[]>([]);
+  const [otherCourses, setOtherCourses] = useState<{ id: string; title: string }[]>([]);
 
   useEffect(() => {
     fetchInstructors();
+    fetchOtherCourses();
   }, []);
+
+  const fetchOtherCourses = async () => {
+    try {
+      const { data } = await withTimeout(
+        supabase.from('courses').select('id, title').order('title'),
+        12000,
+        'fetchOtherCourses',
+      );
+      if (data) setOtherCourses(data as { id: string; title: string }[]);
+    } catch (e) {
+      console.error('fetchOtherCourses failed:', e);
+    }
+  };
 
   const fetchInstructors = async () => {
     try {
@@ -322,7 +339,11 @@ export default function CreateCourse() {
           payment_url: courseData.payment_url || null,
           is_published: courseData.is_published,
           instructor_id: selectedInstructors[0] || user.id,
-        })
+          lessons_in_order: courseData.lessons_in_order,
+          prerequisite_course_id: courseData.lessons_in_order
+            ? (courseData.prerequisite_course_id || null)
+            : null,
+        } as any)
         .select()
         .single();
 
@@ -561,6 +582,58 @@ export default function CreateCourse() {
                   onCheckedChange={(checked) => setCourseData({ ...courseData, is_published: checked })}
                 />
                 <Label htmlFor="published">{t('createCourse.publishNow')}</Label>
+              </div>
+
+              {/* Same Linear/Open + prerequisite controls as EditCourse. */}
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="lessons-in-order" className="text-base">
+                      {t('editCourse.linearLabel')}
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      {courseData.lessons_in_order
+                        ? t('editCourse.linearOnDesc')
+                        : t('editCourse.linearOffDesc')}
+                    </p>
+                  </div>
+                  <Switch
+                    id="lessons-in-order"
+                    checked={courseData.lessons_in_order}
+                    onCheckedChange={(checked) =>
+                      setCourseData({
+                        ...courseData,
+                        lessons_in_order: checked,
+                        prerequisite_course_id: checked ? courseData.prerequisite_course_id : null,
+                      })
+                    }
+                  />
+                </div>
+
+                {courseData.lessons_in_order && (
+                  <div className="space-y-2">
+                    <Label htmlFor="prerequisite">{t('editCourse.prerequisiteLabel')}</Label>
+                    <select
+                      id="prerequisite"
+                      value={courseData.prerequisite_course_id ?? ''}
+                      onChange={(e) =>
+                        setCourseData({
+                          ...courseData,
+                          prerequisite_course_id: e.target.value || null,
+                        })
+                      }
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">{t('editCourse.prerequisiteNone')}</option>
+                      {otherCourses.map((c) => (
+                        <option key={c.id} value={c.id}>{c.title}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      {t('editCourse.prerequisiteHint')}
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
