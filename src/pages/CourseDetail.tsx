@@ -36,6 +36,9 @@ interface Course {
   is_published: boolean;
   created_at: string;
   order_index: number | null;
+  // false → lessons can be watched in any order (community / open
+  // tracks like Hebreo para todos or VIVOS). Default true — sequential.
+  lessons_in_order: boolean;
 }
 interface Module {
   id: string;
@@ -146,6 +149,12 @@ export default function CourseDetail() {
       modules.forEach(m => m.lessons.forEach(l => locked.add(l.id)));
       return locked;
     }
+    // Open / community courses (lessons_in_order = false): every lesson
+    // is unlocked the moment the course is accessible. Used for VIVOS
+    // and Hebreo para todos.
+    if (course && course.lessons_in_order === false) {
+      return locked;
+    }
     const ordered = [...modules]
       .sort((a, b) => a.order_index - b.order_index)
       .flatMap(m =>
@@ -157,7 +166,7 @@ export default function CourseDetail() {
       prevCompleted = lesson.is_completed;
     }
     return locked;
-  }, [modules, isAdminOrInstructor, courseUnlocked]);
+  }, [modules, isAdminOrInstructor, courseUnlocked, course]);
 
   const isLessonLocked = (lessonId: string) => lockedLessonIds.has(lessonId);
 
@@ -209,6 +218,9 @@ export default function CourseDetail() {
           instructor_name: instructorName,
           payment_url: (courseData as any).payment_url || null,
           order_index: courseData.order_index ?? null,
+          // Default to true if the column is missing from the row (older
+          // courses created before the migration land in this branch).
+          lessons_in_order: (courseData as any).lessons_in_order !== false,
         });
         
         // Check if user has access to this course
@@ -282,8 +294,13 @@ export default function CourseDetail() {
           .flatMap((m: Module) =>
             [...m.lessons].sort((a, b) => a.order_index - b.order_index),
           );
+        // Free-order courses (lessons_in_order=false): no within-course
+        // gating, so nothing is locked here. Cross-course gating, if any,
+        // is enforced by the courseUnlocked state that lockedLessonIds
+        // consumes after this fetch settles.
+        const courseLessonsInOrder = (courseData as any)?.lessons_in_order !== false;
         const lockedNow = new Set<string>();
-        if (!isAdminOrInstructor) {
+        if (!isAdminOrInstructor && courseLessonsInOrder) {
           let prevDone = true;
           for (const l of orderedAll) {
             if (!prevDone) lockedNow.add(l.id);
