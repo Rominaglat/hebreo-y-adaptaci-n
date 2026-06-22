@@ -99,9 +99,9 @@ export function PrivateLessonDialog() {
       <DialogTrigger asChild>
         <Button
           type="button"
-          variant="hero"
+          variant="default"
           size="sm"
-          className="gap-1.5"
+          className="gap-1.5 shadow-sm"
           aria-label={t('privateLesson.button')}
         >
           <GraduationCap className="w-4 h-4" />
