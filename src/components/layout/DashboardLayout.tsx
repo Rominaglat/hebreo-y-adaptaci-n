@@ -21,6 +21,7 @@ import { OnboardingFlow } from '@/components/OnboardingFlow';
 import { OnboardingChecklist } from '@/components/OnboardingChecklist';
 import { AchievementToast } from '@/components/AchievementBadge';
 import { CommandPalette } from '@/components/CommandPalette';
+import { PrivateLessonDialog } from '@/components/PrivateLessonDialog';
 import { useSmartNotifications } from '@/hooks/useSmartNotifications';
 import { format } from 'date-fns';
 import { he, enUS, es } from 'date-fns/locale';
@@ -303,6 +304,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Request a paid 1:1 private lesson — sits next to the search */}
+            <PrivateLessonDialog />
             {/* ⌘K hint button — desktop only */}
             <button
               type="button"

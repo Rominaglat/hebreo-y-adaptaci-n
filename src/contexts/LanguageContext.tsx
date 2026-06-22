@@ -26,6 +26,43 @@ const translations: Translations = {
   'common.error': { he: 'שגיאה', en: 'Error', es: 'Error' },
   'common.success': { he: 'הצלחה', en: 'Success', es: 'Éxito' },
 
+  // Private 1:1 lesson — top-bar CTA + lead-capture popup
+  'privateLesson.button': { he: 'שיעור פרטי 1:1', en: '1:1 Private Lesson', es: 'Clase privada 1:1' },
+  'privateLesson.title': { he: 'בקשת שיעור פרטי 1:1', en: 'Request a 1:1 Private Lesson', es: 'Solicitar una clase privada 1:1' },
+  'privateLesson.description': {
+    he: 'בנוסף למנוי שלכם, ניתן לרכוש חבילת שיעורים פרטיים 1:1 לחיזוק אישי עם מדריך/ה. השאירו פרטים ונחזור אליכם עם הצעה מתאימה.',
+    en: "On top of your subscription, you can purchase a package of 1:1 private lessons for personal reinforcement with an instructor. Leave your details and we'll get back to you with an offer.",
+    es: 'Además de tu suscripción, puedes adquirir un paquete de clases privadas 1:1 para reforzar tu aprendizaje con un instructor. Déjanos tus datos y te contactaremos con una propuesta.',
+  },
+  'privateLesson.paidNote': {
+    he: 'שימו לב: מדובר בתשלום נוסף, בנפרד ומעבר לדמי המנוי.',
+    en: 'Please note: this is an additional charge, separate from and on top of your subscription fee.',
+    es: 'Ten en cuenta: tiene un costo adicional, aparte y por encima de tu suscripción.',
+  },
+  'privateLesson.field.name': { he: 'שם', en: 'Name', es: 'Nombre' },
+  'privateLesson.field.email': { he: 'אימייל', en: 'Email', es: 'Correo electrónico' },
+  'privateLesson.field.phone': { he: 'טלפון', en: 'Phone', es: 'Teléfono' },
+  'privateLesson.submit': { he: 'שליחת פרטים', en: 'Send my details', es: 'Enviar mis datos' },
+  'privateLesson.validation.name': { he: 'נא להזין שם', en: 'Please enter your name', es: 'Introduce tu nombre' },
+  'privateLesson.validation.email': { he: 'כתובת אימייל אינה תקינה', en: 'Please enter a valid email', es: 'Introduce un correo válido' },
+  'privateLesson.validation.contact': {
+    he: 'נא להשאיר אימייל או מספר טלפון',
+    en: 'Please leave an email or a phone number',
+    es: 'Deja un correo o un número de teléfono',
+  },
+  'privateLesson.toast.success.title': { he: 'הפרטים נשלחו!', en: 'Details sent!', es: '¡Datos enviados!' },
+  'privateLesson.toast.success.desc': {
+    he: 'תודה! נחזור אליכם בהקדם עם פרטים על שיעורים פרטיים 1:1.',
+    en: "Thank you! We'll get back to you shortly with details about 1:1 private lessons.",
+    es: '¡Gracias! Te contactaremos pronto con información sobre las clases privadas 1:1.',
+  },
+  'privateLesson.toast.error.title': { he: 'השליחה נכשלה', en: 'Submission failed', es: 'Error al enviar' },
+  'privateLesson.toast.error.desc': {
+    he: 'משהו השתבש. נא לנסות שוב בעוד רגע.',
+    en: 'Something went wrong. Please try again in a moment.',
+    es: 'Algo salió mal. Inténtalo de nuevo en un momento.',
+  },
+
   // Auth
   'auth.login': { he: 'התחברות', en: 'Login', es: 'Iniciar sesión' },
   'auth.logout': { he: 'התנתקות', en: 'Logout', es: 'Cerrar sesión' },
