@@ -23,7 +23,8 @@ import {
   Upload,
   Download,
   RefreshCw,
-  BarChart3
+  BarChart3,
+  Clock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { he, enUS } from 'date-fns/locale';
@@ -109,11 +110,28 @@ interface UserWithRole {
   join_date: string;
   role: 'admin' | 'instructor' | 'student' | 'super_admin' | 'lead';
   enrolledCourses?: string[];
+  // Active access time limit (null/absent = unlimited). Set once the limit
+  // has fired; `accessRevokedAt` marks it already applied by the sweep.
+  accessExpiresAt?: string | null;
+  accessRevokedAt?: string | null;
 }
 
 interface Course {
   id: string;
   title: string;
+}
+
+// supabase.functions.invoke never throws — non-2xx responses come back as
+// { error: FunctionsHttpError } whose .message is the generic "non-2xx status
+// code". The real server message lives in error.context (the raw Response).
+// Mirror handleInviteUser's handling so admins see the actual error.
+async function readFunctionError(error: any): Promise<string> {
+  try {
+    const body = await error?.context?.json?.();
+    return body?.error || body?.message || error?.message || '';
+  } catch {
+    return error?.message || '';
+  }
 }
 
 export default function ManageUsers() {
@@ -168,6 +186,12 @@ export default function ManageUsers() {
   const [loadingActivities, setLoadingActivities] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
+  // Time-limit dialog
+  const [timeLimitDialogOpen, setTimeLimitDialogOpen] = useState(false);
+  const [isSettingTimeLimit, setIsSettingTimeLimit] = useState(false);
+  const [timeLimitMode, setTimeLimitMode] = useState<'hours' | 'date'>('hours');
+  const [timeLimitHours, setTimeLimitHours] = useState('24');
+  const [timeLimitDate, setTimeLimitDate] = useState('');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [progressDialogOpen, setProgressDialogOpen] = useState(false);
   const [progressUser, setProgressUser] = useState<UserWithRole | null>(null);
@@ -306,7 +330,7 @@ export default function ManageUsers() {
         return all;
       };
 
-      const [profilesResult, enrollmentsData] = await Promise.all([
+      const [profilesResult, enrollmentsData, accessLimitsResult] = await Promise.all([
         withTimeout(
           supabase
             .from('profiles')
@@ -317,6 +341,20 @@ export default function ManageUsers() {
           'fetchUsers/profiles'
         ),
         fetchAllEnrollments(),
+        // Best-effort: a timeout/RLS failure here must not reject the whole
+        // load (which would blank the user list) — swallow it to empty so we
+        // just drop the expiry badges.
+        withTimeout(
+          supabase
+            .from('access_limits')
+            .select('user_id, expires_at, revoked_at')
+            .in('user_id', userIds),
+          12000,
+          'fetchUsers/accessLimits'
+        ).then(
+          (r) => r,
+          () => ({ data: [] as { user_id: string; expires_at: string; revoked_at: string | null }[] }),
+        ),
       ]);
       const enrollmentsResult = { data: enrollmentsData, error: null as null };
 
@@ -328,6 +366,13 @@ export default function ManageUsers() {
         const set = enrollmentsByUser.get(e.user_id) ?? new Set<string>();
         set.add(e.course_id);
         enrollmentsByUser.set(e.user_id, set);
+      });
+
+      // access_limits read is best-effort — a failure here shouldn't blank out
+      // the whole user list, just the expiry badges.
+      const accessLimitByUser = new Map<string, { expiresAt: string; revokedAt: string | null }>();
+      (accessLimitsResult.data || []).forEach((a) => {
+        accessLimitByUser.set(a.user_id, { expiresAt: a.expires_at, revokedAt: a.revoked_at });
       });
 
       const profiles = profilesResult.data || [];
@@ -342,6 +387,8 @@ export default function ManageUsers() {
             phone: profile.phone || null,
             role: (roleByUser.get(profile.id) || 'student') as UserWithRole['role'],
             enrolledCourses: Array.from(enrollmentsByUser.get(profile.id) ?? new Set<string>()),
+            accessExpiresAt: accessLimitByUser.get(profile.id)?.expiresAt ?? null,
+            accessRevokedAt: accessLimitByUser.get(profile.id)?.revokedAt ?? null,
           };
         }),
       );
@@ -809,6 +856,104 @@ export default function ManageUsers() {
     setNewPassword('');
     setShowNewPassword(false);
     setResetPasswordDialogOpen(true);
+  };
+
+  const openTimeLimitDialog = (user: UserWithRole) => {
+    setSelectedUser(user);
+    // Prefill from any existing (not-yet-fired) limit.
+    const pending = user.accessExpiresAt && !user.accessRevokedAt ? user.accessExpiresAt : '';
+    if (pending) {
+      // datetime-local wants `YYYY-MM-DDTHH:mm` in local time.
+      const d = new Date(pending);
+      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+      setTimeLimitMode('date');
+      setTimeLimitDate(local);
+      setTimeLimitHours('24');
+    } else {
+      setTimeLimitMode('hours');
+      setTimeLimitHours('24');
+      setTimeLimitDate('');
+    }
+    setTimeLimitDialogOpen(true);
+  };
+
+  const handleSetTimeLimit = async () => {
+    if (!selectedUser) return;
+
+    // Build the request body from the active mode.
+    let body: { action: string; userId: string; hours?: number; expiresAt?: string };
+    if (timeLimitMode === 'hours') {
+      const h = Number(timeLimitHours);
+      if (!Number.isFinite(h) || h <= 0) {
+        toast({ title: t('common.error'), description: t('manageUsers.timeLimit.invalidHours'), variant: 'destructive' });
+        return;
+      }
+      body = { action: 'set_access_limit', userId: selectedUser.id, hours: h };
+    } else {
+      if (!timeLimitDate) {
+        toast({ title: t('common.error'), description: t('manageUsers.timeLimit.invalidDate'), variant: 'destructive' });
+        return;
+      }
+      const d = new Date(timeLimitDate);
+      if (isNaN(d.getTime()) || d.getTime() <= Date.now()) {
+        toast({ title: t('common.error'), description: t('manageUsers.timeLimit.invalidDate'), variant: 'destructive' });
+        return;
+      }
+      body = { action: 'set_access_limit', userId: selectedUser.id, expiresAt: d.toISOString() };
+    }
+
+    setIsSettingTimeLimit(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-user-actions', { body });
+      if (error) {
+        const msg = await readFunctionError(error);
+        toast({ title: t('common.error'), description: msg || t('common.error'), variant: 'destructive' });
+        return;
+      }
+      if (data?.error) {
+        toast({ title: t('common.error'), description: data.error, variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: t('manageUsers.timeLimit.setTitle'), description: t('manageUsers.timeLimit.setDesc') });
+      setTimeLimitDialogOpen(false);
+      fetchUsers();
+    } catch (error: any) {
+      console.error('Error setting time limit:', error);
+      toast({ title: t('common.error'), description: error.message || t('common.error'), variant: 'destructive' });
+    } finally {
+      setIsSettingTimeLimit(false);
+    }
+  };
+
+  const handleRemoveTimeLimit = async () => {
+    if (!selectedUser) return;
+    setIsSettingTimeLimit(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-user-actions', {
+        body: { action: 'set_access_limit', userId: selectedUser.id, clear: true },
+      });
+      if (error) {
+        const msg = await readFunctionError(error);
+        toast({ title: t('common.error'), description: msg || t('common.error'), variant: 'destructive' });
+        return;
+      }
+      if (data?.error) {
+        toast({ title: t('common.error'), description: data.error, variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: t('manageUsers.timeLimit.removedTitle'), description: t('manageUsers.timeLimit.removedDesc') });
+      setTimeLimitDialogOpen(false);
+      fetchUsers();
+    } catch (error: any) {
+      console.error('Error removing time limit:', error);
+      toast({ title: t('common.error'), description: error.message || t('common.error'), variant: 'destructive' });
+    } finally {
+      setIsSettingTimeLimit(false);
+    }
   };
 
   const openDeleteDialog = (user: UserWithRole) => {
@@ -1425,6 +1570,18 @@ export default function ManageUsers() {
                           <Badge variant={getRoleBadgeVariant(user.role)}>
                             {roleLabels[user.role] ?? user.role}
                           </Badge>
+                          {user.accessExpiresAt && !user.accessRevokedAt && (
+                            <Badge
+                              variant="outline"
+                              className="ms-1 gap-1"
+                              title={t('manageUsers.timeLimit.badgeTitle')}
+                            >
+                              <Clock className="w-3 h-3" />
+                              {format(new Date(user.accessExpiresAt), 'P', {
+                                locale: language === 'he' ? he : enUS,
+                              })}
+                            </Badge>
+                          )}
                         </TableCell>
                         {!isMainTenant && (
                           <TableCell>
@@ -1479,6 +1636,12 @@ export default function ManageUsers() {
                                 <History className="w-4 h-4 ml-2" />
                                 {t('admin.activityHistory')}
                               </DropdownMenuItem>
+                              {canEdit && (user.role === 'student' || user.role === 'lead') && (
+                                <DropdownMenuItem onClick={() => openTimeLimitDialog(user)}>
+                                  <Clock className="w-4 h-4 ml-2" />
+                                  {t('manageUsers.setTimeLimit')}
+                                </DropdownMenuItem>
+                              )}
                               {canEdit && <DropdownMenuSeparator />}
                               {canEdit && (
                                 <DropdownMenuItem
@@ -1584,6 +1747,12 @@ export default function ManageUsers() {
                               <History className="w-4 h-4 ml-2" />
                               {t('admin.activityHistory')}
                             </DropdownMenuItem>
+                            {canEdit && (user.role === 'student' || user.role === 'lead') && (
+                              <DropdownMenuItem onClick={() => openTimeLimitDialog(user)}>
+                                <Clock className="w-4 h-4 ml-2" />
+                                {t('manageUsers.setTimeLimit')}
+                              </DropdownMenuItem>
+                            )}
                             {canEdit && <DropdownMenuSeparator />}
                             {canEdit && (
                               <DropdownMenuItem
@@ -1604,6 +1773,14 @@ export default function ManageUsers() {
                         {!isMainTenant && (
                           <Badge variant="outline" className="text-xs">
                             {user.enrolledCourses?.length || 0} {t('manageUsers.coursesLower')}
+                          </Badge>
+                        )}
+                        {user.accessExpiresAt && !user.accessRevokedAt && (
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <Clock className="w-3 h-3" />
+                            {format(new Date(user.accessExpiresAt), 'P', {
+                              locale: language === 'he' ? he : enUS,
+                            })}
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
@@ -1923,6 +2100,102 @@ export default function ManageUsers() {
                 </>
               ) : (
                 t('admin.resetPassword')
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Time Limit Dialog */}
+      <Dialog open={timeLimitDialogOpen} onOpenChange={setTimeLimitDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('manageUsers.timeLimit.title')}</DialogTitle>
+            <DialogDescription>
+              {selectedUser && `${t('manageUsers.timeLimit.description')} ${selectedUser.full_name}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {selectedUser?.accessExpiresAt && !selectedUser?.accessRevokedAt && (
+              <div className="text-sm rounded-md bg-muted p-3 flex items-center gap-2">
+                <Clock className="w-4 h-4 flex-shrink-0" />
+                <span>
+                  {t('manageUsers.timeLimit.currentlyExpires')}{' '}
+                  {format(new Date(selectedUser.accessExpiresAt), 'PPpp', {
+                    locale: language === 'he' ? he : enUS,
+                  })}
+                </span>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={timeLimitMode === 'hours' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setTimeLimitMode('hours')}
+              >
+                {t('manageUsers.timeLimit.modeHours')}
+              </Button>
+              <Button
+                type="button"
+                variant={timeLimitMode === 'date' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setTimeLimitMode('date')}
+              >
+                {t('manageUsers.timeLimit.modeDate')}
+              </Button>
+            </div>
+
+            {timeLimitMode === 'hours' ? (
+              <div className="space-y-2">
+                <Label htmlFor="time_limit_hours">{t('manageUsers.timeLimit.hoursLabel')}</Label>
+                <Input
+                  id="time_limit_hours"
+                  type="number"
+                  min="1"
+                  value={timeLimitHours}
+                  onChange={(e) => setTimeLimitHours(e.target.value)}
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="time_limit_date">{t('manageUsers.timeLimit.dateLabel')}</Label>
+                <Input
+                  id="time_limit_date"
+                  type="datetime-local"
+                  value={timeLimitDate}
+                  onChange={(e) => setTimeLimitDate(e.target.value)}
+                />
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">{t('manageUsers.timeLimit.hint')}</p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            {selectedUser?.accessExpiresAt && !selectedUser?.accessRevokedAt && (
+              <Button
+                variant="ghost"
+                className="text-destructive focus:text-destructive me-auto"
+                onClick={handleRemoveTimeLimit}
+                disabled={isSettingTimeLimit}
+              >
+                {t('manageUsers.timeLimit.remove')}
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setTimeLimitDialogOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleSetTimeLimit} disabled={isSettingTimeLimit}>
+              {isSettingTimeLimit ? (
+                <>
+                  <Loader2 className="w-4 h-4 mx-2 animate-spin" />
+                  {t('manageUsers.timeLimit.saving')}
+                </>
+              ) : (
+                t('manageUsers.timeLimit.set')
               )}
             </Button>
           </DialogFooter>

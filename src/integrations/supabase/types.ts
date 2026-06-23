@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_limits: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          revoked_at: string | null
+          source: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expires_at: string
+          revoked_at?: string | null
+          source?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          revoked_at?: string | null
+          source?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       _backup_phase2_platform_settings: {
         Row: {
           id: string | null
@@ -2083,7 +2113,7 @@ export type Database = {
       strip_html_tags: { Args: { input: string }; Returns: string }
     }
     Enums: {
-      app_role: "admin" | "instructor" | "student" | "super_admin"
+      app_role: "admin" | "instructor" | "student" | "super_admin" | "lead"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2211,7 +2241,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "instructor", "student", "super_admin"],
+      app_role: ["admin", "instructor", "student", "super_admin", "lead"],
     },
   },
 } as const

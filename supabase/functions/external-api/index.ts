@@ -359,6 +359,38 @@ serve(async (req) => {
           }
         }
 
+        // Optional time-limited access. `access_hours` (number, in hours):
+        //   * absent or 0 → unlimited (no limit row).
+        //   * > 0 → access expires that many hours from now, after which a
+        //     server-side sweep deletes the user's enrollments and downgrades
+        //     them to 'lead' (see migration 20260623120000_access_time_limit).
+        // Only applied to student/lead accounts — privileged roles are never
+        // time-limited.
+        let accessExpiresAt: string | null = null;
+        if (data.access_hours !== undefined && data.access_hours !== null && data.access_hours !== '') {
+          const accessHours = Number(data.access_hours);
+          if (!Number.isFinite(accessHours) || accessHours < 0) {
+            return await sendResponse(
+              errorResponse('access_hours must be a non-negative number', 'VALIDATION_ERROR'),
+              'Invalid access_hours',
+            );
+          }
+          if (accessHours > 0 && (resolvedRole === 'student' || resolvedRole === 'lead')) {
+            accessExpiresAt = new Date(Date.now() + accessHours * 3600_000).toISOString();
+            const { error: limitError } = await supabase.from('access_limits').upsert({
+              user_id: userId,
+              expires_at: accessExpiresAt,
+              revoked_at: null,
+              created_by: null,
+              source: 'api',
+              updated_at: new Date().toISOString(),
+            });
+            if (limitError) {
+              console.error('[API users.create] access_limits upsert failed:', limitError);
+            }
+          }
+        }
+
         // Fire the invite email (best-effort — never fail the create on
         // mail dispatch). admin-user-actions' dashboard path does the
         // same. We send X-Internal-Secret because the external-api
@@ -398,6 +430,7 @@ serve(async (req) => {
             full_name: fullName,
             phone: data.phone || null,
             role: resolvedRole,
+            access_expires_at: accessExpiresAt,
           },
           message: 'User created successfully',
         }));

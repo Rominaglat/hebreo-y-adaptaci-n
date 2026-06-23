@@ -4,9 +4,14 @@ import { getCorsHeaders, handlePreflight } from "../_shared/cors.ts";
 
 
 interface AdminActionRequest {
-  action: "delete_user" | "reset_password" | "log_activity" | "create_user" | "update_user" | "sync_emails";
+  action: "delete_user" | "reset_password" | "log_activity" | "create_user" | "update_user" | "sync_emails" | "set_access_limit";
   userId?: string;
   newPassword?: string;
+  // For set_access_limit: provide EITHER expiresAt (ISO datetime) OR hours
+  // (number of hours from now), OR clear:true to remove an existing limit.
+  expiresAt?: string;
+  hours?: number;
+  clear?: boolean;
   activityType?: string;
   activityDescription?: string;
   metadata?: Record<string, any>;
@@ -128,7 +133,7 @@ serve(async (req) => {
 
     console.log("Requester verified:", adminUserId, "admin:", requesterIsAdmin, "instructor:", requesterIsInstructor);
 
-    const { action, userId: targetUserId, newPassword, activityType, activityDescription, metadata, email, fullName, role, tenantId, phone, newEmail, overwritePassword }: AdminActionRequest = await req.json();
+    const { action, userId: targetUserId, newPassword, activityType, activityDescription, metadata, email, fullName, role, tenantId, phone, newEmail, overwritePassword, expiresAt, hours, clear }: AdminActionRequest = await req.json();
 
     // SEC-026 — audit log helper for sensitive admin actions. Best-effort;
     // log failures must not block the action.
@@ -769,6 +774,119 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ success: true, message: "User updated successfully" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "set_access_limit": {
+        // Admin-only (instructors never reach unlisted actions). Sets/clears a
+        // time-limited-access row for a student/lead. When it expires, a
+        // server-side sweep deletes their enrollments and downgrades them to
+        // 'lead' (migration 20260623120000_access_time_limit).
+        if (!requesterIsAdmin) {
+          return new Response(
+            JSON.stringify({ error: "This action requires admin access" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        if (!targetUserId) {
+          return new Response(
+            JSON.stringify({ error: "User ID is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Only students/leads may be time-limited — never admins/instructors.
+        const { data: targetRoles, error: targetRolesError } = await adminClient
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", targetUserId);
+
+        if (targetRolesError) {
+          console.error("Error fetching target roles:", targetRolesError);
+          throw targetRolesError;
+        }
+        const targetIsPrivileged = (targetRoles || []).some(
+          (r) => r.role === "admin" || r.role === "super_admin" || r.role === "instructor"
+        );
+        if (targetIsPrivileged) {
+          return new Response(
+            JSON.stringify({ error: "Time limit can only be set for students and leads" }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Clear an existing limit.
+        if (clear === true) {
+          const { error: delError } = await adminClient
+            .from("access_limits")
+            .delete()
+            .eq("user_id", targetUserId);
+          if (delError) {
+            console.error("Error clearing access limit:", delError);
+            throw delError;
+          }
+          await writeAuditLog("clear_access_limit", targetUserId, tenantId ?? null, null, null);
+          return new Response(
+            JSON.stringify({ success: true, message: "Access limit removed", expiresAt: null }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Resolve expiry: explicit ISO datetime, else hours-from-now.
+        let expiresAtIso: string;
+        if (expiresAt) {
+          const d = new Date(expiresAt);
+          if (isNaN(d.getTime())) {
+            return new Response(
+              JSON.stringify({ error: "Invalid expiresAt" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          if (d.getTime() <= Date.now()) {
+            return new Response(
+              JSON.stringify({ error: "expiresAt must be in the future" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          expiresAtIso = d.toISOString();
+        } else if (hours !== undefined && hours !== null) {
+          const h = Number(hours);
+          if (!Number.isFinite(h) || h <= 0) {
+            return new Response(
+              JSON.stringify({ error: "hours must be a positive number" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          expiresAtIso = new Date(Date.now() + h * 3600_000).toISOString();
+        } else {
+          return new Response(
+            JSON.stringify({ error: "Provide expiresAt, hours, or clear" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { error: upsertError } = await adminClient
+          .from("access_limits")
+          .upsert({
+            user_id: targetUserId,
+            expires_at: expiresAtIso,
+            revoked_at: null,
+            created_by: adminUserId,
+            source: "admin",
+            updated_at: new Date().toISOString(),
+          });
+        if (upsertError) {
+          console.error("Error setting access limit:", upsertError);
+          throw upsertError;
+        }
+
+        await writeAuditLog("set_access_limit", targetUserId, tenantId ?? null, null, {
+          expires_at: expiresAtIso,
+        });
+        console.log(`Access limit set for user ${targetUserId} → ${expiresAtIso}`);
+        return new Response(
+          JSON.stringify({ success: true, message: "Access limit set", expiresAt: expiresAtIso }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
