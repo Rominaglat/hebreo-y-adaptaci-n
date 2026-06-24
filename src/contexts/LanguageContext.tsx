@@ -471,6 +471,8 @@ const translations: Translations = {
   'studyRooms.roomDeletedDesc': { he: 'חדר הלימוד הוסר.', en: 'The study room has been removed.', es: 'La sala de estudio fue eliminada.' },
   'studyRooms.roomLocked': { he: 'החדר נעול', en: 'Room is locked', es: 'La sala está bloqueada' },
   'studyRooms.roomLockedDesc': { he: 'רק מי שהוזמן יכול להצטרף לחדר זה.', en: 'Only invited people can join this room.', es: 'Solo pueden unirse personas invitadas.' },
+  'studyRooms.roomNotFoundTitle': { he: 'החדר לא נמצא', en: 'Room not found', es: 'Sala no encontrada' },
+  'studyRooms.roomNotFoundDesc': { he: 'ייתכן שהחדר נסגר או שהקישור שגוי.', en: 'The room may have closed or the link is invalid.', es: 'Es posible que la sala se haya cerrado o que el enlace no sea válido.' },
   'studyRooms.deleteRoom': { he: 'למחוק את חדר הלימוד?', en: 'Delete study room?', es: '¿Eliminar la sala de estudio?' },
   'studyRooms.deleteRoomDesc': { he: 'פעולה זו תמחק לצמיתות את החדר ותסיר את כל המשתתפים.', en: 'This action will permanently delete the room and remove all participants.', es: 'Esta acción eliminará la sala y a todos los participantes de forma permanente.' },
   'studyRooms.locked': { he: 'נעול', en: 'Locked', es: 'Bloqueada' },

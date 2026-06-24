@@ -42,6 +42,12 @@ export function useRaisedHands({ roomId, localUserId }: UseRaisedHandsProps) {
           if (e.raised && e.userId) next.add(e.userId);
         });
       });
+      // Trust our OWN intent over presence for our own hand: Supabase presence
+      // does not reliably emit a self 'sync' when you re-track() to UPDATE your
+      // state, so a lowered hand could otherwise pop back up. localRaisedRef is
+      // the source of truth for the local user.
+      if (localRaisedRef.current) next.add(localUserId);
+      else next.delete(localUserId);
       setRaisedHands(next);
     };
 
@@ -69,11 +75,23 @@ export function useRaisedHands({ roomId, localUserId }: UseRaisedHandsProps) {
 
   const raiseHand = useCallback(() => {
     localRaisedRef.current = true;
+    // Optimistic local update so the button toggles instantly regardless of
+    // presence round-trip timing.
+    setRaisedHands((prev) => {
+      const n = new Set(prev);
+      n.add(localUserId);
+      return n;
+    });
     channelRef.current?.track({ userId: localUserId, raised: true });
   }, [localUserId]);
 
   const lowerHand = useCallback(() => {
     localRaisedRef.current = false;
+    setRaisedHands((prev) => {
+      const n = new Set(prev);
+      n.delete(localUserId);
+      return n;
+    });
     channelRef.current?.track({ userId: localUserId, raised: false });
   }, [localUserId]);
 

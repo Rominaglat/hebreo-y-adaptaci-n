@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Users, 
   Plus, 
@@ -51,6 +51,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useOnboarding } from '@/hooks/useOnboarding';
@@ -88,6 +89,9 @@ export default function StudyRooms() {
   // the MeetingRoom so the call actually uses the selected camera/mic and
   // honors the camera-off / muted toggles.
   const [joinPrefs, setJoinPrefs] = useState<PreJoinResult | undefined>(undefined);
+  // Invite-link handling: /study-rooms?room=<id> goes STRAIGHT to the lobby.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledInviteRef = useRef(false);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [videoDialogOpen, setVideoDialogOpen] = useState(false);
@@ -248,6 +252,30 @@ export default function StudyRooms() {
     // grant permissions BEFORE the WebRTC stack starts firing offers.
     setPendingRoom(room);
   };
+
+  // Invite link: arriving at /study-rooms?room=<id> opens the lobby directly.
+  // The link is the invitation, so this bypasses the public-list lock gate —
+  // anyone with the link lands in the lobby for that room (incl. private rooms).
+  useEffect(() => {
+    if (handledInviteRef.current) return;
+    const roomIdParam = searchParams.get('room');
+    if (!roomIdParam || !user || !profile || loading) return;
+    handledInviteRef.current = true;
+    // Strip the param so a later leave/refresh doesn't re-open the lobby.
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('room');
+    setSearchParams(nextParams, { replace: true });
+    const room = rooms.find((r) => r.id === roomIdParam);
+    if (room) {
+      setPendingRoom(room);
+    } else {
+      toast({
+        title: t('studyRooms.roomNotFoundTitle'),
+        description: t('studyRooms.roomNotFoundDesc'),
+        variant: 'destructive',
+      });
+    }
+  }, [searchParams, user, profile, loading, rooms, setSearchParams, toast, t]);
 
   const handleLeaveRoom = () => {
     setActiveRoom(null);

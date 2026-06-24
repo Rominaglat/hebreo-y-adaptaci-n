@@ -222,10 +222,11 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
     };
   }, [room.id, userId, showChat]);
 
-  // Layout mode — defaults to "speaker" so shared video / screen share
-  // automatically dominates the layout (the user's stated preference).
-  // The toggle button lets the user override to a flat grid.
-  const [viewMode, setViewMode] = useState<"grid" | "speaker">("speaker");
+  // Layout mode — defaults to "grid" (everyone equal). A shared video forces
+  // spotlight regardless; for screen share / active-speaker the user opts into
+  // "speaker" via the toggle. Defaulting to grid avoids surprising people with
+  // a stuck "expanded" view they can't escape.
+  const [viewMode, setViewMode] = useState<"grid" | "speaker">("grid");
   // Pinned participant — overrides active-speaker selection in speaker view.
   const [pinnedUserId, setPinnedUserId] = useState<string | null>(null);
   // Active-speaker spotlight: remember the most recent remote speaker so the
@@ -904,7 +905,8 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
   };
 
   const copyRoomLink = () => {
-    navigator.clipboard.writeText(window.location.href + '?room=' + room.id);
+    // Clean canonical invite link (the in-call URL may already carry a query).
+    navigator.clipboard.writeText(`${window.location.origin}/study-rooms?room=${room.id}`);
     setCopied(true);
     toast({
       title: t('meetingRoom.linkCopiedTitle'),
@@ -1607,7 +1609,13 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
                   variant="glass"
                   size="icon"
                   className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
-                  onClick={() => setViewMode((m) => (m === "grid" ? "speaker" : "grid"))}
+                  onClick={() => {
+                    // Any view switch clears the pin so the grid is always
+                    // reachable (a pin used to override the toggle and trap the
+                    // user in spotlight).
+                    setPinnedUserId(null);
+                    setViewMode((m) => (m === "grid" ? "speaker" : "grid"));
+                  }}
                   aria-label={t('meetingRoom.switchView')}
                 >
                   {viewMode === "grid" ? (
