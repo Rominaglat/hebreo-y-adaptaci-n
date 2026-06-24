@@ -84,6 +84,12 @@ import { useTenant } from '@/contexts/TenantContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { withTimeout } from '@/lib/utils';
+import {
+  isTimeLimitEligible,
+  partitionByTimeLimitEligibility,
+  buildAccessLimitBody,
+  type AccessLimitBody,
+} from '@/lib/accessLimit';
 import { ImportUsersDialog } from '@/components/admin/ImportUsersDialog';
 import { Progress } from '@/components/ui/progress';
 import ExcelJS from 'exceljs';
@@ -192,6 +198,13 @@ export default function ManageUsers() {
   const [timeLimitMode, setTimeLimitMode] = useState<'hours' | 'date'>('hours');
   const [timeLimitHours, setTimeLimitHours] = useState('24');
   const [timeLimitDate, setTimeLimitDate] = useState('');
+  // Bulk time-limit dialog (independent state so it can't bleed into the single dialog)
+  const [bulkTimeLimitDialogOpen, setBulkTimeLimitDialogOpen] = useState(false);
+  const [isBulkSettingTimeLimit, setIsBulkSettingTimeLimit] = useState(false);
+  const [bulkTimeLimitMode, setBulkTimeLimitMode] = useState<'hours' | 'date'>('hours');
+  const [bulkTimeLimitHours, setBulkTimeLimitHours] = useState('24');
+  const [bulkTimeLimitDate, setBulkTimeLimitDate] = useState('');
+  const [bulkTimeLimitProgress, setBulkTimeLimitProgress] = useState({ done: 0, total: 0 });
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [progressDialogOpen, setProgressDialogOpen] = useState(false);
   const [progressUser, setProgressUser] = useState<UserWithRole | null>(null);
@@ -956,6 +969,97 @@ export default function ManageUsers() {
     }
   };
 
+  const openBulkTimeLimitDialog = () => {
+    setBulkTimeLimitMode('hours');
+    setBulkTimeLimitHours('24');
+    setBulkTimeLimitDate('');
+    setBulkTimeLimitProgress({ done: 0, total: 0 });
+    setBulkTimeLimitDialogOpen(true);
+  };
+
+  // Apply a prebuilt access-limit body to every eligible selected user, looping
+  // the same audited `set_access_limit` edge action used for a single user.
+  // Ineligible users (admins/instructors/super_admins) are skipped, not sent.
+  const runBulkAccessLimit = async (body: AccessLimitBody) => {
+    const selected = users.filter((u) => selectedUsers.has(u.id));
+    const { eligible, skipped } = partitionByTimeLimitEligibility(selected);
+    if (eligible.length === 0) {
+      toast({ title: t('common.error'), description: t('manageUsers.timeLimit.noEligible'), variant: 'destructive' });
+      return;
+    }
+
+    setIsBulkSettingTimeLimit(true);
+    setBulkTimeLimitProgress({ done: 0, total: eligible.length });
+    let successCount = 0;
+    let failedCount = 0;
+
+    try {
+      let processed = 0;
+      for (const user of eligible) {
+        try {
+          // No explicit Authorization header: supabase-js auto-attaches the
+          // caller's JWT, matching the single-user set/remove handlers.
+          const { data, error } = await supabase.functions.invoke('admin-user-actions', {
+            body: { ...body, userId: user.id },
+          });
+          if (error) {
+            throw new Error((await readFunctionError(error)) || t('common.error'));
+          }
+          if (data?.error) {
+            throw new Error(data.error);
+          }
+          successCount++;
+        } catch (err) {
+          console.error(`Error setting time limit for user ${user.id}:`, err);
+          failedCount++;
+        }
+        processed++;
+        setBulkTimeLimitProgress({ done: processed, total: eligible.length });
+      }
+
+      // Build a localized summary: "N updated, M skipped, K failed".
+      const parts = [`${successCount} ${t('manageUsers.timeLimit.bulkUpdated')}`];
+      if (skipped.length > 0) parts.push(`${skipped.length} ${t('manageUsers.timeLimit.bulkSkippedWord')}`);
+      if (failedCount > 0) parts.push(`${failedCount} ${t('manageUsers.usersFailed')}`);
+      toast({
+        title: successCount > 0 ? t('manageUsers.timeLimit.bulkDoneTitle') : t('common.error'),
+        description: parts.join(', '),
+        variant: failedCount > 0 ? 'destructive' : 'default',
+      });
+
+      setBulkTimeLimitDialogOpen(false);
+      setSelectedUsers(new Set());
+      fetchUsers();
+    } catch (error) {
+      console.error('Error in bulk time limit:', error);
+      toast({ title: t('common.error'), description: (error as Error)?.message || t('common.error'), variant: 'destructive' });
+    } finally {
+      setIsBulkSettingTimeLimit(false);
+    }
+  };
+
+  const handleBulkSetTimeLimit = async () => {
+    const result = buildAccessLimitBody({
+      mode: bulkTimeLimitMode,
+      hours: bulkTimeLimitHours,
+      date: bulkTimeLimitDate,
+    });
+    if (!result.ok) {
+      const desc =
+        result.code === 'invalid_hours'
+          ? t('manageUsers.timeLimit.invalidHours')
+          : t('manageUsers.timeLimit.invalidDate');
+      toast({ title: t('common.error'), description: desc, variant: 'destructive' });
+      return;
+    }
+    await runBulkAccessLimit(result.body);
+  };
+
+  const handleBulkRemoveTimeLimit = async () => {
+    const result = buildAccessLimitBody({ mode: 'clear' });
+    if (result.ok) await runBulkAccessLimit(result.body);
+  };
+
   const openDeleteDialog = (user: UserWithRole) => {
     setSelectedUser(user);
     setDeleteDialogOpen(true);
@@ -1266,6 +1370,11 @@ export default function ManageUsers() {
     );
   }
 
+  // Eligible / skipped breakdown for the bulk time-limit dialog.
+  const bulkSelectedUsers = users.filter((u) => selectedUsers.has(u.id));
+  const bulkEligibleCount = bulkSelectedUsers.filter((u) => isTimeLimitEligible(u.role)).length;
+  const bulkSkippedCount = bulkSelectedUsers.length - bulkEligibleCount;
+
   return (
     <>
       <div className="space-y-6">
@@ -1472,13 +1581,21 @@ export default function ManageUsers() {
                   </Button>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={() => setBulkRoleDialogOpen(true)}
                   >
                     <Lock className="w-4 h-4 ml-2" />
                     {t('manageUsers.changeRoles')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={openBulkTimeLimitDialog}
+                  >
+                    <Clock className="w-4 h-4 ml-2" />
+                    {t('manageUsers.setTimeLimit')}
                   </Button>
                   {!isMainTenant && (
                     <Button
@@ -2190,6 +2307,133 @@ export default function ManageUsers() {
             </Button>
             <Button onClick={handleSetTimeLimit} disabled={isSettingTimeLimit}>
               {isSettingTimeLimit ? (
+                <>
+                  <Loader2 className="w-4 h-4 mx-2 animate-spin" />
+                  {t('manageUsers.timeLimit.saving')}
+                </>
+              ) : (
+                t('manageUsers.timeLimit.set')
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Time-Limit Dialog */}
+      <Dialog
+        open={bulkTimeLimitDialogOpen}
+        onOpenChange={(open) => {
+          // Block close while the loop is in flight so we don't leave a partial state.
+          if (isBulkSettingTimeLimit && !open) return;
+          setBulkTimeLimitDialogOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('manageUsers.timeLimit.bulkTitle')}</DialogTitle>
+            <DialogDescription>{t('manageUsers.timeLimit.bulkDescription')}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="text-sm rounded-md bg-muted p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 flex-shrink-0" />
+                <span>
+                  {t('manageUsers.timeLimit.bulkEligible').replace('{count}', String(bulkEligibleCount))}
+                </span>
+              </div>
+              {bulkSkippedCount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {t('manageUsers.timeLimit.bulkSkipped').replace('{count}', String(bulkSkippedCount))}
+                </p>
+              )}
+            </div>
+
+            {bulkEligibleCount === 0 ? (
+              <p className="text-sm text-destructive">{t('manageUsers.timeLimit.noEligible')}</p>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={bulkTimeLimitMode === 'hours' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setBulkTimeLimitMode('hours')}
+                  >
+                    {t('manageUsers.timeLimit.modeHours')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={bulkTimeLimitMode === 'date' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setBulkTimeLimitMode('date')}
+                  >
+                    {t('manageUsers.timeLimit.modeDate')}
+                  </Button>
+                </div>
+
+                {bulkTimeLimitMode === 'hours' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="bulk_time_limit_hours">{t('manageUsers.timeLimit.hoursLabel')}</Label>
+                    <Input
+                      id="bulk_time_limit_hours"
+                      type="number"
+                      min="1"
+                      value={bulkTimeLimitHours}
+                      onChange={(e) => setBulkTimeLimitHours(e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="bulk_time_limit_date">{t('manageUsers.timeLimit.dateLabel')}</Label>
+                    <Input
+                      id="bulk_time_limit_date"
+                      type="datetime-local"
+                      value={bulkTimeLimitDate}
+                      onChange={(e) => setBulkTimeLimitDate(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">{t('manageUsers.timeLimit.hint')}</p>
+              </>
+            )}
+
+            {isBulkSettingTimeLimit && bulkTimeLimitProgress.total > 0 && (
+              <div className="space-y-2 py-2">
+                <Progress
+                  value={Math.round((bulkTimeLimitProgress.done / bulkTimeLimitProgress.total) * 100)}
+                  className="h-2"
+                />
+                <p className="text-xs text-muted-foreground text-center">
+                  {t('manageUsers.bulkProgress')
+                    .replace('{done}', String(bulkTimeLimitProgress.done))
+                    .replace('{total}', String(bulkTimeLimitProgress.total))}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            {bulkEligibleCount > 0 && (
+              <Button
+                variant="ghost"
+                className="text-destructive focus:text-destructive me-auto"
+                onClick={handleBulkRemoveTimeLimit}
+                disabled={isBulkSettingTimeLimit}
+              >
+                {t('manageUsers.timeLimit.remove')}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => setBulkTimeLimitDialogOpen(false)}
+              disabled={isBulkSettingTimeLimit}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleBulkSetTimeLimit} disabled={isBulkSettingTimeLimit || bulkEligibleCount === 0}>
+              {isBulkSettingTimeLimit ? (
                 <>
                   <Loader2 className="w-4 h-4 mx-2 animate-spin" />
                   {t('manageUsers.timeLimit.saving')}
