@@ -25,6 +25,10 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
   const [joinError, setJoinError] = useState<JoinError | null>(null);
 
   const peers = useRef<Map<string, PeerState>>(new Map());
+  // Last-seen joined_at per peer. A fresh joined_at means the peer left and
+  // rejoined (e.g. refreshed) — we tear down the stale RTCPeerConnection and
+  // rebuild it, so audio/video recover instead of staying frozen.
+  const peerJoinedAt = useRef<Map<string, string>>(new Map());
   const channelRef = useRef<RealtimeChannel | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -219,8 +223,9 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
           setConnectionStatus('connected');
           break;
         case 'failed':
-          // Surface to the user — the banner key is on this state.
-          setConnectionStatus('failed');
+          // A SINGLE peer failing must NOT flag the whole room as failed (that
+          // banner pushed users to refresh, which cascaded). Drop this peer's
+          // stream; it gets rebuilt when they rejoin (peerJoinedAt detection).
           setRemoteStreams((prev) => {
             const newMap = new Map(prev);
             newMap.delete(peerId);
@@ -228,12 +233,9 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
           });
           break;
         case 'disconnected':
-          console.log('[WebRTC] Peer disconnected:', peerId);
-          setRemoteStreams((prev) => {
-            const newMap = new Map(prev);
-            newMap.delete(peerId);
-            return newMap;
-          });
+          // Often transient — let ICE try to recover instead of dropping the
+          // tile to black immediately.
+          console.log('[WebRTC] Peer disconnected (awaiting recovery):', peerId);
           break;
       }
     };
@@ -251,8 +253,9 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
           console.log(`[WebRTC] ICE failed, restart attempt ${state.iceRestartAttempts}/3`);
           pc.restartIce();
         } else {
+          // Give up on THIS peer's ICE — but don't fail the whole room. It'll
+          // rebuild if the peer rejoins.
           console.warn('[WebRTC] ICE restart budget exhausted for', peerId);
-          setConnectionStatus('failed');
         }
       } else if (pc.iceConnectionState === 'connected') {
         // Reset the budget on a successful reconnect so future failures get a
@@ -814,9 +817,29 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
             setParticipants(data);
 
             data.forEach((p) => {
-              if (p.user_id !== localUserId && !peers.current.has(p.user_id)) {
-                console.log('[WebRTC] New participant detected:', p.user_id);
+              if (p.user_id === localUserId) return;
+              const existing = peers.current.get(p.user_id);
+              const known = peerJoinedAt.current.get(p.user_id);
+              const rejoined = !!existing && !!known && !!p.joined_at && p.joined_at !== known;
+
+              if (rejoined) {
+                // Peer left and came back (e.g. refreshed) — drop the stale
+                // connection so we rebuild a fresh one below.
+                console.log('[WebRTC] Peer rejoined, rebuilding:', p.user_id);
+                existing.connection.close();
+                peers.current.delete(p.user_id);
+                setRemoteStreams((prev) => {
+                  const newMap = new Map(prev);
+                  newMap.delete(p.user_id);
+                  return newMap;
+                });
+              }
+
+              if (!peers.current.has(p.user_id)) {
+                peerJoinedAt.current.set(p.user_id, p.joined_at);
+                // Higher id initiates; the other side waits for our offer.
                 if (localUserId > p.user_id) {
+                  console.log('[WebRTC] New/rejoined participant — connecting:', p.user_id);
                   createPeerConnection(p.user_id);
                 }
               }
@@ -829,6 +852,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
                 if (peerState) {
                   peerState.connection.close();
                   peers.current.delete(peerId);
+                  peerJoinedAt.current.delete(peerId);
                   setRemoteStreams((prev) => {
                     const newMap = new Map(prev);
                     newMap.delete(peerId);
@@ -844,10 +868,19 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
         });
     });
 
-    // 2) Now safe to register ourselves in the room.
+    // 2) Now safe to register ourselves in the room. DELETE any stale row for
+    //    us first, then INSERT a fresh one — so a rejoin (e.g. after a refresh)
+    //    gets a brand-new joined_at and other clients see us leave→join and
+    //    rebuild their peer connection to us (an in-place upsert wouldn't).
+    await supabase
+      .from('room_participants')
+      .delete()
+      .eq('room_id', roomId)
+      .eq('user_id', localUserId);
+
     const { error: upsertError } = await supabase
       .from('room_participants')
-      .upsert(
+      .insert(
         {
           room_id: roomId,
           user_id: localUserId,
@@ -857,7 +890,6 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
           is_screen_sharing: false,
           last_seen_at: new Date().toISOString(),
         } as never,
-        { onConflict: 'room_id,user_id' },
       );
 
     if (upsertError) {
@@ -894,6 +926,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
 
       existingParticipants.forEach((p) => {
         if (p.user_id !== localUserId) {
+          peerJoinedAt.current.set(p.user_id, p.joined_at);
           if (localUserId > p.user_id) {
             console.log('[WebRTC] Initiating connection to existing participant:', p.user_id);
             createPeerConnection(p.user_id);
@@ -1021,6 +1054,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
       peerState.connection.close();
     });
     peers.current.clear();
+    peerJoinedAt.current.clear();
 
     // Unsubscribe from channel
     if (channelRef.current) {
