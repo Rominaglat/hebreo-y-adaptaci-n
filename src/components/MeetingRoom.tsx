@@ -330,6 +330,17 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs, isAdmin = f
     isHost: canHost,
   });
 
+  // Auto-open the whiteboard for EVERYONE whenever a new stroke arrives, so a
+  // participant who didn't open it still sees the scribbles (they used to only
+  // render for whoever opened the board locally).
+  const prevStrokeCountRef = useRef(0);
+  useEffect(() => {
+    if (strokes.length > prevStrokeCountRef.current && strokes.length > 0) {
+      setShowWhiteboard(true);
+    }
+    prevStrokeCountRef.current = strokes.length;
+  }, [strokes.length]);
+
   // Tracks whether the component is still mounted — guards the lesson fetch
   // setState calls so React doesn't warn when the user leaves mid-fetch.
   const mountedRef = useRef(true);
@@ -1037,8 +1048,8 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs, isAdmin = f
                     onPause={handlePause}
                     onSeek={handleSeek}
                     onClose={() => updateSharedVideo(null)}
-                    canClose={canHost}
-                    canControl={canHost}
+                    canClose={true}
+                    canControl={true}
                     onReportState={updateVideoState}
                     onAudioStreamReady={(s) => { syncedAudioStreamRef.current = s; }}
                   />
@@ -1698,33 +1709,30 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs, isAdmin = f
             </Tooltip>
           )}
 
-          {/* Watch course video together — host only (only the host can pick
-              and drive the shared video; non-hosts just follow). */}
-          {canHost && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={sharedVideoUrl ? "default" : "glass"}
-                  size="icon"
-                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
-                  onClick={() => setVideoDialogOpen(true)}
-                  aria-label={t('meetingRoom.watchCourseVideo')}
-                >
-                  <Play className="w-4 h-4 sm:w-5 sm:h-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('meetingRoom.watchCourseVideoTogether')}</TooltipContent>
-            </Tooltip>
-          )}
-          {canHost && (
-            <VideoSelectDialog
-              open={videoDialogOpen}
-              onOpenChange={setVideoDialogOpen}
-              lessons={courseLessons}
-              loading={loadingLessons}
-              onSelectVideo={handleSelectVideo}
-            />
-          )}
+          {/* Watch course video together — collaborative: anyone can pick and
+              drive the shared video (only lessons EVERY participant can access
+              are listed, server-side). */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={sharedVideoUrl ? "default" : "glass"}
+                size="icon"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
+                onClick={() => setVideoDialogOpen(true)}
+                aria-label={t('meetingRoom.watchCourseVideo')}
+              >
+                <Play className="w-4 h-4 sm:w-5 sm:h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('meetingRoom.watchCourseVideoTogether')}</TooltipContent>
+          </Tooltip>
+          <VideoSelectDialog
+            open={videoDialogOpen}
+            onOpenChange={setVideoDialogOpen}
+            lessons={courseLessons}
+            loading={loadingLessons}
+            onSelectVideo={handleSelectVideo}
+          />
 
           {/* Chat — desktop opens the side aside; mobile opens the bottom sheet.
               Unread badge on the icon when new messages arrive while panel is closed. */}

@@ -150,11 +150,9 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, userId, toast, t]);
 
-  // Update video in database. Host-only: only the room host may choose or
-  // clear the shared video — otherwise any participant could hijack what
-  // everyone is watching.
+  // Update video in database. Collaborative: ANY participant may choose/clear
+  // the shared video (the room owner asked for shared control).
   const updateSharedVideo = useCallback(async (url: string | null) => {
-    if (!isHost) return;
     const videoStateJson: Json = {
       playing: false,
       currentTime: 0,
@@ -177,9 +175,8 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
   }, [roomId, userId, isHost]);
 
   // Update video state (play/pause/seek) - debounced to prevent flooding.
-  // Host-only: only the host drives playback; everyone else follows.
+  // Collaborative: anyone can play/pause/seek for the room.
   const updateVideoState = useCallback(async (playing: boolean, currentTime: number) => {
-    if (!isHost) return;
     // Clear any pending debounce
     if (syncDebounceRef.current) {
       clearTimeout(syncDebounceRef.current);

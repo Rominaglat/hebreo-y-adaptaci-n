@@ -814,9 +814,16 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
               .eq('room_id', roomId);
 
             if (!data) return;
-            setParticipants(data);
+            // Ignore "ghost" rows — participants whose heartbeat is stale
+            // (left without cleanup). Live users heartbeat every 30s, so a 90s
+            // window never drops them; ghosts are excluded from the roster AND
+            // from peer-connection attempts (we don't try to connect to the dead).
+            const data2 = data.filter(
+              (p) => !p.last_seen_at || Date.now() - new Date(p.last_seen_at).getTime() < 90_000,
+            );
+            setParticipants(data2);
 
-            data.forEach((p) => {
+            data2.forEach((p) => {
               if (p.user_id === localUserId) return;
               const existing = peers.current.get(p.user_id);
               const known = peerJoinedAt.current.get(p.user_id);
@@ -846,7 +853,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
             });
 
             peers.current.forEach((_, peerId) => {
-              if (!data.find((p) => p.user_id === peerId)) {
+              if (!data2.find((p) => p.user_id === peerId)) {
                 console.log('[WebRTC] Participant left:', peerId);
                 const peerState = peers.current.get(peerId);
                 if (peerState) {
@@ -922,9 +929,13 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
       .eq('room_id', roomId);
 
     if (existingParticipants) {
-      setParticipants(existingParticipants);
+      // Skip ghosts (stale heartbeat) — don't show or connect to dead peers.
+      const existingFresh = existingParticipants.filter(
+        (p) => !p.last_seen_at || Date.now() - new Date(p.last_seen_at).getTime() < 90_000,
+      );
+      setParticipants(existingFresh);
 
-      existingParticipants.forEach((p) => {
+      existingFresh.forEach((p) => {
         if (p.user_id !== localUserId) {
           peerJoinedAt.current.set(p.user_id, p.joined_at);
           if (localUserId > p.user_id) {
