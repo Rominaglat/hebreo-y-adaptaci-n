@@ -327,81 +327,40 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
   // setState calls so React doesn't warn when the user leaves mid-fetch.
   const mountedRef = useRef(true);
 
+  // The course videos offered for "watch together" = lessons EVERY current
+  // participant can access (server-side RPC; intersection of everyone's access,
+  // so a shared account can't leak paid content). Recomputed when the picker
+  // opens so it reflects who's actually in the room right now.
+  const fetchSharedLessons = useCallback(async () => {
+    if (!mountedRef.current) return;
+    setLoadingLessons(true);
+    // The RPC isn't in the generated types — cast around it.
+    const { data, error } = await (supabase.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ data: CourseLesson[] | null; error: unknown }>)(
+      'room_shared_lessons',
+      { p_room_id: room.id },
+    );
+    if (!mountedRef.current) return;
+    if (error) {
+      console.error('[MeetingRoom] room_shared_lessons failed:', error);
+      setCourseLessons([]);
+    } else {
+      setCourseLessons(data ?? []);
+    }
+    setLoadingLessons(false);
+  }, [room.id]);
+
+  // Refresh the shared-lesson list whenever the picker opens.
+  useEffect(() => {
+    if (videoDialogOpen) fetchSharedLessons();
+  }, [videoDialogOpen, fetchSharedLessons]);
+
   useEffect(() => {
     mountedRef.current = true;
     joinRoom();
-
-    // Fetch lessons with videos - only from enrolled courses
-    const fetchLessons = async () => {
-      if (!mountedRef.current) return;
-      setLoadingLessons(true);
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !mountedRef.current) {
-        if (mountedRef.current) setLoadingLessons(false);
-        return;
-      }
-
-      const { data: enrollments } = await supabase
-        .from('enrollments')
-        .select('course_id')
-        .eq('user_id', user.id);
-
-      const enrolledCourseIds = enrollments?.map(e => e.course_id) || [];
-      
-      // Check if user is admin or instructor
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .single();
-      
-      const isAdminOrInstructor = userRole?.role === 'admin' || userRole?.role === 'instructor';
-
-      const { data, error } = await supabase
-        .from('lessons')
-        .select(`
-          id,
-          title,
-          video_url,
-          order_index,
-          modules!inner (
-            id,
-            title,
-            order_index,
-            courses!inner (
-              id,
-              title,
-              is_published
-            )
-          )
-        `)
-        .not('video_url', 'is', null)
-        .order('order_index', { ascending: true });
-
-      if (!error && data && mountedRef.current) {
-        const lessons = data
-          .filter((lesson: any) => {
-            const courseId = lesson.modules?.courses?.id;
-            const isPublished = lesson.modules?.courses?.is_published;
-            // Show if admin/instructor OR if enrolled in the course
-            return isPublished && (isAdminOrInstructor || enrolledCourseIds.includes(courseId));
-          })
-          .map((lesson: any) => ({
-            id: lesson.id,
-            title: lesson.title,
-            video_url: lesson.video_url,
-            course_id: lesson.modules?.courses?.id || '',
-            course_title: lesson.modules?.courses?.title || '',
-            order_index: lesson.order_index || 0,
-            module_title: lesson.modules?.title || '',
-            module_order: lesson.modules?.order_index || 0,
-          }));
-        setCourseLessons(lessons);
-      }
-      if (mountedRef.current) setLoadingLessons(false);
-    };
-    fetchLessons();
+    fetchSharedLessons();
 
     return () => {
       mountedRef.current = false;
@@ -612,6 +571,11 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
       canvasRef.current = canvas;
 
       const audioContext = new AudioContext();
+      // Some browsers create the context 'suspended' even after a gesture;
+      // resume so the audio actually flows into the recording.
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume().catch(() => {});
+      }
       const audioDestination = audioContext.createMediaStreamDestination();
       audioContextRef.current = audioContext;
       audioDestinationRef.current = audioDestination;
@@ -889,11 +853,14 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
         audioContextRef.current = null;
         audioDestinationRef.current = null;
       }
+      // Surface the real reason so a failure is actionable (not a generic
+      // "something went wrong").
+      const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       toast({
         title: t('meetingRoom.recordingErrorTitle'),
-        description: t('meetingRoom.recordingErrorDesc'),
+        description: `${t('meetingRoom.recordingErrorDesc')} (${reason})`,
         variant: "destructive",
-        duration: 4000,
+        duration: 6000,
       });
     }
   }, [room.name, toast, localStream, remoteStreams, stopRecording, t]);
