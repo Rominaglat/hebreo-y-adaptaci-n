@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { MicOff, VideoOff, Monitor, Hand, Crown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -14,6 +14,8 @@ interface VideoTileProps {
   isSpeaking?: boolean;
   isHandRaised?: boolean;
   isHost?: boolean;
+  /** Chosen audio-output (speaker) device for remote audio, via setSinkId. */
+  outputDeviceId?: string;
 }
 
 const VideoTile = ({
@@ -27,9 +29,11 @@ const VideoTile = ({
   isSpeaking = false,
   isHandRaised = false,
   isHost = false,
+  outputDeviceId,
 }: VideoTileProps) => {
   const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Callback ref so the stream is attached the moment the <video> element
   // mounts. The previous useEffect approach broke camera toggling: turning
@@ -49,6 +53,31 @@ const VideoTile = ({
       el.play().catch(() => {});
     }
   }, [stream]);
+
+  // Dedicated, ALWAYS-MOUNTED audio sink for remote participants. The <video>
+  // element is conditionally rendered (it unmounts when the peer turns their
+  // camera off), so binding audio to it made a camera-off participant go
+  // silent. Route remote audio through this <audio> element instead — it
+  // stays mounted regardless of camera state — and keep the <video> muted so
+  // the same track never plays twice. Google Meet uses the same separation.
+  const setAudioEl = useCallback((el: HTMLAudioElement | null) => {
+    audioRef.current = el;
+    if (el && stream) {
+      el.srcObject = stream;
+      el.play().catch(() => {});
+    }
+  }, [stream]);
+
+  // Route remote audio to the user's chosen output device (speaker/headset).
+  // setSinkId is Chromium-only; guard so unsupported browsers just use default.
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !outputDeviceId) return;
+    const sinkable = el as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+    if (typeof sinkable.setSinkId === 'function') {
+      sinkable.setSinkId(outputDeviceId).catch(() => {});
+    }
+  }, [outputDeviceId, stream]);
 
   const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
@@ -72,12 +101,19 @@ const VideoTile = ({
         isSpeaking && "ring-4 ring-green-400 shadow-[0_0_24px_rgba(74,222,128,0.45)]",
       )}
     >
+      {/* Always-mounted audio sink for remote peers (see setAudioEl). Local
+          audio is never played back (would echo), so render only for remotes. */}
+      {stream && !isLocal && <audio ref={setAudioEl} autoPlay />}
+
       {shouldShowVideo ? (
         <video
           ref={setVideoEl}
           autoPlay
           playsInline
-          muted={isLocal}
+          // Muted unconditionally: remote audio is handled by the dedicated
+          // <audio> sink above, so the video element must NOT also emit audio
+          // (otherwise every remote plays twice). Local video is muted anyway.
+          muted
           // data-screen-share lets the recording canvas pick the screen
           // share out of the pile of <video> elements and give it the big
           // slot instead of dropping it into an even grid.

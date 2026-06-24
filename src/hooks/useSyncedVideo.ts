@@ -33,6 +33,14 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
   const isSeeking = useRef(false);
   const isLocalAction = useRef(false);
   const syncDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  // Live mirrors of state read inside the realtime subscription. Reading these
+  // from refs (instead of listing them as effect deps) stops the channel from
+  // being torn down and recreated on every single video-state change — that
+  // churn was dropping sync events mid-resubscribe.
+  const sharedVideoUrlRef = useRef<string | null>(sharedVideoUrl);
+  const lastSyncTimeRef = useRef<number>(lastSyncTime);
+  useEffect(() => { sharedVideoUrlRef.current = sharedVideoUrl; }, [sharedVideoUrl]);
+  useEffect(() => { lastSyncTimeRef.current = lastSyncTime; }, [lastSyncTime]);
 
   // Fetch initial video state
   useEffect(() => {
@@ -82,7 +90,8 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
           const newData = payload.new as any;
           
           // Update shared video URL
-          if (newData.shared_video_url !== sharedVideoUrl) {
+          if (newData.shared_video_url !== sharedVideoUrlRef.current) {
+            sharedVideoUrlRef.current = newData.shared_video_url;
             setSharedVideoUrl(newData.shared_video_url);
             if (newData.shared_video_url) {
               toast({
@@ -104,7 +113,8 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
             
             // Only apply if it's from someone else and newer
             const stateTime = state.updatedAt ? new Date(state.updatedAt).getTime() : 0;
-            if (state.updatedBy !== userId && stateTime > lastSyncTime) {
+            if (state.updatedBy !== userId && stateTime > lastSyncTimeRef.current) {
+              lastSyncTimeRef.current = stateTime;
               setVideoState(state);
               setLastSyncTime(stateTime);
 
@@ -134,10 +144,17 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomId, userId, sharedVideoUrl, lastSyncTime, toast, t]);
+    // sharedVideoUrl / lastSyncTime are intentionally read via refs (above) and
+    // omitted here so the channel is created ONCE per room, not re-created on
+    // every video-state change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, userId, toast, t]);
 
-  // Update video in database
+  // Update video in database. Host-only: only the room host may choose or
+  // clear the shared video — otherwise any participant could hijack what
+  // everyone is watching.
   const updateSharedVideo = useCallback(async (url: string | null) => {
+    if (!isHost) return;
     const videoStateJson: Json = {
       playing: false,
       currentTime: 0,
@@ -157,10 +174,12 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
       setSharedVideoUrl(url);
       setLastSyncTime(Date.now());
     }
-  }, [roomId, userId]);
+  }, [roomId, userId, isHost]);
 
-  // Update video state (play/pause/seek) - debounced to prevent flooding
+  // Update video state (play/pause/seek) - debounced to prevent flooding.
+  // Host-only: only the host drives playback; everyone else follows.
   const updateVideoState = useCallback(async (playing: boolean, currentTime: number) => {
+    if (!isHost) return;
     // Clear any pending debounce
     if (syncDebounceRef.current) {
       clearTimeout(syncDebounceRef.current);
@@ -199,7 +218,7 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
     syncDebounceRef.current = setTimeout(() => {
       isLocalAction.current = false;
     }, 300);
-  }, [roomId, userId]);
+  }, [roomId, userId, isHost]);
 
   // Video event handlers
   const handlePlay = useCallback(() => {
@@ -225,6 +244,7 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
     videoState,
     videoRef,
     updateSharedVideo,
+    updateVideoState,
     handlePlay,
     handlePause,
     handleSeek,

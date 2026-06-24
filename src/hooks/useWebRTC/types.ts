@@ -22,10 +22,21 @@ export interface PeerState {
   iceRestartAttempts: number;
 }
 
+// Device + initial-state preferences carried over from the pre-join lobby.
+// Optional so existing callers keep working; when omitted the call falls back
+// to the system-default camera/mic with both on.
+export interface DevicePrefs {
+  cameraId?: string;
+  micId?: string;
+  videoOn: boolean;
+  micOn: boolean;
+}
+
 export interface UseWebRTCProps {
   roomId: string;
   localUserId: string;
   localUserName: string;
+  devicePrefs?: DevicePrefs;
 }
 
 // Discriminator for join failures so the UI can show a specific message.

@@ -13,7 +13,7 @@ import {
 
 export { type Participant } from './types';
 
-export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps): UseWebRTCReturn => {
+export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: UseWebRTCProps): UseWebRTCReturn => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
@@ -32,61 +32,102 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
   // Explicit stash for the camera video track so that screen-share end can
   // always restore it, even if the track was toggled or replaced mid-session.
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  // Screen-share outgoing tracks. While sharing, every peer's video sender
+  // carries screenVideoTrackRef, and (when the share has audio) the audio
+  // sender carries mixedAudioTrackRef — a Web-Audio mix of mic + tab/system
+  // audio so peers hear BOTH the presenter and the shared content. Kept in
+  // refs so a peer that connects mid-share gets the same tracks.
+  const screenVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+  const mixedAudioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const mixCtxRef = useRef<AudioContext | null>(null);
   // Heartbeat timer + window-unload handler — keep refs so cleanup is reliable.
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const unloadHandlerRef = useRef<(() => void) | null>(null);
 
-  // Initialize local media with fallbacks
+  // Initialize local media with fallbacks.
+  //
+  // Honors the lobby's device choices (devicePrefs): the exact camera/mic the
+  // user picked, and whether to start with camera off / muted. The mic is
+  // ALWAYS acquired (even when starting muted) so the unmute button works
+  // instantly — we just disable the track. The camera is only acquired when
+  // videoOn is true (matches Meet: no camera light when you join camera-off;
+  // toggleVideo re-acquires on demand).
   const initLocalStream = useCallback(async (): Promise<MediaStream> => {
-    console.log('[WebRTC] Initializing local stream...');
-    
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          width: { ideal: 1280 }, 
-          height: { ideal: 720 },
-          facingMode: 'user'
-        },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      console.log('[WebRTC] Got video and audio stream');
+    console.log('[WebRTC] Initializing local stream...', devicePrefs);
+
+    const wantVideo = devicePrefs?.videoOn !== false;
+    const startUnmuted = devicePrefs?.micOn !== false;
+    const cameraId = devicePrefs?.cameraId;
+    const micId = devicePrefs?.micId;
+
+    const baseVideo: MediaTrackConstraints = {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      facingMode: 'user',
+    };
+    const baseAudio: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+
+    // Apply local state from a freshly-acquired stream, respecting the lobby's
+    // start-muted choice.
+    const apply = (stream: MediaStream, gotVideo: boolean) => {
+      if (!startUnmuted) {
+        stream.getAudioTracks().forEach((tr) => { tr.enabled = false; });
+      }
       setLocalStream(stream);
       localStreamRef.current = stream;
-      setIsVideoOn(true);
-      setIsMuted(false);
+      setIsVideoOn(gotVideo);
+      setIsMuted(!startUnmuted || stream.getAudioTracks().length === 0);
       return stream;
+    };
+
+    // 1) Preferred: honor exact device ids + on/off intent.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: wantVideo
+          ? { ...baseVideo, ...(cameraId ? { deviceId: { exact: cameraId } } : {}) }
+          : false,
+        audio: { ...baseAudio, ...(micId ? { deviceId: { exact: micId } } : {}) },
+      });
+      console.log('[WebRTC] Got stream honoring lobby prefs');
+      return apply(stream, wantVideo && stream.getVideoTracks().length > 0);
     } catch (error) {
-      console.warn('[WebRTC] Failed to get video, trying audio only:', error);
-      
+      // 2) A pinned device may have vanished between lobby and call
+      //    (OverconstrainedError) — retry relaxed but keep the on/off intent.
+      console.warn('[WebRTC] Preferred constraints failed, retrying relaxed:', error);
       try {
-        const audioStream = await navigator.mediaDevices.getUserMedia({
-          video: false,
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-          },
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: wantVideo ? baseVideo : false,
+          audio: baseAudio,
         });
-        console.log('[WebRTC] Got audio-only stream');
-        setLocalStream(audioStream);
-        localStreamRef.current = audioStream;
-        setIsVideoOn(false);
-        setIsMuted(false);
-        return audioStream;
-      } catch (audioError) {
-        console.warn('[WebRTC] Failed to get any media, creating empty stream:', audioError);
-        const emptyStream = new MediaStream();
-        setLocalStream(emptyStream);
-        localStreamRef.current = emptyStream;
-        setIsVideoOn(false);
-        setIsMuted(true);
-        return emptyStream;
+        console.log('[WebRTC] Got relaxed stream');
+        return apply(stream, wantVideo && stream.getVideoTracks().length > 0);
+      } catch (error2) {
+        // 3) Audio-only fallback.
+        console.warn('[WebRTC] Failed to get video, trying audio only:', error2);
+        try {
+          const audioStream = await navigator.mediaDevices.getUserMedia({
+            video: false,
+            audio: { echoCancellation: true, noiseSuppression: true },
+          });
+          console.log('[WebRTC] Got audio-only stream');
+          return apply(audioStream, false);
+        } catch (audioError) {
+          // 4) Nothing available — empty stream so the user can still see/hear others.
+          console.warn('[WebRTC] Failed to get any media, creating empty stream:', audioError);
+          const emptyStream = new MediaStream();
+          setLocalStream(emptyStream);
+          localStreamRef.current = emptyStream;
+          setIsVideoOn(false);
+          setIsMuted(true);
+          return emptyStream;
+        }
       }
     }
-  }, []);
+  }, [devicePrefs]);
 
   // Create and configure peer connection.
   //
@@ -238,13 +279,33 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
       }
     };
 
-    // Add local tracks
-    const streamToUse = screenStreamRef.current || localStreamRef.current;
-    if (streamToUse) {
-      streamToUse.getTracks().forEach(track => {
+    // Always add the local mic + camera tracks first. This is what makes a
+    // peer that connects DURING a screen share still hear our microphone — the
+    // old `screenStream || localStream` OR added only the screen tracks and
+    // silently dropped the mic for late joiners.
+    const localStream = localStreamRef.current;
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
         console.log('[WebRTC] Adding local track to peer:', track.kind);
-        pc.addTrack(track, streamToUse);
+        pc.addTrack(track, localStream);
       });
+    }
+
+    // If a screen share is already in progress, swap the senders to carry the
+    // screen content — mirroring exactly what already-connected peers received
+    // via replaceTrack in startScreenShare.
+    if (screenStreamRef.current) {
+      const screenVideo = screenVideoTrackRef.current;
+      if (screenVideo) {
+        const vSender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (vSender) vSender.replaceTrack(screenVideo);
+        else pc.addTrack(screenVideo, screenStreamRef.current);
+      }
+      const mixedAudio = mixedAudioTrackRef.current;
+      if (mixedAudio) {
+        const aSender = pc.getSenders().find(s => s.track?.kind === 'audio');
+        if (aSender) aSender.replaceTrack(mixedAudio);
+      }
     }
 
     peers.current.set(peerId, peerState);
@@ -354,10 +415,15 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
     const allEnded = videoTracks.length === 0 || videoTracks.every(t => t.readyState === 'ended');
 
     if (allEnded) {
-      // Re-acquire camera from scratch.
+      // Re-acquire camera from scratch — honoring the lobby-selected camera.
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'user',
+            ...(devicePrefs?.cameraId ? { deviceId: { exact: devicePrefs.cameraId } } : {}),
+          },
           audio: false,
         });
         const newTrack = stream.getVideoTracks()[0];
@@ -396,7 +462,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
       .update({ is_video_on: newVideoOn, last_seen_at: new Date().toISOString() } as never)
       .eq('room_id', roomId)
       .eq('user_id', localUserId);
-  }, [isVideoOn, roomId, localUserId]);
+  }, [isVideoOn, roomId, localUserId, devicePrefs]);
 
   // Start screen sharing
   const startScreenShare = useCallback(async () => {
@@ -418,11 +484,44 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
       if (liveCameraTrack) cameraTrackRef.current = liveCameraTrack;
 
       const videoTrack = stream.getVideoTracks()[0];
+      screenVideoTrackRef.current = videoTrack;
+
+      // If the user shared a tab/window WITH audio, mix it with the mic so
+      // peers hear both the presenter and the shared content. Each peer only
+      // has a single audio m-line, so we send ONE mixed track (not two) — the
+      // receiver's ontrack keeps a single audio track per peer.
+      const screenAudioTrack = stream.getAudioTracks()[0] ?? null;
+      let outgoingAudio: MediaStreamTrack | null = null;
+      if (screenAudioTrack) {
+        try {
+          const AudioCtx =
+            window.AudioContext ||
+            (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          const ctx = new AudioCtx();
+          mixCtxRef.current = ctx;
+          const dest = ctx.createMediaStreamDestination();
+          // Mic source (the same track mute toggles, so muting still works).
+          const micTrack = localStreamRef.current?.getAudioTracks()[0];
+          if (micTrack) {
+            ctx.createMediaStreamSource(new MediaStream([micTrack])).connect(dest);
+          }
+          // Shared-content audio source.
+          ctx.createMediaStreamSource(new MediaStream([screenAudioTrack])).connect(dest);
+          outgoingAudio = dest.stream.getAudioTracks()[0] ?? null;
+          mixedAudioTrackRef.current = outgoingAudio;
+        } catch (err) {
+          console.warn('[WebRTC] Failed to mix screen audio, sending mic only:', err);
+        }
+      }
 
       peers.current.forEach((peerState) => {
-        const sender = peerState.connection.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) {
-          sender.replaceTrack(videoTrack);
+        const pc = peerState.connection;
+        const vSender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (vSender) vSender.replaceTrack(videoTrack);
+        else pc.addTrack(videoTrack, stream);
+        if (outgoingAudio) {
+          const aSender = pc.getSenders().find(s => s.track?.kind === 'audio');
+          if (aSender) aSender.replaceTrack(outgoingAudio);
         }
       });
 
@@ -456,15 +555,38 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
     screenStreamRef.current.getTracks().forEach(track => track.stop());
     setScreenStream(null);
     screenStreamRef.current = null;
+    screenVideoTrackRef.current = null;
     setIsScreenSharing(false);
 
+    // Restore each peer's audio sender to the RAW mic track (we may have
+    // swapped it to a mic+screen mix in startScreenShare), then tear down the
+    // mix graph.
+    const micTrack = localStreamRef.current?.getAudioTracks()[0] ?? null;
+    if (mixedAudioTrackRef.current) {
+      peers.current.forEach((peerState) => {
+        const aSender = peerState.connection.getSenders().find(s => s.track?.kind === 'audio');
+        if (aSender) aSender.replaceTrack(micTrack);
+      });
+      mixedAudioTrackRef.current.stop();
+      mixedAudioTrackRef.current = null;
+    }
+    if (mixCtxRef.current) {
+      mixCtxRef.current.close().catch(() => {});
+      mixCtxRef.current = null;
+    }
+
     // Restore the original camera. Prefer the stashed track; if it died while
-    // we were sharing, re-acquire from the camera.
+    // we were sharing, re-acquire from the camera (honoring the selected one).
     let restoredTrack: MediaStreamTrack | null = cameraTrackRef.current;
     if (!restoredTrack || restoredTrack.readyState === 'ended') {
       try {
         const fresh = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'user',
+            ...(devicePrefs?.cameraId ? { deviceId: { exact: devicePrefs.cameraId } } : {}),
+          },
           audio: false,
         });
         restoredTrack = fresh.getVideoTracks()[0] ?? null;
@@ -495,7 +617,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
       .eq('user_id', localUserId);
 
     console.log('[WebRTC] Screen sharing stopped');
-  }, [roomId, localUserId]);
+  }, [roomId, localUserId, devicePrefs]);
 
   // Join room.
   //
@@ -513,7 +635,14 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
     setConnectionStatus('connecting');
     isJoined.current = true;
 
-    await initLocalStream();
+    const joinStream = await initLocalStream();
+    // Reflect the lobby's start-muted / camera-off choices in the very first
+    // participant row so peers see the correct state immediately (not a flash
+    // of "unmuted, camera on").
+    const startVideoOn =
+      devicePrefs?.videoOn !== false && joinStream.getVideoTracks().length > 0;
+    const startMuted =
+      devicePrefs?.micOn === false || joinStream.getAudioTracks().length === 0;
 
     // Clean up any stale signals addressed to us before we open the channel —
     // otherwise the SELECT inside handleSignal would replay them.
@@ -596,8 +725,8 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
           room_id: roomId,
           user_id: localUserId,
           user_name: localUserName,
-          is_muted: false,
-          is_video_on: true,
+          is_muted: startMuted,
+          is_video_on: startVideoOn,
           is_screen_sharing: false,
           last_seen_at: new Date().toISOString(),
         } as never,
@@ -705,7 +834,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
     window.addEventListener('pagehide', unload);
 
     console.log('[WebRTC] Room joined successfully');
-  }, [roomId, localUserId, localUserName, initLocalStream, createPeerConnection, handleSignal]);
+  }, [roomId, localUserId, localUserName, devicePrefs, initLocalStream, createPeerConnection, handleSignal]);
 
   // Leave room
   const leaveRoom = useCallback(async () => {
@@ -737,6 +866,16 @@ export const useWebRTC = ({ roomId, localUserId, localUserName }: UseWebRTCProps
       screenStreamRef.current.getTracks().forEach(track => track.stop());
       screenStreamRef.current = null;
       setScreenStream(null);
+    }
+    // Tear down the screen-audio mix graph if a share was active.
+    screenVideoTrackRef.current = null;
+    if (mixedAudioTrackRef.current) {
+      mixedAudioTrackRef.current.stop();
+      mixedAudioTrackRef.current = null;
+    }
+    if (mixCtxRef.current) {
+      mixCtxRef.current.close().catch(() => {});
+      mixCtxRef.current = null;
     }
 
     // Close all peer connections

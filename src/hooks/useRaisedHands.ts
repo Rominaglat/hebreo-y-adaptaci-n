@@ -1,11 +1,14 @@
 // Raised-hands tracker for the meeting room.
 //
-// Broadcast-only state — we don't persist this to Postgres because a hand
-// raise is ephemeral by definition (you raise to ask a question, the host
-// acknowledges, you lower). Anyone who joins later gets a clean board.
+// Backed by Supabase PRESENCE (not fire-and-forget broadcast) so that:
+//   * a participant who joins mid-meeting immediately sees every hand that is
+//     already raised (presence sends the full state on sync), and
+//   * a raised hand disappears automatically when its owner leaves/disconnects
+//     (presence 'leave'), instead of lingering forever.
 //
-// The hook returns the current set of user_ids with raised hands plus
-// toggle/lower/clear helpers wired to the same broadcast channel.
+// Each client tracks its own `{ userId, raised }` state; the public set is
+// derived from the presence state of everyone on the channel. "Lower all" is a
+// host broadcast that asks each client to lower its own hand.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,59 +18,63 @@ interface UseRaisedHandsProps {
   localUserId: string;
 }
 
+interface HandPresence {
+  userId: string;
+  raised: boolean;
+}
+
 export function useRaisedHands({ roomId, localUserId }: UseRaisedHandsProps) {
   const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set());
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Remember our own raised state so a channel re-subscribe re-tracks it.
+  const localRaisedRef = useRef(false);
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`raised-hands-${roomId}`, { config: { broadcast: { self: true } } })
-      .on("broadcast", { event: "raise" }, ({ payload }) => {
-        const uid = payload?.userId as string | undefined;
-        if (!uid) return;
-        setRaisedHands((prev) => {
-          if (prev.has(uid)) return prev;
-          const next = new Set(prev);
-          next.add(uid);
-          return next;
+    const channel = supabase.channel(`raised-hands-${roomId}`, {
+      config: { presence: { key: localUserId } },
+    });
+
+    const rebuild = () => {
+      const state = channel.presenceState<HandPresence>();
+      const next = new Set<string>();
+      Object.values(state).forEach((entries) => {
+        entries.forEach((e) => {
+          if (e.raised && e.userId) next.add(e.userId);
         });
-      })
-      .on("broadcast", { event: "lower" }, ({ payload }) => {
-        const uid = payload?.userId as string | undefined;
-        if (!uid) return;
-        setRaisedHands((prev) => {
-          if (!prev.has(uid)) return prev;
-          const next = new Set(prev);
-          next.delete(uid);
-          return next;
-        });
-      })
+      });
+      setRaisedHands(next);
+    };
+
+    channel
+      .on("presence", { event: "sync" }, rebuild)
+      .on("presence", { event: "join" }, rebuild)
+      .on("presence", { event: "leave" }, rebuild)
+      // Host "lower all": each client lowers its own hand.
       .on("broadcast", { event: "lower-all" }, () => {
-        setRaisedHands(new Set());
+        localRaisedRef.current = false;
+        channel.track({ userId: localUserId, raised: false });
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          channel.track({ userId: localUserId, raised: localRaisedRef.current });
+        }
+      });
 
     channelRef.current = channel;
     return () => {
       supabase.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [roomId]);
+  }, [roomId, localUserId]);
 
   const raiseHand = useCallback(() => {
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "raise",
-      payload: { userId: localUserId },
-    });
+    localRaisedRef.current = true;
+    channelRef.current?.track({ userId: localUserId, raised: true });
   }, [localUserId]);
 
   const lowerHand = useCallback(() => {
-    channelRef.current?.send({
-      type: "broadcast",
-      event: "lower",
-      payload: { userId: localUserId },
-    });
+    localRaisedRef.current = false;
+    channelRef.current?.track({ userId: localUserId, raised: false });
   }, [localUserId]);
 
   const lowerAllHands = useCallback(() => {

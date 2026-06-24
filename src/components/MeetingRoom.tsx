@@ -21,13 +21,25 @@ import {
   MessageSquare, Users, Monitor, MonitorOff,
   Copy, Check, Play, X, Circle, Square, PenTool, Pencil,
   Hand, LayoutGrid, Maximize2, RotateCw, Loader2,
+  UserX, Lock, Unlock, PhoneOff, Volume2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWebRTC } from "@/hooks/useWebRTC/index";
+import type { DevicePrefs } from "@/hooks/useWebRTC/types";
 import { useSyncedVideo } from "@/hooks/useSyncedVideo";
 import { useWhiteboard } from "@/hooks/useWhiteboard";
 import { useActiveSpeakers } from "@/hooks/useActiveSpeakers";
 import { useRaisedHands } from "@/hooks/useRaisedHands";
+import { useRoomModeration } from "@/hooks/useRoomModeration";
+import { useMutedSpeakingHint } from "@/hooks/useMutedSpeakingHint";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Tooltip,
@@ -60,9 +72,11 @@ interface MeetingRoomProps {
   onLeave: () => void;
   userId: string;
   userName: string;
+  /** Device + start-state choices carried over from the pre-join lobby. */
+  devicePrefs?: DevicePrefs;
 }
 
-const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
+const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRoomProps) => {
   const { toast } = useToast();
   const { t } = useLanguage();
   const [showChat, setShowChat] = useState(false);
@@ -90,6 +104,10 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
   const animationFrameRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  // Post-gain audio of the synced watch-party video, exposed by
+  // SyncedVideoPlayer. Used by the recorder instead of createMediaElementSource
+  // (the element's single source node is already claimed by the player).
+  const syncedAudioStreamRef = useRef<MediaStream | null>(null);
   
   const isHost = room.host_id === userId;
 
@@ -113,6 +131,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
     roomId: room.id,
     localUserId: userId,
     localUserName: displayName,
+    devicePrefs,
   });
 
   // Surface a join failure (locked room, room full, RLS deny) and bounce
@@ -154,6 +173,18 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
     localStream,
     isMuted,
   });
+
+  // Remember the most recent REMOTE speaker for the Speaker layout's big tile.
+  // Ignores our own voice so we don't spotlight ourselves while others listen.
+  useEffect(() => {
+    const remoteSpeaker = participants.find(
+      (p) => p.user_id !== userId && activeSpeakers.has(p.user_id),
+    );
+    if (remoteSpeaker) setActiveSpeakerSpotlight(remoteSpeaker.user_id);
+  }, [activeSpeakers, participants, userId]);
+
+  // "You're muted but talking" hint.
+  const mutedSpeaking = useMutedSpeakingHint({ localStream, isMuted });
 
   // Raised hands (broadcast-only, ephemeral).
   const { raisedHands, isLocalRaised, raiseHand, lowerHand, lowerAllHands } = useRaisedHands({
@@ -197,17 +228,42 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
   const [viewMode, setViewMode] = useState<"grid" | "speaker">("speaker");
   // Pinned participant — overrides active-speaker selection in speaker view.
   const [pinnedUserId, setPinnedUserId] = useState<string | null>(null);
+  // Active-speaker spotlight: remember the most recent remote speaker so the
+  // "Speaker" layout keeps a stable large tile through the natural gaps
+  // between utterances (Google Meet keeps the last speaker on stage).
+  const [activeSpeakerSpotlight, setActiveSpeakerSpotlight] = useState<string | null>(null);
+
+  // Audio output (speaker) selection — applied to remote tiles via setSinkId.
+  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
+  const [outputDeviceId, setOutputDeviceId] = useState<string>('default');
+  useEffect(() => {
+    const supportsSink = typeof (HTMLMediaElement.prototype as { setSinkId?: unknown }).setSinkId === 'function';
+    if (!supportsSink || !navigator.mediaDevices?.enumerateDevices) return;
+    const refresh = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setAudioOutputs(devices.filter((d) => d.kind === 'audiooutput'));
+      } catch {
+        /* ignore — fall back to the default speaker */
+      }
+    };
+    refresh();
+    navigator.mediaDevices.addEventListener?.('devicechange', refresh);
+    return () => navigator.mediaDevices.removeEventListener?.('devicechange', refresh);
+  }, []);
 
   // Single source of truth for layout switching between mobile sheet and
   // desktop aside so RoomChat doesn't mount in both places at once (which
   // caused chat subscriptions to fight each other).
   const isMobile = useIsMobile();
 
-  // Track the room's is_recording flag in real time so non-host participants
-  // see the privacy banner the moment the host starts/stops recording.
+  // Track the room's is_recording + is_locked flags in real time so every
+  // participant sees the recording banner and the lock state live.
   const [roomIsRecording, setRoomIsRecording] = useState<boolean>(!!room.is_recording);
+  const [roomLocked, setRoomLocked] = useState<boolean>(!!room.is_locked);
   useEffect(() => {
     setRoomIsRecording(!!room.is_recording);
+    setRoomLocked(!!room.is_locked);
     const channel = supabase
       .channel(`room-state-${room.id}`)
       .on(
@@ -219,21 +275,23 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
           filter: `id=eq.${room.id}`,
         },
         (payload) => {
-          const next = payload.new as { is_recording?: boolean | null };
+          const next = payload.new as { is_recording?: boolean | null; is_locked?: boolean | null };
           setRoomIsRecording(!!next.is_recording);
+          setRoomLocked(!!next.is_locked);
         },
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [room.id, room.is_recording]);
+  }, [room.id, room.is_recording, room.is_locked]);
 
   const {
     sharedVideoUrl,
     videoState,
     videoRef,
     updateSharedVideo,
+    updateVideoState,
     handlePlay,
     handlePause,
     handleSeek,
@@ -356,6 +414,18 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
         } catch (err) {
           console.warn('[MeetingRoom] Failed to stop recorder on unmount:', err);
         }
+        // Clear the public is_recording flag so the consent banner doesn't stay
+        // stuck ON for everyone when the host closes the tab / navigates away
+        // mid-recording (the normal stopRecording path is bypassed on a raw
+        // unmount). Best-effort fire-and-forget.
+        if (isHost) {
+          supabase.from('rooms')
+            .update({ is_recording: false })
+            .eq('id', room.id)
+            .then(({ error }) => {
+              if (error) console.warn('[MeetingRoom] Failed to clear is_recording on unmount:', error);
+            });
+        }
       }
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
@@ -388,6 +458,65 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
 
   const handleLeave = () => {
     setConfirmLeaveOpen(true);
+  };
+
+  // Host moderation — force-mute / remove / end-for-all. Every client listens;
+  // only the host invokes the action helpers (gated in the UI).
+  const { muteParticipant, removeParticipant, endCallForAll } = useRoomModeration({
+    roomId: room.id,
+    localUserId: userId,
+    onForceMute: () => {
+      if (!isMuted) toggleMute();
+      toast({
+        title: t('meetingRoom.mutedByHostTitle'),
+        description: t('meetingRoom.mutedByHostDesc'),
+      });
+    },
+    onKicked: () => {
+      toast({
+        title: t('meetingRoom.removedByHostTitle'),
+        description: t('meetingRoom.removedByHostDesc'),
+        variant: 'destructive',
+      });
+      performLeave();
+    },
+    onEndCall: () => {
+      // The host doesn't receive their own broadcast, so this only fires for
+      // other participants.
+      toast({
+        title: t('meetingRoom.callEndedByHostTitle'),
+        description: t('meetingRoom.callEndedByHostDesc'),
+      });
+      performLeave();
+    },
+  });
+
+  // Host ends the call for everyone: tell the room, then leave ourselves.
+  const handleEndForAll = () => {
+    endCallForAll();
+    performLeave();
+  };
+
+  // Host toggles the room lock (blocks new non-host joins).
+  const toggleRoomLock = async () => {
+    const next = !roomLocked;
+    setRoomLocked(next);
+    const { error } = await supabase
+      .from('rooms')
+      .update({ is_locked: next })
+      .eq('id', room.id);
+    if (error) {
+      setRoomLocked(!next);
+      toast({
+        title: t('common.error'),
+        description: t('meetingRoom.lockErrorDesc'),
+        variant: 'destructive',
+      });
+      return;
+    }
+    toast({
+      title: next ? t('meetingRoom.roomLockedTitle') : t('meetingRoom.roomUnlockedTitle'),
+    });
   };
 
   // Keyboard shortcuts. Use document.activeElement so the check works even
@@ -504,23 +633,22 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
         }
       });
 
-      // Capture the direct synced-video player's audio too. createMedia-
-      // ElementSource reroutes the element's output through our context,
-      // so we MUST also connect to the default destination — otherwise the
-      // user stops hearing the video while recording.
-      const syncedVideoEl = document.querySelector<HTMLVideoElement>(
-        'video[data-synced-video="true"]',
-      );
-      if (syncedVideoEl) {
+      // Mix in the synced watch-party video's audio. We must NOT call
+      // createMediaElementSource on the <video> — SyncedVideoPlayer already
+      // claimed the element's single source node for its gain, and a second
+      // call throws (which is why this audio used to silently vanish from
+      // recordings). Instead consume the post-gain MediaStream the player
+      // exposes via onAudioStreamReady. createMediaStreamSource may be called
+      // freely, so re-recording works too.
+      const syncedAudio = syncedAudioStreamRef.current;
+      if (syncedAudio && syncedAudio.getAudioTracks().length > 0) {
         try {
-          const source = audioContext.createMediaElementSource(syncedVideoEl);
+          const source = audioContext.createMediaStreamSource(
+            new MediaStream(syncedAudio.getAudioTracks()),
+          );
           source.connect(audioDestination);
-          source.connect(audioContext.destination);
         } catch (err) {
-          // createMediaElementSource can only be called once per element.
-          // If the user re-records the same video, just skip — the prior
-          // source is still wired.
-          console.warn('[recording] synced-video audio already wired:', err);
+          console.warn('[recording] failed to wire synced-video audio:', err);
         }
       }
 
@@ -710,8 +838,12 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
         combinedStream.getTracks().forEach(track => track.stop());
         if (audioContextRef.current) {
           audioContextRef.current.close();
+          // Null the refs so a second recording starts from a clean slate
+          // instead of reusing a closed context.
+          audioContextRef.current = null;
+          audioDestinationRef.current = null;
         }
-        
+
         toast({
           title: t('meetingRoom.recordingDownloadedTitle'),
           description: `${t('meetingRoom.recordingDownloadedDesc')} (${extension.toUpperCase()})`,
@@ -744,6 +876,18 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
       });
     } catch (error) {
       console.error('Error starting recording:', error);
+      // Tear down the canvas draw loop + AudioContext if we threw after wiring
+      // them up (e.g. MediaRecorder construction failed) — otherwise the rAF
+      // loop and audio graph leak until the page is closed.
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+        audioDestinationRef.current = null;
+      }
       toast({
         title: t('meetingRoom.recordingErrorTitle'),
         description: t('meetingRoom.recordingErrorDesc'),
@@ -823,12 +967,40 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
     : screenSharer
     ? "remote-screen"
     : null;
+  // A pin only counts if that participant is still in the room.
+  const pinnedValid =
+    pinnedUserId && participants.some((p) => p.user_id === pinnedUserId)
+      ? pinnedUserId
+      : null;
+
+  // Whom to spotlight as the big tile when NO screen share / shared video is
+  // on stage. A pin always wins (even in grid view — "pin to spotlight").
+  // Otherwise, in Speaker view we follow the active speaker (falling back to
+  // the first remote participant so the stage is never empty).
+  const spotlightUserId: string | null =
+    primaryKind !== null
+      ? null
+      : pinnedValid
+      ? pinnedValid
+      : viewMode === "speaker"
+      ? activeSpeakerSpotlight &&
+        participants.some((p) => p.user_id === activeSpeakerSpotlight)
+        ? activeSpeakerSpotlight
+        : participants.find((p) => p.user_id !== userId)?.user_id ?? null
+      : null;
+
   // Shared video has no sensible grid representation (it's an iframe), so
   // it always uses spotlight. Screen-share is "tile-able" so the toggle
-  // applies there.
+  // applies there. A pinned/active-speaker participant also drives spotlight.
   const spotlight =
     primaryKind === "shared-video" ||
-    (primaryKind !== null && viewMode === "speaker");
+    (primaryKind !== null && viewMode === "speaker") ||
+    spotlightUserId !== null;
+
+  // The participant object to render in the big spotlight slot (may be self).
+  const spotlightParticipant = spotlightUserId
+    ? participants.find((p) => p.user_id === spotlightUserId) ?? null
+    : null;
 
 
   // Calculate grid layout - count all participants
@@ -890,6 +1062,9 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                     onSeek={handleSeek}
                     onClose={() => updateSharedVideo(null)}
                     canClose={isHost}
+                    canControl={isHost}
+                    onReportState={updateVideoState}
+                    onAudioStreamReady={(s) => { syncedAudioStreamRef.current = s; }}
                   />
                 )}
                 {primaryKind === "local-screen" && screenStream && (
@@ -911,7 +1086,48 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                     isVideoOn={true}
                     isScreenSharing={true}
                     isLarge={true}
+                    outputDeviceId={outputDeviceId}
                   />
+                )}
+                {/* Pinned / active-speaker participant spotlight (no screen
+                    share or shared video active). Click the big tile to unpin
+                    and return to auto / active-speaker follow. */}
+                {primaryKind === null && spotlightParticipant && (
+                  <div
+                    className="w-full h-full cursor-pointer"
+                    onClick={() => setPinnedUserId(null)}
+                    title={t('meetingRoom.unpinParticipant')}
+                  >
+                    <VideoTile
+                      stream={
+                        spotlightParticipant.user_id === userId
+                          ? localStream
+                          : remoteStreams.get(spotlightParticipant.user_id) || null
+                      }
+                      name={
+                        spotlightParticipant.user_id === userId
+                          ? displayName
+                          : spotlightParticipant.user_name || t('meetingRoom.participant')
+                      }
+                      isMuted={
+                        spotlightParticipant.user_id === userId
+                          ? isMuted
+                          : spotlightParticipant.is_muted || false
+                      }
+                      isVideoOn={
+                        spotlightParticipant.user_id === userId
+                          ? isVideoOn
+                          : spotlightParticipant.is_video_on !== false
+                      }
+                      isScreenSharing={false}
+                      isLocal={spotlightParticipant.user_id === userId}
+                      isLarge={true}
+                      isSpeaking={activeSpeakers.has(spotlightParticipant.user_id)}
+                      isHandRaised={raisedHands.has(spotlightParticipant.user_id)}
+                      isHost={spotlightParticipant.user_id === room.host_id}
+                      outputDeviceId={outputDeviceId}
+                    />
+                  </div>
                 )}
                 {showWhiteboard && (
                   <WhiteboardOverlay
@@ -935,27 +1151,46 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 )}
               </div>
 
-              {/* Thumbnail strip — horizontal scroll of every participant. */}
+              {/* Thumbnail strip — horizontal scroll of every participant
+                  except whoever is currently in the big spotlight slot. */}
               <div className="shrink-0 flex gap-2 overflow-x-auto pb-1 h-24 sm:h-32">
-                <div className="w-32 sm:w-44 shrink-0 h-full">
-                  <VideoTile
-                    stream={localStream}
-                    name={displayName}
-                    isMuted={isMuted}
-                    isVideoOn={isVideoOn}
-                    isScreenSharing={false}
-                    isLocal={true}
-                    isSpeaking={activeSpeakers.has(userId)}
-                    isHandRaised={raisedHands.has(userId)}
-                    isHost={isHost}
-                  />
-                </div>
+                {spotlightUserId !== userId && (
+                  <div className="w-32 sm:w-44 shrink-0 h-full">
+                    <VideoTile
+                      stream={localStream}
+                      name={displayName}
+                      isMuted={isMuted}
+                      isVideoOn={isVideoOn}
+                      isScreenSharing={false}
+                      isLocal={true}
+                      isSpeaking={activeSpeakers.has(userId)}
+                      isHandRaised={raisedHands.has(userId)}
+                      isHost={isHost}
+                    />
+                  </div>
+                )}
                 {participants
-                  .filter(p => p.user_id !== userId)
+                  .filter(p =>
+                    p.user_id !== userId &&
+                    p.user_id !== spotlightUserId &&
+                    // When a remote peer is the big screen-share tile, don't
+                    // also render them in the strip — that would mount a second
+                    // <audio> sink for the same peer and play them twice.
+                    !(primaryKind === "remote-screen" && p.user_id === screenSharer?.user_id)
+                  )
                   .map((participant) => {
                     const stream = remoteStreams.get(participant.user_id);
                     return (
-                      <div key={participant.user_id} className="w-32 sm:w-44 shrink-0 h-full">
+                      <div
+                        key={participant.user_id}
+                        className="w-32 sm:w-44 shrink-0 h-full cursor-pointer"
+                        onClick={() =>
+                          setPinnedUserId((prev) =>
+                            prev === participant.user_id ? null : participant.user_id,
+                          )
+                        }
+                        title={pinnedUserId === participant.user_id ? t('meetingRoom.unpinParticipant') : t('meetingRoom.pinParticipant')}
+                      >
                         <VideoTile
                           stream={stream || null}
                           name={participant.user_name || t('meetingRoom.participant')}
@@ -965,6 +1200,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                           isSpeaking={activeSpeakers.has(participant.user_id)}
                           isHandRaised={raisedHands.has(participant.user_id)}
                           isHost={participant.user_id === room.host_id}
+                          outputDeviceId={outputDeviceId}
                         />
                       </div>
                     );
@@ -999,6 +1235,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                     isVideoOn={true}
                     isScreenSharing={true}
                     isLarge={true}
+                    outputDeviceId={outputDeviceId}
                   />
                 )}
 
@@ -1016,7 +1253,12 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                 />
 
                 {participants
-                  .filter(p => p.user_id !== userId)
+                  .filter(p =>
+                    p.user_id !== userId &&
+                    // The screen-sharer is already the big tile above; skip
+                    // their grid tile so we don't double up video + audio.
+                    !(primaryKind === "remote-screen" && p.user_id === screenSharer?.user_id)
+                  )
                   .map((participant) => {
                     const stream = remoteStreams.get(participant.user_id);
                     return (
@@ -1039,6 +1281,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                           isSpeaking={activeSpeakers.has(participant.user_id)}
                           isHandRaised={raisedHands.has(participant.user_id)}
                           isHost={participant.user_id === room.host_id}
+                          outputDeviceId={outputDeviceId}
                         />
                       </div>
                     );
@@ -1080,6 +1323,28 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
             )}
             {showParticipants && (
               <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+                {isHost && (
+                  <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 gap-1.5 text-xs"
+                      onClick={toggleRoomLock}
+                    >
+                      {roomLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                      {roomLocked ? t('meetingRoom.unlockRoom') : t('meetingRoom.lockRoom')}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="flex-1 gap-1.5 text-xs"
+                      onClick={handleEndForAll}
+                    >
+                      <PhoneOff className="w-3.5 h-3.5" />
+                      {t('meetingRoom.endForAll')}
+                    </Button>
+                  </div>
+                )}
                 <div className="space-y-2">
                   {participants.map((p) => {
                     const isSelf = p.user_id === userId;
@@ -1121,6 +1386,30 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
+                          )}
+                          {/* Host moderation actions for other participants. */}
+                          {isHost && !isSelf && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => muteParticipant(p.user_id)}
+                                disabled={p.is_muted}
+                                title={t('meetingRoom.muteParticipant')}
+                              >
+                                <MicOff className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                onClick={() => removeParticipant(p.user_id)}
+                                title={t('meetingRoom.removeParticipant')}
+                              >
+                                <UserX className="w-3.5 h-3.5" />
+                              </Button>
+                            </>
                           )}
                           {p.is_muted ? (
                             <MicOff className="w-3 h-3 sm:w-4 sm:h-4 text-destructive" />
@@ -1167,6 +1456,28 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
           )}
           {showParticipants && (
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
+              {isHost && (
+                <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-1.5 text-xs"
+                    onClick={toggleRoomLock}
+                  >
+                    {roomLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                    {roomLocked ? t('meetingRoom.unlockRoom') : t('meetingRoom.lockRoom')}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1 gap-1.5 text-xs"
+                    onClick={handleEndForAll}
+                  >
+                    <PhoneOff className="w-3.5 h-3.5" />
+                    {t('meetingRoom.endForAll')}
+                  </Button>
+                </div>
+              )}
               <div className="space-y-2">
                 {participants.map((p) => {
                   const isSelf = p.user_id === userId;
@@ -1198,6 +1509,29 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
+                        {isHost && !isSelf && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => muteParticipant(p.user_id)}
+                              disabled={p.is_muted}
+                              title={t('meetingRoom.muteParticipant')}
+                            >
+                              <MicOff className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => removeParticipant(p.user_id)}
+                              title={t('meetingRoom.removeParticipant')}
+                            >
+                              <UserX className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
                         {p.is_muted ? <MicOff className="w-4 h-4 text-destructive" /> : <Mic className="w-4 h-4 text-green-500" />}
                         {p.is_video_on ? <Video className="w-4 h-4 text-green-500" /> : <VideoOff className="w-4 h-4 text-muted-foreground" />}
                       </div>
@@ -1263,10 +1597,10 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
             <TooltipContent>{isLocalRaised ? t('meetingRoom.lowerHand') : t('meetingRoom.raiseHand')}</TooltipContent>
           </Tooltip>
 
-          {/* View mode toggle — only meaningful when there's primary content
-              to spotlight (a shared video or a screen share). Hidden
-              otherwise so the toggle never looks like it does nothing. */}
-          {primaryKind !== null && (
+          {/* View mode toggle — meaningful whenever there's something to
+              spotlight: primary content (shared video / screen share) OR at
+              least one remote participant (Speaker view follows the talker). */}
+          {(primaryKind !== null || remoteParticipantsCount >= 1) && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1304,7 +1638,39 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
             </TooltipTrigger>
             <TooltipContent>{isScreenSharing ? t('meetingRoom.stopScreenShare') : t('meetingRoom.startScreenShare')}</TooltipContent>
           </Tooltip>
-          
+
+          {/* Speaker (audio output) selector — only when the browser supports
+              setSinkId and more than one output device exists. */}
+          {audioOutputs.length > 1 && (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="glass"
+                      size="icon"
+                      className="hidden sm:flex w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
+                      aria-label={t('meetingRoom.speakerLabel')}
+                    >
+                      <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>{t('meetingRoom.speakerLabel')}</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="center" className="max-w-[260px]">
+                <DropdownMenuLabel>{t('meetingRoom.speakerLabel')}</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={outputDeviceId} onValueChange={setOutputDeviceId}>
+                  {audioOutputs.map((d) => (
+                    <DropdownMenuRadioItem key={d.deviceId} value={d.deviceId} className="truncate">
+                      {d.label || `${t('meetingRoom.speakerLabel')} ${d.deviceId.slice(0, 6)}`}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           {/* Recording button - only for host, hidden on mobile */}
           {isHost && (
             <Tooltip>
@@ -1350,28 +1716,33 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
             </Tooltip>
           )}
 
-          {/* Watch course video together button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={sharedVideoUrl ? "default" : "glass"}
-                size="icon"
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
-                onClick={() => setVideoDialogOpen(true)}
-                aria-label={t('meetingRoom.watchCourseVideo')}
-              >
-                <Play className="w-4 h-4 sm:w-5 sm:h-5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t('meetingRoom.watchCourseVideoTogether')}</TooltipContent>
-          </Tooltip>
-          <VideoSelectDialog
-            open={videoDialogOpen}
-            onOpenChange={setVideoDialogOpen}
-            lessons={courseLessons}
-            loading={loadingLessons}
-            onSelectVideo={handleSelectVideo}
-          />
+          {/* Watch course video together — host only (only the host can pick
+              and drive the shared video; non-hosts just follow). */}
+          {isHost && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={sharedVideoUrl ? "default" : "glass"}
+                  size="icon"
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-full shrink-0"
+                  onClick={() => setVideoDialogOpen(true)}
+                  aria-label={t('meetingRoom.watchCourseVideo')}
+                >
+                  <Play className="w-4 h-4 sm:w-5 sm:h-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('meetingRoom.watchCourseVideoTogether')}</TooltipContent>
+            </Tooltip>
+          )}
+          {isHost && (
+            <VideoSelectDialog
+              open={videoDialogOpen}
+              onOpenChange={setVideoDialogOpen}
+              lessons={courseLessons}
+              loading={loadingLessons}
+              onSelectVideo={handleSelectVideo}
+            />
+          )}
 
           {/* Chat — desktop opens the side aside; mobile opens the bottom sheet.
               Unread badge on the icon when new messages arrive while panel is closed. */}
@@ -1451,6 +1822,20 @@ const MeetingRoom = ({ room, onLeave, userId, userName }: MeetingRoomProps) => {
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
           </span>
           {t('meetingRoom.callRecording')}
+        </div>
+      )}
+
+      {/* "You're muted but talking" nudge — Google Meet parity. Detected from
+          a live clone of the mic so it works even while the real track is
+          disabled. Sits just above the controls. */}
+      {mutedSpeaking && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 rounded-full px-4 py-2 text-sm font-medium shadow-lg flex items-center gap-2 bg-foreground text-background"
+        >
+          <MicOff className="w-4 h-4" />
+          <span>{t('meetingRoom.mutedHintTitle')} — {t('meetingRoom.mutedHintDesc')}</span>
         </div>
       )}
 

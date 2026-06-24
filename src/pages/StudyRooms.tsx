@@ -59,7 +59,7 @@ import { useRooms, Room } from '@/hooks/useRooms';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import MeetingRoom from '@/components/MeetingRoom';
-import PreJoinScreen from '@/components/study-rooms/PreJoinScreen';
+import PreJoinScreen, { type PreJoinResult } from '@/components/study-rooms/PreJoinScreen';
 
 interface CourseLesson {
   id: string;
@@ -84,6 +84,10 @@ export default function StudyRooms() {
   // Two-phase entry: user picks a room → PreJoinScreen for device check →
   // MeetingRoom. `pendingRoom` is the staging slot between the two.
   const [pendingRoom, setPendingRoom] = useState<Room | null>(null);
+  // Device/start-state choices captured in the pre-join lobby and handed to
+  // the MeetingRoom so the call actually uses the selected camera/mic and
+  // honors the camera-off / muted toggles.
+  const [joinPrefs, setJoinPrefs] = useState<PreJoinResult | undefined>(undefined);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [videoDialogOpen, setVideoDialogOpen] = useState(false);
@@ -315,7 +319,8 @@ export default function StudyRooms() {
     return (
       <PreJoinScreen
         roomName={pendingRoom.name}
-        onJoin={() => {
+        onJoin={(prefs) => {
+          setJoinPrefs(prefs);
           setActiveRoom(pendingRoom);
           setPendingRoom(null);
         }}
@@ -332,6 +337,7 @@ export default function StudyRooms() {
         onLeave={handleLeaveRoom}
         userId={user.id}
         userName={profile.full_name}
+        devicePrefs={joinPrefs}
       />
     );
   }
@@ -411,7 +417,15 @@ export default function StudyRooms() {
                     min={2}
                     max={50}
                     value={newRoom.max_participants}
-                    onChange={(e) => setNewRoom({ ...newRoom, max_participants: parseInt(e.target.value) || 10 })}
+                    onChange={(e) =>
+                      setNewRoom({
+                        ...newRoom,
+                        // Clamp to a P2P-mesh-sane range so the absurd legacy
+                        // 1000-cap rooms can't reappear (the number input's max
+                        // is only a hint; users can still type past it).
+                        max_participants: Math.min(50, Math.max(2, parseInt(e.target.value) || 10)),
+                      })
+                    }
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -645,13 +659,24 @@ export default function StudyRooms() {
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button 
-                      className="flex-1 min-w-0" 
+                    <Button
+                      className="flex-1 min-w-0"
                       onClick={() => handleJoinRoom(room)}
-                      disabled={room.participants_count !== undefined && room.participants_count >= room.max_participants}
+                      disabled={
+                        (room.participants_count !== undefined && room.participants_count >= room.max_participants) ||
+                        (room.is_locked && room.host_id !== user?.id)
+                      }
                     >
-                      <Video className="w-4 h-4 mx-1 shrink-0" />
-                      <span className="truncate">{t('studyRooms.joinRoom')}</span>
+                      {room.is_locked && room.host_id !== user?.id ? (
+                        <Lock className="w-4 h-4 mx-1 shrink-0" />
+                      ) : (
+                        <Video className="w-4 h-4 mx-1 shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {room.is_locked && room.host_id !== user?.id
+                          ? t('studyRooms.locked')
+                          : t('studyRooms.joinRoom')}
+                      </span>
                     </Button>
                     <div className="flex items-center gap-1 shrink-0">
                       {canCopyRoomLink(room) && (
@@ -780,7 +805,7 @@ export default function StudyRooms() {
                   min={2}
                   max={50}
                   value={editingRoom.max_participants}
-                  onChange={(e) => setEditingRoom({ ...editingRoom, max_participants: parseInt(e.target.value) || 10 })}
+                  onChange={(e) => setEditingRoom({ ...editingRoom, max_participants: Math.min(50, Math.max(2, parseInt(e.target.value) || 10)) })}
                 />
               </div>
               <div className="flex items-center justify-between">

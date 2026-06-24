@@ -15,6 +15,8 @@ export interface CursorPosition {
   y: number;
   userId: string;
   userName: string;
+  /** Receiver-side last-seen stamp, used to prune stale cursors. */
+  ts?: number;
 }
 
 interface UseWhiteboardProps {
@@ -31,6 +33,11 @@ export const useWhiteboard = ({ roomId, userId, userName, isHost }: UseWhiteboar
   const [pendingRequests, setPendingRequests] = useState<{ userId: string; userName: string }[]>([]);
   const [approvedUsers, setApprovedUsers] = useState<Set<string>>(new Set());
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Live mirror of `strokes` so the replay-on-join handler (which runs inside
+  // the channel subscription, with a stale closure over state) can answer with
+  // the current board without re-subscribing.
+  const strokesRef = useRef<DrawingStroke[]>([]);
+  useEffect(() => { strokesRef.current = strokes; }, [strokes]);
 
   // Initialize channel
   useEffect(() => {
@@ -46,6 +53,28 @@ export const useWhiteboard = ({ roomId, userId, userName, isHost }: UseWhiteboar
         const stroke = payload as DrawingStroke;
         setStrokes(prev => [...prev, stroke]);
       })
+      // Late-join replay: a freshly-joined peer asks for the current board;
+      // anyone who has strokes answers with the full set. The requester merges
+      // by stroke id so multiple answers (or a race with live strokes) dedupe.
+      .on('broadcast', { event: 'request-strokes' }, () => {
+        if (strokesRef.current.length > 0) {
+          channel.send({
+            type: 'broadcast',
+            event: 'replay-strokes',
+            payload: { strokes: strokesRef.current },
+          });
+        }
+      })
+      .on('broadcast', { event: 'replay-strokes' }, ({ payload }) => {
+        const incoming = (payload?.strokes ?? []) as DrawingStroke[];
+        if (incoming.length === 0) return;
+        setStrokes(prev => {
+          const have = new Set(prev.map(s => s.id));
+          const merged = [...prev];
+          incoming.forEach(s => { if (!have.has(s.id)) merged.push(s); });
+          return merged.length === prev.length ? prev : merged;
+        });
+      })
       .on('broadcast', { event: 'stroke-update' }, ({ payload }) => {
         const { id, point } = payload as { id: string; point: { x: number; y: number } };
         setStrokes(prev => prev.map(s => 
@@ -55,7 +84,7 @@ export const useWhiteboard = ({ roomId, userId, userName, isHost }: UseWhiteboar
       .on('broadcast', { event: 'cursor' }, ({ payload }) => {
         const cursor = payload as CursorPosition;
         if (cursor.userId !== userId) {
-          setCursors(prev => new Map(prev).set(cursor.userId, cursor));
+          setCursors(prev => new Map(prev).set(cursor.userId, { ...cursor, ts: Date.now() }));
         }
       })
       .on('broadcast', { event: 'clear' }, () => {
@@ -88,7 +117,12 @@ export const useWhiteboard = ({ roomId, userId, userName, isHost }: UseWhiteboar
         // user's strokes disappear too.
         setStrokes(prev => prev.filter(s => s.userId !== payload.userId));
       })
-      .subscribe();
+      .subscribe((status) => {
+        // On join, pull the existing board from whoever already has it.
+        if (status === 'SUBSCRIBED' && strokesRef.current.length === 0) {
+          channel.send({ type: 'broadcast', event: 'request-strokes', payload: {} });
+        }
+      });
 
     channelRef.current = channel;
 
@@ -103,19 +137,24 @@ export const useWhiteboard = ({ roomId, userId, userName, isHost }: UseWhiteboar
     };
   }, [roomId, userId, isHost]);
 
-  // Remove cursor when user is inactive
+  // Prune stale remote cursors (the previous implementation was a no-op, so
+  // a peer's cursor lingered forever after they stopped moving / left). Drop
+  // any cursor not refreshed in the last 3s.
   useEffect(() => {
     const interval = setInterval(() => {
       setCursors(prev => {
         const now = Date.now();
+        let changed = false;
         const newMap = new Map(prev);
-        // Remove cursors that haven't been updated in 3 seconds
-        newMap.forEach((_, key) => {
-          // We'll handle this through presence instead
+        newMap.forEach((cursor, key) => {
+          if (cursor.ts && now - cursor.ts > 3000) {
+            newMap.delete(key);
+            changed = true;
+          }
         });
-        return newMap;
+        return changed ? newMap : prev;
       });
-    }, 3000);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, []);
