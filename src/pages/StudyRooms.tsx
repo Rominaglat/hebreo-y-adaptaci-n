@@ -366,6 +366,7 @@ export default function StudyRooms() {
         userId={user.id}
         userName={profile.full_name}
         devicePrefs={joinPrefs}
+        isAdmin={isAdmin}
       />
     );
   }

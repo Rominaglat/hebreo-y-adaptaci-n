@@ -74,9 +74,11 @@ interface MeetingRoomProps {
   userName: string;
   /** Device + start-state choices carried over from the pre-join lobby. */
   devicePrefs?: DevicePrefs;
+  /** Admin/super-admin — granted full host powers in any room. */
+  isAdmin?: boolean;
 }
 
-const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRoomProps) => {
+const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs, isAdmin = false }: MeetingRoomProps) => {
   const { toast } = useToast();
   const { t } = useLanguage();
   const [showChat, setShowChat] = useState(false);
@@ -110,6 +112,11 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
   const syncedAudioStreamRef = useRef<MediaStream | null>(null);
   
   const isHost = room.host_id === userId;
+  // Privileged controls (recording, moderation, shared-video, lock, end-for-all)
+  // are available to the room host AND to admins/super-admins — so the people
+  // running the platform always have host powers even in a room they didn't
+  // create. `isHost` itself stays the literal room owner (used for badges).
+  const canHost = isHost || isAdmin;
 
   const {
     localStream,
@@ -300,7 +307,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
     roomId: room.id,
     userId,
     userName,
-    isHost,
+    isHost: canHost,
   });
 
   const {
@@ -320,7 +327,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
     roomId: room.id,
     userId,
     userName,
-    isHost,
+    isHost: canHost,
   });
 
   // Tracks whether the component is still mounted — guards the lesson fetch
@@ -378,7 +385,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
         // stuck ON for everyone when the host closes the tab / navigates away
         // mid-recording (the normal stopRecording path is bypassed on a raw
         // unmount). Best-effort fire-and-forget.
-        if (isHost) {
+        if (canHost) {
           supabase.from('rooms')
             .update({ is_recording: false })
             .eq('id', room.id)
@@ -540,7 +547,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
     setRecordingTime(0);
 
     // Clear the public flag so other participants stop seeing the banner.
-    if (isHost) {
+    if (canHost) {
       supabase.from('rooms')
         .update({ is_recording: false })
         .eq('id', room.id)
@@ -548,7 +555,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
           if (error) console.warn('[MeetingRoom] Failed to clear is_recording:', error);
         });
     }
-  }, [isHost, room.id]);
+  }, [canHost, room.id]);
 
   const startRecording = useCallback(async () => {
     try {
@@ -1030,8 +1037,8 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
                     onPause={handlePause}
                     onSeek={handleSeek}
                     onClose={() => updateSharedVideo(null)}
-                    canClose={isHost}
-                    canControl={isHost}
+                    canClose={canHost}
+                    canControl={canHost}
                     onReportState={updateVideoState}
                     onAudioStreamReady={(s) => { syncedAudioStreamRef.current = s; }}
                   />
@@ -1292,7 +1299,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
             )}
             {showParticipants && (
               <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
-                {isHost && (
+                {canHost && (
                   <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border">
                     <Button
                       variant="outline"
@@ -1357,7 +1364,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
                             </Button>
                           )}
                           {/* Host moderation actions for other participants. */}
-                          {isHost && !isSelf && (
+                          {canHost && !isSelf && (
                             <>
                               <Button
                                 variant="ghost"
@@ -1425,7 +1432,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
           )}
           {showParticipants && (
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
-              {isHost && (
+              {canHost && (
                 <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border">
                   <Button
                     variant="outline"
@@ -1478,7 +1485,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        {isHost && !isSelf && (
+                        {canHost && !isSelf && (
                           <>
                             <Button
                               variant="ghost"
@@ -1647,13 +1654,13 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
           )}
 
           {/* Recording button - only for host, hidden on mobile */}
-          {isHost && (
+          {canHost && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant={isRecording ? "destructive" : "glass"}
                   size="icon"
-                  className={cn("hidden sm:flex w-10 h-10 sm:w-12 sm:h-12 rounded-full relative shrink-0", isRecording && "animate-pulse")}
+                  className={cn("flex w-10 h-10 sm:w-12 sm:h-12 rounded-full relative shrink-0", isRecording && "animate-pulse")}
                   onClick={isRecording ? stopRecording : startRecording}
                   aria-label={isRecording ? t('meetingRoom.stopRecording') : t('meetingRoom.startRecording')}
                 >
@@ -1693,7 +1700,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
 
           {/* Watch course video together — host only (only the host can pick
               and drive the shared video; non-hosts just follow). */}
-          {isHost && (
+          {canHost && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1709,7 +1716,7 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs }: MeetingRo
               <TooltipContent>{t('meetingRoom.watchCourseVideoTogether')}</TooltipContent>
             </Tooltip>
           )}
-          {isHost && (
+          {canHost && (
             <VideoSelectDialog
               open={videoDialogOpen}
               onOpenChange={setVideoDialogOpen}
