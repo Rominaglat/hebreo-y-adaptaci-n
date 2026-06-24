@@ -20,6 +20,11 @@ export interface PeerState {
   // Budget for ICE restarts. Prevents an infinite restart loop when TURN is
   // unreachable (which would otherwise spam offers into webrtc_signals).
   iceRestartAttempts: number;
+  // ICE candidates that arrived before the remote description was set. They
+  // MUST be buffered and applied after setRemoteDescription — adding them early
+  // throws and the candidate is lost, so ICE never completes and the call never
+  // connects. Flushed in the offer/answer handlers.
+  pendingCandidates: RTCIceCandidateInit[];
 }
 
 // Device + initial-state preferences carried over from the pre-join lobby.

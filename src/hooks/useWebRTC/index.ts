@@ -164,6 +164,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
       ignoreOffer: false,
       isSettingRemoteAnswerPending: false,
       iceRestartAttempts: 0,
+      pendingCandidates: [],
     };
 
     // Handle ICE candidates
@@ -336,29 +337,45 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
     }
     
     const pc = peerState.connection;
+    const state = peerState;
+
+    // Apply any ICE candidates that were buffered while we had no remote
+    // description yet (adding them earlier throws and they're lost forever).
+    const flushPending = async () => {
+      const pending = state.pendingCandidates;
+      state.pendingCandidates = [];
+      for (const c of pending) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(c));
+        } catch {
+          /* a stale candidate after a renegotiation — safe to drop */
+        }
+      }
+    };
 
     try {
       switch (signal.signal_type) {
         case 'offer': {
           console.log('[WebRTC] Received offer from:', peerId);
-          
-          const offerCollision = 
-            peerState.makingOffer || 
+
+          const offerCollision =
+            peerState.makingOffer ||
             pc.signalingState !== 'stable';
-          
+
           // Polite peer yields to impolite peer (higher ID is impolite)
           const isPolite = localUserId < peerId;
           peerState.ignoreOffer = !isPolite && offerCollision;
-          
+
           if (peerState.ignoreOffer) {
             console.log('[WebRTC] Ignoring colliding offer from:', peerId);
             return;
           }
 
           await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
+          await flushPending();
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          
+
           console.log('[WebRTC] Sending answer to:', peerId);
           await supabase.from('webrtc_signals').insert([{
             room_id: roomId,
@@ -369,27 +386,33 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
           }]);
           break;
         }
-        
+
         case 'answer': {
           console.log('[WebRTC] Received answer from:', peerId);
-          
+
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(signal.signal_data.sdp));
+            await flushPending();
           } else {
             console.log('[WebRTC] Ignoring answer in wrong state:', pc.signalingState);
           }
           break;
         }
-        
+
         case 'ice-candidate': {
-          if (signal.signal_data.candidate) {
+          const candidate = signal.signal_data.candidate;
+          if (!candidate) break;
+          // Only add once a remote description exists; otherwise buffer it.
+          if (pc.remoteDescription && pc.remoteDescription.type) {
             try {
-              await pc.addIceCandidate(new RTCIceCandidate(signal.signal_data.candidate));
+              await pc.addIceCandidate(new RTCIceCandidate(candidate));
             } catch (err) {
               if (!peerState.ignoreOffer) {
                 console.error('[WebRTC] Failed to add ICE candidate:', err);
               }
             }
+          } else {
+            state.pendingCandidates.push(candidate);
           }
           break;
         }
