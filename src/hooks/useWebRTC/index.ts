@@ -40,6 +40,15 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
   const screenVideoTrackRef = useRef<MediaStreamTrack | null>(null);
   const mixedAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   const mixCtxRef = useRef<AudioContext | null>(null);
+  // Picture-in-picture compositor: while sharing, the outgoing video is a
+  // canvas that draws the screen full-frame with the presenter's camera in the
+  // corner, so viewers still see the presenter's face. These refs hold the
+  // compositor pieces so they can be torn down on stop.
+  const pipCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pipRafRef = useRef<number | null>(null);
+  const pipScreenElRef = useRef<HTMLVideoElement | null>(null);
+  const pipCameraElRef = useRef<HTMLVideoElement | null>(null);
+  const pipStreamRef = useRef<MediaStream | null>(null);
   // Heartbeat timer + window-unload handler — keep refs so cleanup is reliable.
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const unloadHandlerRef = useRef<(() => void) | null>(null);
@@ -411,6 +420,23 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
   const toggleVideo = useCallback(async () => {
     if (!localStreamRef.current) return;
 
+    // During a screen share the video sender carries the PiP composite — so we
+    // must NOT replace senders here (that would swap out the screen). Just flip
+    // the camera track's enabled state; the compositor shows/hides the corner.
+    if (screenStreamRef.current) {
+      const camTracks = localStreamRef.current.getVideoTracks().filter((t) => t.readyState === 'live');
+      if (camTracks.length > 0) {
+        camTracks.forEach((t) => { t.enabled = !t.enabled; });
+        const newVideoOn = camTracks.some((t) => t.enabled);
+        setIsVideoOn(newVideoOn);
+        await supabase.from('room_participants')
+          .update({ is_video_on: newVideoOn, last_seen_at: new Date().toISOString() } as never)
+          .eq('room_id', roomId)
+          .eq('user_id', localUserId);
+      }
+      return;
+    }
+
     const videoTracks = localStreamRef.current.getVideoTracks();
     const allEnded = videoTracks.length === 0 || videoTracks.every(t => t.readyState === 'ended');
 
@@ -483,8 +509,96 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
       );
       if (liveCameraTrack) cameraTrackRef.current = liveCameraTrack;
 
-      const videoTrack = stream.getVideoTracks()[0];
-      screenVideoTrackRef.current = videoTrack;
+      const rawScreenTrack = stream.getVideoTracks()[0];
+
+      // Build a picture-in-picture composite — screen full-frame with the
+      // presenter's camera in the bottom-right corner — so viewers still see
+      // the presenter's face instead of the screen REPLACING their camera.
+      // We send the composite track; falls back to the raw screen on failure.
+      let outgoingVideo: MediaStreamTrack = rawScreenTrack;
+      try {
+        const settings = rawScreenTrack.getSettings();
+        let cw = settings.width ?? 1280;
+        let ch = settings.height ?? 720;
+        const maxW = 1600;
+        if (cw > maxW) { ch = Math.round(ch * (maxW / cw)); cw = maxW; }
+        const canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        const cctx = canvas.getContext('2d')!;
+        pipCanvasRef.current = canvas;
+
+        const screenEl = document.createElement('video');
+        screenEl.muted = true;
+        screenEl.playsInline = true;
+        screenEl.srcObject = stream;
+        screenEl.play().catch(() => {});
+        pipScreenElRef.current = screenEl;
+
+        const camTrack = localStreamRef.current?.getVideoTracks().find((t) => t.readyState !== 'ended') ?? null;
+        let camEl: HTMLVideoElement | null = null;
+        if (camTrack) {
+          camEl = document.createElement('video');
+          camEl.muted = true;
+          camEl.playsInline = true;
+          camEl.srcObject = new MediaStream([camTrack]);
+          camEl.play().catch(() => {});
+          pipCameraElRef.current = camEl;
+        }
+
+        const FRAME_MS = 1000 / 20; // throttle to ~20fps to bound CPU
+        let last = 0;
+        const draw = (now: number) => {
+          pipRafRef.current = requestAnimationFrame(draw);
+          if (now - last < FRAME_MS) return;
+          last = now;
+          cctx.fillStyle = '#000';
+          cctx.fillRect(0, 0, cw, ch);
+          // Screen, letterboxed to preserve aspect ratio.
+          if (screenEl.videoWidth > 0) {
+            const sr = screenEl.videoWidth / screenEl.videoHeight;
+            const cr = cw / ch;
+            let dw = cw, dh = ch, dx = 0, dy = 0;
+            if (sr > cr) { dh = cw / sr; dy = (ch - dh) / 2; }
+            else { dw = ch * sr; dx = (cw - dw) / 2; }
+            cctx.drawImage(screenEl, dx, dy, dw, dh);
+          }
+          // Camera PiP — only while the camera is live AND enabled.
+          if (camEl && camTrack && camTrack.enabled && camTrack.readyState === 'live' && camEl.videoWidth > 0) {
+            const pw = Math.round(cw * 0.2);
+            const ph = Math.round(pw * (camEl.videoHeight / camEl.videoWidth || 0.5625));
+            const margin = Math.round(cw * 0.015);
+            const px = cw - pw - margin;
+            const py = ch - ph - margin;
+            const r = Math.round(pw * 0.06);
+            cctx.save();
+            cctx.beginPath();
+            cctx.roundRect(px, py, pw, ph, r);
+            cctx.fillStyle = '#111';
+            cctx.fill();
+            cctx.clip();
+            cctx.drawImage(camEl, px, py, pw, ph);
+            cctx.restore();
+            cctx.save();
+            cctx.beginPath();
+            cctx.roundRect(px, py, pw, ph, r);
+            cctx.strokeStyle = 'rgba(255,255,255,0.85)';
+            cctx.lineWidth = Math.max(2, Math.round(cw * 0.002));
+            cctx.stroke();
+            cctx.restore();
+          }
+        };
+        pipRafRef.current = requestAnimationFrame(draw);
+
+        const composite = canvas.captureStream(20);
+        pipStreamRef.current = composite;
+        const compositeTrack = composite.getVideoTracks()[0];
+        if (compositeTrack) outgoingVideo = compositeTrack;
+      } catch (err) {
+        console.warn('[WebRTC] PiP composite failed, sending raw screen:', err);
+      }
+
+      screenVideoTrackRef.current = outgoingVideo;
 
       // If the user shared a tab/window WITH audio, mix it with the mic so
       // peers hear both the presenter and the shared content. Each peer only
@@ -517,8 +631,8 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
       peers.current.forEach((peerState) => {
         const pc = peerState.connection;
         const vSender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (vSender) vSender.replaceTrack(videoTrack);
-        else pc.addTrack(videoTrack, stream);
+        if (vSender) vSender.replaceTrack(outgoingVideo);
+        else pc.addTrack(outgoingVideo, stream);
         if (outgoingAudio) {
           const aSender = pc.getSenders().find(s => s.track?.kind === 'audio');
           if (aSender) aSender.replaceTrack(outgoingAudio);
@@ -530,9 +644,9 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
         .eq('room_id', roomId)
         .eq('user_id', localUserId);
 
-      // Browser-driven stop ("Stop sharing" button) ends the track. Route to
-      // the same cleanup as the in-app stop button.
-      videoTrack.onended = () => {
+      // Browser-driven stop ("Stop sharing" button) ends the RAW screen track
+      // (the composite canvas track never "ends"). Route to the same cleanup.
+      rawScreenTrack.onended = () => {
         stopScreenShare();
       };
 
@@ -557,6 +671,19 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
     screenStreamRef.current = null;
     screenVideoTrackRef.current = null;
     setIsScreenSharing(false);
+
+    // Tear down the PiP compositor (canvas render loop + offscreen video els).
+    if (pipRafRef.current != null) {
+      cancelAnimationFrame(pipRafRef.current);
+      pipRafRef.current = null;
+    }
+    if (pipStreamRef.current) {
+      pipStreamRef.current.getTracks().forEach((t) => t.stop());
+      pipStreamRef.current = null;
+    }
+    if (pipScreenElRef.current) { pipScreenElRef.current.srcObject = null; pipScreenElRef.current = null; }
+    if (pipCameraElRef.current) { pipCameraElRef.current.srcObject = null; pipCameraElRef.current = null; }
+    pipCanvasRef.current = null;
 
     // Restore each peer's audio sender to the RAW mic track (we may have
     // swapped it to a mic+screen mix in startScreenShare), then tear down the
@@ -867,7 +994,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
       screenStreamRef.current = null;
       setScreenStream(null);
     }
-    // Tear down the screen-audio mix graph if a share was active.
+    // Tear down the screen-audio mix graph + PiP compositor if a share was active.
     screenVideoTrackRef.current = null;
     if (mixedAudioTrackRef.current) {
       mixedAudioTrackRef.current.stop();
@@ -877,6 +1004,17 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
       mixCtxRef.current.close().catch(() => {});
       mixCtxRef.current = null;
     }
+    if (pipRafRef.current != null) {
+      cancelAnimationFrame(pipRafRef.current);
+      pipRafRef.current = null;
+    }
+    if (pipStreamRef.current) {
+      pipStreamRef.current.getTracks().forEach((t) => t.stop());
+      pipStreamRef.current = null;
+    }
+    if (pipScreenElRef.current) { pipScreenElRef.current.srcObject = null; pipScreenElRef.current = null; }
+    if (pipCameraElRef.current) { pipCameraElRef.current.srcObject = null; pipCameraElRef.current = null; }
+    pipCanvasRef.current = null;
 
     // Close all peer connections
     peers.current.forEach((peerState) => {
