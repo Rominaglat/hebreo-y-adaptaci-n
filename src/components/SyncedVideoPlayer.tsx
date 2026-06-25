@@ -175,6 +175,11 @@ const SyncedVideoPlayer = ({
   const videoStateRef = useRef(videoState);
   useEffect(() => { videoStateRef.current = videoState; }, [videoState]);
 
+  // While we're applying a REMOTE state to the player, suppress the resulting
+  // play/pause/seek events so we don't re-broadcast them back (which made the
+  // two clients fight / ping-pong over control).
+  const applyingRef = useRef(false);
+
   // Drive the embedded player toward a target {playing, currentTime}. Seeks
   // only past a 1.5s drift so it doesn't fight itself; idempotent for the
   // host (already at that state), so no feedback loop.
@@ -182,6 +187,8 @@ const SyncedVideoPlayer = ({
     const player = iframePlayerRef.current;
     const kind = iframeKindRef.current;
     if (!player || !kind) return;
+    applyingRef.current = true;
+    setTimeout(() => { applyingRef.current = false; }, 1200);
     try {
       if (kind === 'youtube') {
         const cur = typeof player.getCurrentTime === 'function' ? player.getCurrentTime() : 0;
@@ -228,6 +235,8 @@ const SyncedVideoPlayer = ({
     iframeKindRef.current = src.type;
 
     const report = (playing: boolean, time: number) => {
+      // Don't echo back events that WE caused by applying a remote state.
+      if (applyingRef.current) return;
       if (canControlRef.current) onReportStateRef.current?.(playing, time);
     };
 

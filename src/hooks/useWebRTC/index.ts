@@ -30,6 +30,14 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
   // rebuild it, so audio/video recover instead of staying frozen.
   const peerJoinedAt = useRef<Map<string, string>>(new Map());
   const channelRef = useRef<RealtimeChannel | null>(null);
+  // Real-time presence — a participant's realtime connection drops the instant
+  // their page unloads (refresh/close), firing a presence 'leave' we act on
+  // immediately. The DB row DELETE on pagehide is best-effort and unreliable,
+  // so without this a refreshed user lingered in everyone's roster (and counted
+  // toward capacity) until the 90s ghost-reap. leftViaPresence remembers who
+  // presence says is gone so the table re-SELECT doesn't resurrect their ghost.
+  const presenceChannelRef = useRef<RealtimeChannel | null>(null);
+  const leftViaPresence = useRef<Set<string>>(new Set());
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const isJoined = useRef(false);
@@ -421,6 +429,63 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
       console.error('[WebRTC] Error handling signal:', err);
     }
   }, [localUserId, roomId, createPeerConnection]);
+
+  // Re-sync the roster + peer connections from the participant table. Called on
+  // any room_participants change AND when presence reports someone (re)joined.
+  // Excludes ghosts (stale heartbeat) and anyone presence says has left.
+  const refreshParticipants = useCallback(async () => {
+    const { data } = await supabase
+      .from('room_participants')
+      .select('*')
+      .eq('room_id', roomId);
+    if (!data) return;
+    const fresh = data.filter(
+      (p) =>
+        !leftViaPresence.current.has(p.user_id) &&
+        (!p.last_seen_at || Date.now() - new Date(p.last_seen_at).getTime() < 90_000),
+    );
+    setParticipants(fresh);
+
+    fresh.forEach((p) => {
+      if (p.user_id === localUserId) return;
+      const existing = peers.current.get(p.user_id);
+      const known = peerJoinedAt.current.get(p.user_id);
+      const rejoined = !!existing && !!known && !!p.joined_at && p.joined_at !== known;
+      if (rejoined) {
+        console.log('[WebRTC] Peer rejoined, rebuilding:', p.user_id);
+        existing.connection.close();
+        peers.current.delete(p.user_id);
+        setRemoteStreams((prev) => {
+          const m = new Map(prev);
+          m.delete(p.user_id);
+          return m;
+        });
+      }
+      if (!peers.current.has(p.user_id)) {
+        peerJoinedAt.current.set(p.user_id, p.joined_at);
+        if (localUserId > p.user_id) {
+          console.log('[WebRTC] New/rejoined participant — connecting:', p.user_id);
+          createPeerConnection(p.user_id);
+        }
+      }
+    });
+
+    peers.current.forEach((_, peerId) => {
+      if (!fresh.find((p) => p.user_id === peerId)) {
+        const peerState = peers.current.get(peerId);
+        if (peerState) {
+          peerState.connection.close();
+          peers.current.delete(peerId);
+          peerJoinedAt.current.delete(peerId);
+          setRemoteStreams((prev) => {
+            const m = new Map(prev);
+            m.delete(peerId);
+            return m;
+          });
+        }
+      }
+    });
+  }, [roomId, localUserId, createPeerConnection]);
 
   // Toggle mute. Includes `last_seen_at` in every status update so we double
   // as a heartbeat — prevents the TTL cron from racing with a status write.
@@ -830,72 +895,52 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
             table: 'room_participants',
             filter: `room_id=eq.${roomId}`,
           },
-          async () => {
-            const { data } = await supabase
-              .from('room_participants')
-              .select('*')
-              .eq('room_id', roomId);
-
-            if (!data) return;
-            // Ignore "ghost" rows — participants whose heartbeat is stale
-            // (left without cleanup). Live users heartbeat every 30s, so a 90s
-            // window never drops them; ghosts are excluded from the roster AND
-            // from peer-connection attempts (we don't try to connect to the dead).
-            const data2 = data.filter(
-              (p) => !p.last_seen_at || Date.now() - new Date(p.last_seen_at).getTime() < 90_000,
-            );
-            setParticipants(data2);
-
-            data2.forEach((p) => {
-              if (p.user_id === localUserId) return;
-              const existing = peers.current.get(p.user_id);
-              const known = peerJoinedAt.current.get(p.user_id);
-              const rejoined = !!existing && !!known && !!p.joined_at && p.joined_at !== known;
-
-              if (rejoined) {
-                // Peer left and came back (e.g. refreshed) — drop the stale
-                // connection so we rebuild a fresh one below.
-                console.log('[WebRTC] Peer rejoined, rebuilding:', p.user_id);
-                existing.connection.close();
-                peers.current.delete(p.user_id);
-                setRemoteStreams((prev) => {
-                  const newMap = new Map(prev);
-                  newMap.delete(p.user_id);
-                  return newMap;
-                });
-              }
-
-              if (!peers.current.has(p.user_id)) {
-                peerJoinedAt.current.set(p.user_id, p.joined_at);
-                // Higher id initiates; the other side waits for our offer.
-                if (localUserId > p.user_id) {
-                  console.log('[WebRTC] New/rejoined participant — connecting:', p.user_id);
-                  createPeerConnection(p.user_id);
-                }
-              }
-            });
-
-            peers.current.forEach((_, peerId) => {
-              if (!data2.find((p) => p.user_id === peerId)) {
-                console.log('[WebRTC] Participant left:', peerId);
-                const peerState = peers.current.get(peerId);
-                if (peerState) {
-                  peerState.connection.close();
-                  peers.current.delete(peerId);
-                  peerJoinedAt.current.delete(peerId);
-                  setRemoteStreams((prev) => {
-                    const newMap = new Map(prev);
-                    newMap.delete(peerId);
-                    return newMap;
-                  });
-                }
-              }
-            });
+          () => {
+            refreshParticipants();
           },
         )
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') resolve();
         });
+    });
+
+    // 1b) Presence channel — instant leave/join detection independent of the
+    //     (best-effort) table DELETE on page unload.
+    await new Promise<void>((resolve) => {
+      const pch = supabase.channel(`room-presence-${roomId}`, {
+        config: { presence: { key: localUserId } },
+      });
+      pch
+        .on('presence', { event: 'leave' }, ({ key }) => {
+          if (key === localUserId) return;
+          // Remember they're gone so a table re-SELECT won't resurrect them,
+          // and remove them from the roster + tear down their peer right now.
+          leftViaPresence.current.add(key);
+          setParticipants((prev) => prev.filter((p) => p.user_id !== key));
+          const peer = peers.current.get(key);
+          if (peer) {
+            peer.connection.close();
+            peers.current.delete(key);
+            peerJoinedAt.current.delete(key);
+          }
+          setRemoteStreams((prev) => {
+            const m = new Map(prev);
+            m.delete(key);
+            return m;
+          });
+        })
+        .on('presence', { event: 'join' }, ({ key }) => {
+          if (key === localUserId) return;
+          leftViaPresence.current.delete(key);
+          refreshParticipants();
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            pch.track({ userId: localUserId });
+            resolve();
+          }
+        });
+      presenceChannelRef.current = pch;
     });
 
     // 2) Now safe to register ourselves in the room. DELETE any stale row for
@@ -1028,7 +1073,7 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
     window.addEventListener('pagehide', unload);
 
     console.log('[WebRTC] Room joined successfully');
-  }, [roomId, localUserId, localUserName, devicePrefs, initLocalStream, createPeerConnection, handleSignal]);
+  }, [roomId, localUserId, localUserName, devicePrefs, initLocalStream, createPeerConnection, handleSignal, refreshParticipants]);
 
   // Leave room
   const leaveRoom = useCallback(async () => {
@@ -1089,11 +1134,16 @@ export const useWebRTC = ({ roomId, localUserId, localUserName, devicePrefs }: U
     });
     peers.current.clear();
     peerJoinedAt.current.clear();
+    leftViaPresence.current.clear();
 
-    // Unsubscribe from channel
+    // Unsubscribe from channels
     if (channelRef.current) {
       await supabase.removeChannel(channelRef.current);
       channelRef.current = null;
+    }
+    if (presenceChannelRef.current) {
+      await supabase.removeChannel(presenceChannelRef.current);
+      presenceChannelRef.current = null;
     }
 
     // Remove from database

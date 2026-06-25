@@ -111,9 +111,14 @@ export const useSyncedVideo = ({ roomId, userId, userName, isHost }: UseSyncedVi
               updatedBy: rawState.updatedBy as string | null,
             };
             
-            // Only apply if it's from someone else and newer
+            // Apply any state change from someone else. (We must NOT gate on a
+            // timestamp comparison: `updatedAt` is the OTHER client's wall clock
+            // while lastSyncTime was this client's Date.now() — clock skew
+            // between the two browsers then silently dropped updates in one
+            // direction, e.g. user->host wouldn't sync. The drift threshold +
+            // updatedBy check below prevent loops.)
             const stateTime = state.updatedAt ? new Date(state.updatedAt).getTime() : 0;
-            if (state.updatedBy !== userId && stateTime > lastSyncTimeRef.current) {
+            if (state.updatedBy !== userId) {
               lastSyncTimeRef.current = stateTime;
               setVideoState(state);
               setLastSyncTime(stateTime);

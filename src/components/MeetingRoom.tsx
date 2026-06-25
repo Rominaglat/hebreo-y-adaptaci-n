@@ -240,6 +240,9 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs, isAdmin = f
   // "Speaker" layout keeps a stable large tile through the natural gaps
   // between utterances (Google Meet keeps the last speaker on stage).
   const [activeSpeakerSpotlight, setActiveSpeakerSpotlight] = useState<string | null>(null);
+  // Which remote screen-share this viewer has chosen to spotlight (when several
+  // people share at once). null = follow the first.
+  const [selectedScreenSharerId, setSelectedScreenSharerId] = useState<string | null>(null);
 
   // Audio output (speaker) selection — applied to remote tiles via setSinkId.
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
@@ -940,7 +943,33 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs, isAdmin = f
     toast({ title: t('meetingRoom.nameUpdatedTitle') });
   };
 
-  const screenSharer = participants.find(p => p.is_screen_sharing && p.user_id !== userId);
+  // All remote participants currently sharing their screen. When more than one
+  // shares at once, each viewer independently picks which to spotlight.
+  const screenSharers = participants.filter(p => p.is_screen_sharing && p.user_id !== userId);
+  const screenSharer =
+    screenSharers.find(s => s.user_id === selectedScreenSharerId) ?? screenSharers[0];
+
+  // Selector chips (only when 2+ remote screens are shared).
+  const screenShareSelector = screenSharers.length > 1 ? (
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex flex-wrap justify-center gap-1.5 glass rounded-full px-2 py-1 max-w-[90%]">
+      {screenSharers.map((s) => (
+        <button
+          key={s.user_id}
+          onClick={() => setSelectedScreenSharerId(s.user_id)}
+          className={cn(
+            "px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 transition-colors",
+            screenSharer?.user_id === s.user_id
+              ? "bg-primary text-primary-foreground"
+              : "text-foreground hover:bg-secondary/70",
+          )}
+          title={s.user_name}
+        >
+          <Monitor className="w-3 h-3 shrink-0" />
+          <span className="truncate max-w-[120px]">{s.user_name?.split(' ')[0] || t('meetingRoom.participant')}</span>
+        </button>
+      ))}
+    </div>
+  ) : null;
 
   // What counts as "primary content" — content that should dominate the
   // layout. When primary content is active AND viewMode is "speaker", we
@@ -1066,15 +1095,18 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs, isAdmin = f
                   />
                 )}
                 {primaryKind === "remote-screen" && screenSharer && (
-                  <VideoTile
-                    stream={remoteStreams.get(screenSharer.user_id) || null}
-                    name={`${screenSharer.user_name || t('meetingRoom.participant')} — ${t('meetingRoom.screenShareLabel')}`}
-                    isMuted={screenSharer.is_muted || false}
-                    isVideoOn={true}
-                    isScreenSharing={true}
-                    isLarge={true}
-                    outputDeviceId={outputDeviceId}
-                  />
+                  <>
+                    <VideoTile
+                      stream={remoteStreams.get(screenSharer.user_id) || null}
+                      name={`${screenSharer.user_name || t('meetingRoom.participant')} — ${t('meetingRoom.screenShareLabel')}`}
+                      isMuted={screenSharer.is_muted || false}
+                      isVideoOn={true}
+                      isScreenSharing={true}
+                      isLarge={true}
+                      outputDeviceId={outputDeviceId}
+                    />
+                    {screenShareSelector}
+                  </>
                 )}
                 {/* Pinned / active-speaker participant spotlight (no screen
                     share or shared video active). Click the big tile to unpin
@@ -1215,15 +1247,18 @@ const MeetingRoom = ({ room, onLeave, userId, userName, devicePrefs, isAdmin = f
                   />
                 )}
                 {primaryKind === "remote-screen" && screenSharer && (
-                  <VideoTile
-                    stream={remoteStreams.get(screenSharer.user_id) || null}
-                    name={`${screenSharer.user_name || t('meetingRoom.participant')} — ${t('meetingRoom.screenShareLabel')}`}
-                    isMuted={screenSharer.is_muted || false}
-                    isVideoOn={true}
-                    isScreenSharing={true}
-                    isLarge={true}
-                    outputDeviceId={outputDeviceId}
-                  />
+                  <>
+                    <VideoTile
+                      stream={remoteStreams.get(screenSharer.user_id) || null}
+                      name={`${screenSharer.user_name || t('meetingRoom.participant')} — ${t('meetingRoom.screenShareLabel')}`}
+                      isMuted={screenSharer.is_muted || false}
+                      isVideoOn={true}
+                      isScreenSharing={true}
+                      isLarge={true}
+                      outputDeviceId={outputDeviceId}
+                    />
+                    {screenShareSelector}
+                  </>
                 )}
 
                 <VideoTile
