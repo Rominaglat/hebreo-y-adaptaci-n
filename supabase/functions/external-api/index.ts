@@ -295,87 +295,154 @@ serve(async (req) => {
           return await sendResponse(errorResponse('Password must be at least 6 characters', 'VALIDATION_ERROR'), 'Password too short');
         }
 
-        const fullName = data.full_name || data.name || data.email;
-
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-          email: data.email,
-          password: data.password,
-          email_confirm: true,
-          user_metadata: { full_name: fullName }
-        });
-
-        if (authError) {
-          if (authError.message.includes('already')) {
-            return await sendResponse(errorResponse('User with this email already exists', 'CONFLICT'), 'User already exists');
-          }
-          throw authError;
-        }
-
-        const userId = authData.user.id;
-
-        // Upsert profile — admin.createUser does NOT reliably fire the
-        // public.profiles trigger, so a plain .update() leaves no row
-        // and the user vanishes from Manage Users (which reads from
-        // profiles). Upsert guarantees the row exists either way.
-        const { error: profileError } = await supabase.from('profiles').upsert({
-          id: userId,
-          email: data.email,
-          full_name: fullName,
-          phone: data.phone || null,
-        });
-        if (profileError) {
-          console.error('[API users.create] profile upsert failed:', profileError);
-        }
-
-        // Grant the requested role (default student). 'lead' was missing
-        // from the whitelist — adding it so the API can mint preview/
-        // sales accounts directly.
-        const allowedRoles = ['admin', 'instructor', 'student', 'lead'];
-        const resolvedRole = data.role && allowedRoles.includes(data.role) ? data.role : 'student';
-        await supabase.from('user_roles').delete().eq('user_id', userId);
-        await supabase.from('user_roles').insert({ user_id: userId, role: resolvedRole });
-
-        // Handle course enrollments
-        if (data.courses) {
-          let courseIds: string[] = [];
-
-          if (data.courses === 'all') {
-            const { data: allCourses } = await supabase
-              .from('courses')
-              .select('id')
-              .eq('is_published', true);
-            courseIds = allCourses?.map(c => c.id) || [];
-          } else if (Array.isArray(data.courses)) {
-            courseIds = data.courses;
-          }
-
-          if (courseIds.length > 0) {
-            const enrollments = courseIds.map(courseId => ({
-              user_id: userId,
-              course_id: courseId,
-              progress_percentage: 0,
-            }));
-            await supabase.from('enrollments').insert(enrollments);
-          }
-        }
-
-        // Optional time-limited access. `access_hours` (number, in hours):
-        //   * absent or 0 → unlimited (no limit row).
-        //   * > 0 → access expires that many hours from now, after which a
-        //     server-side sweep deletes the user's enrollments and downgrades
-        //     them to 'lead' (see migration 20260623120000_access_time_limit).
-        // Only applied to student/lead accounts — privileged roles are never
-        // time-limited.
-        let accessExpiresAt: string | null = null;
+        // Validate access_hours up front so we never half-apply then reject.
+        // null = not provided in the request.
+        let accessHours: number | null = null;
         if (data.access_hours !== undefined && data.access_hours !== null && data.access_hours !== '') {
-          const accessHours = Number(data.access_hours);
+          accessHours = Number(data.access_hours);
           if (!Number.isFinite(accessHours) || accessHours < 0) {
             return await sendResponse(
               errorResponse('access_hours must be a non-negative number', 'VALIDATION_ERROR'),
               'Invalid access_hours',
             );
           }
-          if (accessHours > 0 && (resolvedRole === 'student' || resolvedRole === 'lead')) {
+        }
+
+        const email = String(data.email).trim().toLowerCase();
+        const fullName = data.full_name || data.name || email;
+        const allowedRoles = ['admin', 'instructor', 'student', 'lead'];
+        const resolvedRole = data.role && allowedRoles.includes(data.role) ? data.role : 'student';
+
+        // Create — but if the email already exists, fall back to UPDATE instead
+        // of failing with 409. The payment automation re-sends a lead who paid;
+        // we overwrite their role, content access, personal details and time
+        // limit (desired-state), leaving the password and (for staff) the
+        // role/limit untouched.
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+          email,
+          password: data.password,
+          email_confirm: true,
+          user_metadata: { full_name: fullName },
+        });
+
+        let userId: string;
+        let isUpdate = false;
+        if (authError) {
+          // Detect "email already registered" robustly — don't depend on one
+          // English phrasing. GoTrue uses status 422 / code 'email_exists' and
+          // various messages ("already registered", "already been registered").
+          const msg = (authError.message || '').toLowerCase();
+          const isDuplicate =
+            msg.includes('already') || msg.includes('registered') || msg.includes('exists') ||
+            (authError as { status?: number }).status === 422 ||
+            (authError as { code?: string }).code === 'email_exists';
+          if (!isDuplicate) {
+            throw authError;
+          }
+          // Existing user → look them up by email to recover their id.
+          isUpdate = true;
+          const lookupRes = await fetch(
+            `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}&page=1&per_page=1`,
+            { headers: { Authorization: `Bearer ${supabaseServiceKey}`, apikey: supabaseServiceKey } },
+          );
+          const lookupData = await lookupRes.json();
+          const existing = lookupData?.users?.[0];
+          if (!existing?.id) {
+            return await sendResponse(
+              errorResponse('User already exists but could not be located for update', 'CONFLICT', 409),
+              'Existing user lookup failed',
+            );
+          }
+          userId = existing.id;
+        } else {
+          userId = authData.user.id;
+        }
+
+        // Never let the API demote or time-limit a staff account that already
+        // exists. Staff still get their profile + enrollments updated.
+        let isPrivileged = false;
+        if (isUpdate) {
+          const { data: existingRoles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', userId);
+          isPrivileged = (existingRoles || []).some(
+            (r) => r.role === 'admin' || r.role === 'super_admin' || r.role === 'instructor',
+          );
+        }
+
+        // 1) Personal details — overwrite (both paths). Upsert because
+        // admin.createUser does NOT reliably fire the public.profiles trigger.
+        const { error: profileError } = await supabase.from('profiles').upsert({
+          id: userId,
+          email,
+          full_name: fullName,
+          phone: data.phone || null,
+        });
+        if (profileError) {
+          console.error(`[API users.create] profile upsert failed (${isUpdate ? 'update' : 'create'}):`, profileError);
+        }
+
+        // 2) Role — overwrite to the requested role (default student), unless
+        // the existing account is staff (guard: a webhook must not demote an admin).
+        if (!isPrivileged) {
+          const { error: roleDelErr } = await supabase.from('user_roles').delete().eq('user_id', userId);
+          if (roleDelErr) console.error('[API users.create] user_roles delete failed:', roleDelErr);
+          const { error: roleInsErr } = await supabase.from('user_roles').insert({ user_id: userId, role: resolvedRole });
+          if (roleInsErr) console.error('[API users.create] user_roles insert failed:', roleInsErr);
+        }
+
+        // 3) Content access — when `courses` is a valid spec (an array of ids
+        // or 'all'), REPLACE the user's enrollments with exactly that set
+        // (drop existing, then insert). Anything else (absent/null/'' /invalid)
+        // → leave enrollments untouched, so we never wipe access by accident.
+        // courseIds === null means "skip the replace entirely".
+        if (data.courses === 'all' || Array.isArray(data.courses)) {
+          let courseIds: string[] | null = null;
+          if (data.courses === 'all') {
+            const { data: allCourses } = await supabase
+              .from('courses')
+              .select('id')
+              .eq('is_published', true);
+            courseIds = allCourses?.map(c => c.id) || [];
+          } else {
+            // Validate caller-supplied ids against real courses (deduped) so a
+            // bad id can't FK-fail the insert AFTER we've deleted the old rows.
+            const requested = [...new Set((data.courses as unknown[]).filter(Boolean).map(String))];
+            if (requested.length === 0) {
+              courseIds = []; // explicit empty array → remove all access
+            } else {
+              const { data: validCourses } = await supabase.from('courses').select('id').in('id', requested);
+              const validIds = validCourses?.map(c => c.id) || [];
+              if (validIds.length === 0) {
+                // Non-empty request but no id resolved → don't wipe; flag it.
+                console.warn('[API users.create] courses had no valid ids — leaving enrollments unchanged');
+              } else {
+                courseIds = validIds;
+              }
+            }
+          }
+
+          if (courseIds !== null) {
+            const { error: delEnrollErr } = await supabase.from('enrollments').delete().eq('user_id', userId);
+            if (delEnrollErr) console.error('[API users.create] enrollments delete failed:', delEnrollErr);
+            if (courseIds.length > 0) {
+              const { error: insEnrollErr } = await supabase.from('enrollments').insert(
+                courseIds.map((courseId) => ({ user_id: userId, course_id: courseId, progress_percentage: 0 })),
+              );
+              if (insEnrollErr) console.error('[API users.create] enrollments insert failed:', insEnrollErr);
+            }
+          }
+        }
+
+        // 4) Time limit — desired-state, only for non-staff student/lead:
+        //   * access_hours > 0 → set/replace the limit (source 'api').
+        //   * absent or 0      → CLEAR any existing limit (full access).
+        // When it expires, a server-side sweep deletes the user's enrollments
+        // and downgrades them to 'lead' (migration 20260623120000).
+        let accessExpiresAt: string | null = null;
+        if (!isPrivileged) {
+          if (accessHours !== null && accessHours > 0 && (resolvedRole === 'student' || resolvedRole === 'lead')) {
             accessExpiresAt = new Date(Date.now() + accessHours * 3600_000).toISOString();
             const { error: limitError } = await supabase.from('access_limits').upsert({
               user_id: userId,
@@ -388,51 +455,65 @@ serve(async (req) => {
             if (limitError) {
               console.error('[API users.create] access_limits upsert failed:', limitError);
             }
+          } else {
+            // No (or zero) hours → ensure no limit. No-op for a brand-new user.
+            const { error: clearError } = await supabase.from('access_limits').delete().eq('user_id', userId);
+            if (clearError) {
+              console.error('[API users.create] access_limits clear failed:', clearError);
+            }
           }
         }
 
-        // Fire the invite email (best-effort — never fail the create on
-        // mail dispatch). admin-user-actions' dashboard path does the
-        // same. We send X-Internal-Secret because the external-api
-        // caller doesn't have a user JWT, and send-invite-email is
-        // normally JWT-gated to admin/instructor.
-        const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
-        if (internalSecret) {
-          try {
-            const inviteResp = await fetch(`${supabaseUrl}/functions/v1/send-invite-email`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-internal-secret': internalSecret,
-              },
-              body: JSON.stringify({
-                email: data.email,
-                fullName,
-                tempPassword: data.password,
-              }),
-            });
-            if (!inviteResp.ok) {
-              console.warn(
-                `[API users.create] invite email dispatch returned ${inviteResp.status} for ${hashApiKey(data.email)} — user is created, admin can resend manually`,
-              );
+        // Fire the invite email for BRAND-NEW accounts only (existing users
+        // already have an account and we didn't touch their password).
+        // Best-effort — never fail on mail dispatch. We send X-Internal-Secret
+        // because the external-api caller has no user JWT and send-invite-email
+        // is normally JWT-gated to admin/instructor.
+        if (!isUpdate) {
+          const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+          if (internalSecret) {
+            try {
+              const inviteResp = await fetch(`${supabaseUrl}/functions/v1/send-invite-email`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-internal-secret': internalSecret,
+                },
+                body: JSON.stringify({
+                  email,
+                  fullName,
+                  tempPassword: data.password,
+                }),
+              });
+              if (!inviteResp.ok) {
+                console.warn(
+                  `[API users.create] invite email dispatch returned ${inviteResp.status} for ${hashApiKey(email)} — user is created, admin can resend manually`,
+                );
+              }
+            } catch (e) {
+              console.warn('[API users.create] invite email dispatch error:', e);
             }
-          } catch (e) {
-            console.warn('[API users.create] invite email dispatch error:', e);
+          } else {
+            console.warn('[API users.create] INTERNAL_FUNCTION_SECRET not configured — no invite email sent');
           }
-        } else {
-          console.warn('[API users.create] INTERNAL_FUNCTION_SECRET not configured — no invite email sent');
         }
 
         return await sendResponse(jsonResponse({
           user: {
             id: userId,
-            email: authData.user.email,
+            email,
             full_name: fullName,
             phone: data.phone || null,
-            role: resolvedRole,
+            role: isPrivileged ? undefined : resolvedRole,
             access_expires_at: accessExpiresAt,
           },
-          message: 'User created successfully',
+          updated: isUpdate,
+          staff_protected: isPrivileged,
+          message: isUpdate
+            ? (isPrivileged
+                ? 'User already existed (staff) — details and enrollments updated; role and time limit left unchanged'
+                : 'User already existed — updated')
+            : 'User created successfully',
         }));
       }
 
