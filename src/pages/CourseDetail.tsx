@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { BookOpen, Play, Pause, CheckCircle, Clock, Download, ChevronDown, ChevronRight, ArrowRight, ArrowLeft, StickyNote, FileText, ClipboardList, Lock, FileInput, File, ExternalLink, Calendar, Star, EyeOff, Info } from 'lucide-react';
 import { format } from 'date-fns';
@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Label } from '@/components/ui/label';
 import { NewBadge } from '@/components/NewBadge';
 import { useLessonBookmarks } from '@/hooks/useLessonBookmarks';
+import { getFilePreviewKind } from '@/lib/filePreview';
 
 interface Course {
   id: string;
@@ -81,6 +82,96 @@ interface Note {
   video_timestamp: number | null;
   created_at: string;
 }
+// Renders a lesson's attached file. PDFs/images render natively in the
+// browser (reliable, unlike the old Google Docs Viewer embed which often
+// showed a blank frame); office docs go through Office Online; everything
+// else falls back to download. A loading skeleton and an always-visible
+// "open / download" row guarantee the student is never trapped on a blank
+// page even if the inline preview fails.
+function LessonFilePreview({ fileUrl, title }: { fileUrl: string; title: string }) {
+  const { t } = useLanguage();
+  const [loading, setLoading] = useState(true);
+  const kind = useMemo(() => getFilePreviewKind(fileUrl), [fileUrl]);
+
+  // Reset the spinner whenever the file changes (switching lessons).
+  useEffect(() => {
+    setLoading(kind !== 'other');
+  }, [fileUrl, kind]);
+
+  const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="space-y-4">
+          <div className="relative w-full h-[600px] rounded-lg border bg-white overflow-hidden">
+            {loading && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white text-muted-foreground">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                <span className="text-sm">{t('courseDetail.fileLoading')}</span>
+              </div>
+            )}
+            {kind === 'image' ? (
+              <img
+                src={fileUrl}
+                alt={title}
+                className="w-full h-full object-contain"
+                onLoad={() => setLoading(false)}
+                onError={() => setLoading(false)}
+              />
+            ) : kind === 'office' ? (
+              <iframe
+                key={`office-${fileUrl}`}
+                src={officeSrc}
+                title={title}
+                className="w-full h-full"
+                onLoad={() => setLoading(false)}
+              />
+            ) : kind === 'pdf' ? (
+              // Native browser PDF rendering — the file is served as
+              // application/pdf with permissive CORS, so no external viewer
+              // is needed.
+              <iframe
+                key={`pdf-${fileUrl}`}
+                src={`${fileUrl}#view=FitH`}
+                title={title}
+                className="w-full h-full"
+                onLoad={() => setLoading(false)}
+              />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground p-6 text-center">
+                <File className="w-12 h-12 opacity-50" />
+                <p className="text-sm">{t('courseDetail.fileLoadHelp')}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Always-visible escape hatch so a blank/blocked inline preview
+              never traps the student. */}
+          {kind !== 'other' && (
+            <p className="text-xs text-muted-foreground text-center">{t('courseDetail.fileLoadHelp')}</p>
+          )}
+
+          <div className="flex gap-2">
+            <Button variant="outline" asChild className="flex-1">
+              <a href={fileUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="w-4 h-4 ml-2" />
+                {t('courseDetail.openInNewTab')}
+              </a>
+            </Button>
+            <Button variant="outline" asChild className="flex-1">
+              <a href={fileUrl} download>
+                <Download className="w-4 h-4 ml-2" />
+                {t('courseDetail.downloadFile')}
+              </a>
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CourseDetail() {
   const {
     id
@@ -123,6 +214,10 @@ export default function CourseDetail() {
     return stored === null ? true : stored === 'true';
   });
   const [shouldAutoplay, setShouldAutoplay] = useState(false);
+  // File lessons we've already auto-completed (or whose completion the user
+  // manually toggled) this session — prevents the auto-complete-on-open
+  // effect from re-completing a lesson the student deliberately un-marked.
+  const autoCompletedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     localStorage.setItem('lessonAutoAdvance', String(autoAdvanceEnabled));
@@ -417,21 +512,91 @@ export default function CourseDetail() {
       fetchNotes(selectedLesson.id);
     }
   }, [selectedLesson]);
+
+  // Auto-complete file lessons when opened so the next lesson unlocks
+  // without a manual click. Video lessons already auto-complete on end and
+  // exams on submit; file lessons had no equivalent, which left students on
+  // a viewer with no signal that they must mark it complete to proceed.
+  useEffect(() => {
+    if (!user || !selectedLesson) return;
+    if (selectedLesson.lesson_type !== 'file') return;
+    if (selectedLesson.is_completed) return;
+    if (autoCompletedRef.current.has(selectedLesson.id)) return;
+    // Never auto-complete a lesson the sequential gate still considers locked.
+    if (!isAdminOrInstructor && lockedLessonIds.has(selectedLesson.id)) return;
+    const lessonId = selectedLesson.id;
+    autoCompletedRef.current.add(lessonId);
+    void recordCompletion(lessonId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLesson, user, isAdminOrInstructor, lockedLessonIds]);
+
+  // Persists a lesson completion, verifying the write actually landed. The
+  // insert is gated server-side by RLS (is_lesson_unlocked); without this
+  // check a blocked/failed write would silently leave the next lesson locked
+  // while the UI still claimed "completed". On success it optimistically
+  // flips local state so the following lesson unlocks immediately.
+  const recordCompletion = async (lessonId: string): Promise<boolean> => {
+    if (!user) return false;
+    // Upsert (ignore duplicates) so a re-completion race against the
+    // UNIQUE(user_id, lesson_id) constraint is a no-op rather than an error;
+    // a genuine failure (e.g. RLS blocking a locked lesson) still surfaces.
+    const { error } = await supabase.from('lesson_completions').upsert(
+      { user_id: user.id, lesson_id: lessonId },
+      { onConflict: 'user_id,lesson_id', ignoreDuplicates: true },
+    );
+    if (error) {
+      console.error('Error recording lesson completion:', error);
+      return false;
+    }
+    autoCompletedRef.current.add(lessonId);
+    const totalLessons = modules.reduce((acc, m) => acc + m.lessons.length, 0);
+    const otherCompletedCount = modules.reduce(
+      (acc, m) => acc + m.lessons.filter(l => l.is_completed && l.id !== lessonId).length,
+      0,
+    );
+    const newProgress = totalLessons > 0 ? Math.round(((otherCompletedCount + 1) / totalLessons) * 100) : 0;
+    setModules(prev => prev.map(m => ({
+      ...m,
+      lessons: m.lessons.map(l => l.id === lessonId ? { ...l, is_completed: true } : l),
+    })));
+    setSelectedLesson(prev => prev && prev.id === lessonId ? { ...prev, is_completed: true } : prev);
+    setProgress(newProgress);
+    const { error: enrollErr } = await supabase.from('enrollments').update({
+      progress_percentage: newProgress,
+    }).eq('user_id', user.id).eq('course_id', id);
+    if (enrollErr) console.error('Error updating enrollment progress:', enrollErr);
+    return true;
+  };
+
   const handleMarkComplete = async () => {
     if (!user || !selectedLesson) return;
-    
+
     const wasCompleted = selectedLesson.is_completed;
-    
+
     try {
       if (wasCompleted) {
-        await supabase.from('lesson_completions').delete().eq('user_id', user.id).eq('lesson_id', selectedLesson.id);
+        const { error } = await supabase.from('lesson_completions').delete().eq('user_id', user.id).eq('lesson_id', selectedLesson.id);
+        if (error) {
+          console.error('Error unmarking lesson:', error);
+          toast({ title: t('courseDetail.completionError'), variant: 'destructive' });
+          return;
+        }
+        // Keep the lesson in the auto-complete guard so a deliberate unmark
+        // isn't undone by the file auto-complete-on-open effect.
+        autoCompletedRef.current.add(selectedLesson.id);
       } else {
-        await supabase.from('lesson_completions').insert({
-          user_id: user.id,
-          lesson_id: selectedLesson.id
-        });
+        const { error } = await supabase.from('lesson_completions').upsert(
+          { user_id: user.id, lesson_id: selectedLesson.id },
+          { onConflict: 'user_id,lesson_id', ignoreDuplicates: true },
+        );
+        if (error) {
+          console.error('Error marking lesson complete:', error);
+          toast({ title: t('courseDetail.completionError'), variant: 'destructive' });
+          return;
+        }
+        autoCompletedRef.current.add(selectedLesson.id);
       }
-      
+
       // Calculate the new progress based on current state
       const totalLessons = modules.reduce((acc, m) => acc + m.lessons.length, 0);
       
@@ -733,31 +898,9 @@ export default function CourseDetail() {
                   </div>}
 
                 {/* File Preview - for file lessons */}
-                {selectedLesson.lesson_type === 'file' && selectedLesson.file_url && <Card>
-                    <CardContent className="p-6">
-                      <div className="space-y-4">
-                        <iframe 
-                          key={`file-viewer-${selectedLesson.id}`}
-                          src={`https://docs.google.com/viewer?url=${encodeURIComponent(selectedLesson.file_url)}&embedded=true&timestamp=${selectedLesson.id}`} 
-                          className="w-full h-[600px] rounded-lg border bg-white" 
-                          title={selectedLesson.title} 
-                        />
-                        <div className="flex gap-2">
-                          <Button variant="outline" asChild className="flex-1">
-                            <a href={selectedLesson.file_url} target="_blank" rel="noopener noreferrer">
-                              {t('courseDetail.openInNewTab')}
-                            </a>
-                          </Button>
-                          <Button variant="outline" asChild className="flex-1">
-                            <a href={selectedLesson.file_url} download>
-                              <Download className="w-4 h-4 ml-2" />
-                              {t('courseDetail.downloadFile')}
-                            </a>
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>}
+                {selectedLesson.lesson_type === 'file' && selectedLesson.file_url && (
+                  <LessonFilePreview fileUrl={selectedLesson.file_url} title={selectedLesson.title} />
+                )}
 
                 {/* Exam - for exam lessons */}
                 {selectedLesson.lesson_type === 'exam' && selectedLesson.exam_id && <ExamTaker examId={selectedLesson.exam_id} onComplete={() => {
