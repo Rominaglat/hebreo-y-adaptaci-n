@@ -340,13 +340,25 @@ serve(async (req) => {
             throw authError;
           }
           // Existing user → look them up by email to recover their id.
+          // CRITICAL: GoTrue's `?email=` admin filter is unreliable — it
+          // returns the first user of the UNFILTERED list, not the match.
+          // Taking users[0] here would recover onto a DIFFERENT account and
+          // then overwrite its profile/role/enrollments below, silently
+          // hijacking another user. Page through and require an exact,
+          // case-insensitive email match; abort if none is found.
           isUpdate = true;
-          const lookupRes = await fetch(
-            `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}&page=1&per_page=1`,
-            { headers: { Authorization: `Bearer ${supabaseServiceKey}`, apikey: supabaseServiceKey } },
-          );
-          const lookupData = await lookupRes.json();
-          const existing = lookupData?.users?.[0];
+          const wanted = email.toLowerCase();
+          let existing: { id: string; email?: string } | undefined;
+          for (let page = 1; page <= 20 && !existing; page++) {
+            const lookupRes = await fetch(
+              `${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=200`,
+              { headers: { Authorization: `Bearer ${supabaseServiceKey}`, apikey: supabaseServiceKey } },
+            );
+            const lookupData = await lookupRes.json();
+            const users: Array<{ id: string; email?: string }> = Array.isArray(lookupData?.users) ? lookupData.users : [];
+            if (users.length === 0) break;
+            existing = users.find((u) => (u?.email ?? '').toLowerCase() === wanted);
+          }
           if (!existing?.id) {
             return await sendResponse(
               errorResponse('User already exists but could not be located for update', 'CONFLICT', 409),
