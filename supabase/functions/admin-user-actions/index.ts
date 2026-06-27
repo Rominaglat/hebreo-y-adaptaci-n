@@ -421,21 +421,38 @@ serve(async (req) => {
           if (alreadyExists) {
             console.log(`createUser failed (user exists in auth): ${createError.message}. Looking up by email...`);
             try {
-              const authRes = await fetch(
-                `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}&page=1&per_page=1`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${supabaseServiceKey}`,
-                    apikey: supabaseServiceKey,
-                  },
-                }
-              );
-              const authData = await authRes.json();
-              const foundUser = authData?.users?.[0];
+              // CRITICAL: GoTrue's `?email=` admin filter is unreliable — it
+              // frequently ignores the filter and returns the first user of
+              // the unfiltered list. Taking users[0] blindly here meant we
+              // could "recover" onto a COMPLETELY DIFFERENT account, then
+              // overwrite its profile email/name (finalizeUser upserts the
+              // requested email) and mis-assign its role + enrollments. That
+              // corrupted real accounts (e.g. another student's login got
+              // relabelled with this email). So we page through and require an
+              // EXACT, case-insensitive email match; if none is found we abort
+              // rather than touch the wrong account.
+              const wanted = email.toLowerCase();
+              let foundUser: { id: string; email?: string } | null = null;
+              for (let page = 1; page <= 20 && !foundUser; page++) {
+                const authRes = await fetch(
+                  `${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=200`,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${supabaseServiceKey}`,
+                      apikey: supabaseServiceKey,
+                    },
+                  }
+                );
+                const authData = await authRes.json();
+                const users: Array<{ id: string; email?: string }> = Array.isArray(authData?.users) ? authData.users : [];
+                if (users.length === 0) break;
+                foundUser = users.find((u) => (u?.email ?? "").toLowerCase() === wanted) ?? null;
+              }
               if (foundUser?.id) {
-                console.log(`Found orphaned auth user ${foundUser.id}, recovering...`);
+                console.log(`Found existing auth user ${foundUser.id} with matching email, recovering...`);
                 return await finalizeUser(foundUser.id, false);
               }
+              console.error(`Auth reports ${maskEmail(email)} exists but no exact match was found — aborting to avoid corrupting another account`);
             } catch (lookupErr) {
               console.error("Failed to look up user by email:", lookupErr);
             }
