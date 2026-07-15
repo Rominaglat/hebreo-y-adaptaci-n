@@ -71,7 +71,7 @@ export default function GoalWidget() {
               <div className="grid grid-cols-2 gap-1 rounded-xl bg-black/[0.05] dark:bg-white/[0.06] p-1">
                 {(['hours', 'lessons'] as GoalUnit[]).map(u => (
                   <button key={u} type="button" onClick={() => setUnit(u)}
-                    className={cn('py-2 rounded-lg font-bold text-sm transition',
+                    className={cn('flex items-center justify-center text-center py-2 rounded-lg font-bold text-sm transition',
                       unit === u ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
                     {t(u === 'hours' ? 'goal.unit.hours' : 'goal.unit.lessons')}
                   </button>
@@ -136,7 +136,8 @@ export default function GoalWidget() {
           </div>
 
           <p className="text-2xl font-extrabold text-foreground leading-none">
-            {doneStr} <span className="text-sm font-semibold text-muted-foreground">/ {goal!.target} {unitLabel}</span>
+            <span dir="ltr" className="inline-block">{doneStr} / {goal!.target}</span>{' '}
+            <span className="text-sm font-semibold text-muted-foreground">{unitLabel}</span>
           </p>
           <p className="text-sm text-muted-foreground mt-1.5">
             {remainingAmount <= 0 ? t('goal.widget.done') : t('goal.widget.remaining').replace('{n}', remainingLabel)}
