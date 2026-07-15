@@ -50,6 +50,7 @@ export type Database = {
           lesson_id: string
           user_id: string
           answer_text: string | null
+          answers: Json
           audio_path: string | null
           status: 'submitted' | 'reviewed'
           feedback_text: string | null
@@ -63,6 +64,7 @@ export type Database = {
           lesson_id: string
           user_id: string
           answer_text?: string | null
+          answers?: Json
           audio_path?: string | null
           status?: 'submitted' | 'reviewed'
           feedback_text?: string | null
@@ -76,6 +78,7 @@ export type Database = {
           lesson_id?: string
           user_id?: string
           answer_text?: string | null
+          answers?: Json
           audio_path?: string | null
           status?: 'submitted' | 'reviewed'
           feedback_text?: string | null
@@ -1258,6 +1261,7 @@ export type Database = {
           id: string
           is_hidden: boolean
           lesson_type: string
+          assignment_questions: Json | null
           module_id: string
           order_index: number
           resources_url: string | null
@@ -1275,6 +1279,7 @@ export type Database = {
           id?: string
           is_hidden?: boolean
           lesson_type?: string
+          assignment_questions?: Json | null
           module_id: string
           order_index?: number
           resources_url?: string | null
@@ -1292,6 +1297,7 @@ export type Database = {
           id?: string
           is_hidden?: boolean
           lesson_type?: string
+          assignment_questions?: Json | null
           module_id?: string
           order_index?: number
           resources_url?: string | null

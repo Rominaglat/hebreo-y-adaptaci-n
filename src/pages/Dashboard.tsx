@@ -352,8 +352,6 @@ export default function Dashboard() {
   return (
 
       <div className="space-y-5 sm:space-y-6 w-full min-w-0">
-        {/* Weekly study goal */}
-        <GoalWidget />
         {/* Premium Hero Greeting */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -437,6 +435,15 @@ export default function Dashboard() {
             />
           </div>
         )}
+
+        {/* Weekly study goal */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.28, ease: [0.33, 1, 0.68, 1] }}
+        >
+          <GoalWidget />
+        </motion.div>
 
         {/* Recent Courses & Upcoming Events - Only for regular tenants (not main) */}
         {currentTenant?.slug !== 'main' && (

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Trash2, Upload, Video, File, ClipboardCheck, FileInput, X, ExternalLink, FolderOpen, ChevronDown, ChevronUp, ArrowRightLeft, Sparkles, Loader2, EyeOff, FileText, Mic } from 'lucide-react';
+import { Trash2, Upload, Video, File, ClipboardCheck, FileInput, X, ExternalLink, FolderOpen, ChevronDown, ChevronUp, ArrowRightLeft, Sparkles, Loader2, EyeOff, FileText, Mic, Plus } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,6 +19,11 @@ export interface ResourceItem {
   url: string;
 }
 
+export interface AssignmentQuestion {
+  id: string;
+  text: string;
+}
+
 export interface LessonFormData {
   title: string;
   lesson_type: 'video' | 'file' | 'exam' | 'embed' | 'assignment';
@@ -29,6 +35,7 @@ export interface LessonFormData {
   resources_url: string;
   is_hidden: boolean;
   duration_minutes?: number | null;
+  assignment_questions?: AssignmentQuestion[];
 }
 
 interface Exam {
@@ -784,15 +791,44 @@ export default function LessonForm({
             </div>
           )}
 
-          {lesson.lesson_type === 'assignment' && (
-            <div className="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
-              <p className="text-sm font-medium text-foreground flex items-center gap-2">
-                <Mic className="w-4 h-4 text-primary" />
-                {t('lessonForm.assignmentTitle')}
-              </p>
-              <p className="text-xs text-muted-foreground">{t('lessonForm.assignmentNote')}</p>
-            </div>
-          )}
+          {lesson.lesson_type === 'assignment' && (() => {
+            const questions = lesson.assignment_questions ?? [];
+            const setQuestions = (next: AssignmentQuestion[]) => onUpdate(moduleIndex, lessonIndex, 'assignment_questions', next);
+            return (
+              <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <Mic className="w-4 h-4 text-primary" />
+                    {t('lessonForm.assignmentQuestions')}
+                  </p>
+                  <Button type="button" variant="outline" size="sm"
+                    onClick={() => setQuestions([...questions, { id: crypto.randomUUID(), text: '' }])}>
+                    <Plus className="w-3.5 h-3.5 me-1" />
+                    {t('lessonForm.addQuestion')}
+                  </Button>
+                </div>
+                {questions.length === 0 && (
+                  <p className="text-xs text-muted-foreground">{t('lessonForm.assignmentQuestionsEmpty')}</p>
+                )}
+                {questions.map((q, qi) => (
+                  <div key={q.id} className="flex items-start gap-2">
+                    <span className="text-xs font-semibold text-muted-foreground mt-2.5 w-4 flex-shrink-0">{qi + 1}.</span>
+                    <Textarea
+                      value={q.text}
+                      rows={2}
+                      className="flex-1"
+                      placeholder={t('lessonForm.questionPlaceholder')}
+                      onChange={(e) => setQuestions(questions.map(x => x.id === q.id ? { ...x, text: e.target.value } : x))}
+                    />
+                    <Button type="button" variant="ghost" size="icon" className="flex-shrink-0"
+                      onClick={() => setQuestions(questions.filter(x => x.id !== q.id))}>
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {(lesson.lesson_type === 'video' || lesson.lesson_type === 'embed') && (
             <div className="space-y-1">
@@ -904,4 +940,5 @@ export const createEmptyLesson = (): LessonFormData => ({
   resources_url: '',
   is_hidden: false,
   duration_minutes: null,
+  assignment_questions: [],
 });

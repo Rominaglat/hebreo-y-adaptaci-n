@@ -22,16 +22,14 @@ interface AssignmentSubmissionsDialogProps {
   user: StudentRef | null;
 }
 
+interface QAView { question: string; answer: string; audioUrl: string | null }
+
 interface SubmissionView {
   id: string;
-  lesson_id: string;
   lessonTitle: string;
-  answer_text: string | null;
-  audio_path: string | null;
-  audioUrl: string | null;
   status: 'submitted' | 'reviewed';
   feedback_text: string | null;
-  submitted_at: string;
+  qa: QAView[];
 }
 
 export function AssignmentSubmissionsDialog({ open, onOpenChange, user }: AssignmentSubmissionsDialogProps) {
@@ -48,28 +46,33 @@ export function AssignmentSubmissionsDialog({ open, onOpenChange, user }: Assign
     setLoading(true);
     const { data } = await supabase
       .from('assignment_submissions')
-      .select('id, lesson_id, answer_text, audio_path, status, feedback_text, submitted_at, lessons(title)')
+      .select('id, answers, status, feedback_text, submitted_at, lessons(title, assignment_questions)')
       .eq('user_id', user.id)
       .order('submitted_at', { ascending: false });
 
     const views: SubmissionView[] = [];
     for (const r of (data ?? []) as unknown[]) {
       const row = r as {
-        id: string; lesson_id: string; answer_text: string | null; audio_path: string | null;
-        status: 'submitted' | 'reviewed'; feedback_text: string | null; submitted_at: string;
-        lessons: { title: string } | { title: string }[] | null;
+        id: string; status: 'submitted' | 'reviewed'; feedback_text: string | null;
+        answers: unknown;
+        lessons: { title: string; assignment_questions: unknown } | { title: string; assignment_questions: unknown }[] | null;
       };
-      const lessonsRel = Array.isArray(row.lessons) ? row.lessons[0] : row.lessons;
-      let audioUrl: string | null = null;
-      if (row.audio_path) {
-        const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(row.audio_path, 3600);
-        audioUrl = signed?.signedUrl ?? null;
+      const lessonRel = Array.isArray(row.lessons) ? row.lessons[0] : row.lessons;
+      const questions = (Array.isArray(lessonRel?.assignment_questions) ? lessonRel!.assignment_questions : []) as { id: string; text: string }[];
+      const answers = (Array.isArray(row.answers) ? row.answers : []) as { questionId: string; text: string; audioPath: string | null }[];
+      const answerById = new Map(answers.map(a => [a.questionId, a]));
+
+      const qa: QAView[] = [];
+      for (const q of questions) {
+        const a = answerById.get(q.id);
+        let audioUrl: string | null = null;
+        if (a?.audioPath) {
+          const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(a.audioPath, 3600);
+          audioUrl = signed?.signedUrl ?? null;
+        }
+        qa.push({ question: q.text, answer: a?.text ?? '—', audioUrl });
       }
-      views.push({
-        id: row.id, lesson_id: row.lesson_id, lessonTitle: lessonsRel?.title ?? '—',
-        answer_text: row.answer_text, audio_path: row.audio_path, audioUrl,
-        status: row.status, feedback_text: row.feedback_text, submitted_at: row.submitted_at,
-      });
+      views.push({ id: row.id, lessonTitle: lessonRel?.title ?? '—', status: row.status, feedback_text: row.feedback_text, qa });
     }
     setRows(views);
     setDrafts(Object.fromEntries(views.map(v => [v.id, v.feedback_text ?? ''])));
@@ -87,10 +90,7 @@ export function AssignmentSubmissionsDialog({ open, onOpenChange, user }: Assign
       status: 'reviewed',
     }).eq('id', id);
     setSavingId(null);
-    if (error) {
-      toast({ title: error.message, variant: 'destructive' });
-      return;
-    }
+    if (error) { toast({ title: error.message, variant: 'destructive' }); return; }
     toast({ title: t('assignment.admin.saved') });
     await load();
   }, [drafts, authUser, toast, t, load]);
@@ -117,19 +117,17 @@ export function AssignmentSubmissionsDialog({ open, onOpenChange, user }: Assign
                   </Badge>
                 </div>
 
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-1">{t('assignment.admin.answer')}</p>
-                  <p className="text-sm text-foreground whitespace-pre-wrap">{r.answer_text || '—'}</p>
-                </div>
-
-                {r.audioUrl && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">{t('assignment.admin.recording')}</p>
-                    <audio controls src={r.audioUrl} className="h-10 w-full" />
+                {r.qa.map((qa, i) => (
+                  <div key={i} className="rounded-md bg-muted/40 p-3 space-y-2">
+                    <p className="text-sm font-medium text-foreground">
+                      <span className="text-primary">{t('assignment.question')} {i + 1}.</span> {qa.question}
+                    </p>
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{qa.answer}</p>
+                    {qa.audioUrl && <audio controls src={qa.audioUrl} className="h-9 w-full" />}
                   </div>
-                )}
+                ))}
 
-                <div className="space-y-2">
+                <div className="space-y-2 border-t border-border/60 pt-3">
                   <p className="text-xs font-medium text-muted-foreground">{t('assignment.admin.feedback')}</p>
                   <Textarea rows={3} value={drafts[r.id] ?? ''}
                     onChange={(e) => setDrafts(d => ({ ...d, [r.id]: e.target.value }))} />

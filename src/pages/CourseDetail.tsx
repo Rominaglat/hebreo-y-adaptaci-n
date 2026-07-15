@@ -18,6 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import ExamTaker from '@/components/ExamTaker';
 import AssignmentTaker from '@/components/AssignmentTaker';
+import type { AssignmentQuestion } from '@/components/LessonForm';
 import LessonVideoPlayer from '@/components/LessonVideoPlayer';
 import { useVideoDuration } from '@/hooks/useVideoDuration';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -59,6 +60,7 @@ interface Lesson {
   title: string;
   video_url: string | null;
   content_text: string | null;
+  assignment_questions: AssignmentQuestion[] | null;
   resources_url: string | null;
   order_index: number;
   duration_minutes: number | null;
@@ -913,7 +915,7 @@ export default function CourseDetail() {
                 {/* Assignment - free-text answer + optional voice recording */}
                 {selectedLesson.lesson_type === 'assignment' && <AssignmentTaker
                   lessonId={selectedLesson.id}
-                  prompt={selectedLesson.content_text}
+                  questions={(selectedLesson.assignment_questions ?? []) as AssignmentQuestion[]}
                   onComplete={() => { if (!selectedLesson.is_completed) { handleMarkComplete(); } }}
                 />}
 
