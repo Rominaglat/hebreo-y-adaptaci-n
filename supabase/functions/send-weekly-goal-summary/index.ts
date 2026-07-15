@@ -105,7 +105,12 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const dryRun = body?.dryRun === true;
     const now = new Date();
-    const weekStartDate = body?.weekStart ? new Date(`${body.weekStart}T00:00:00Z`) : lastWeekStart(now);
+    // SECURITY: weekStart is NOT read from the request. This function is public
+    // (cron-triggered), so a caller-supplied week would let an attacker fabricate
+    // unlimited distinct weeks and generate unbounded emails — the per-(user,week)
+    // idempotency only protects a *fixed* week. Always the last completed week, so
+    // at most one (benign, real) send can be triggered per calendar week.
+    const weekStartDate = lastWeekStart(now);
     const weekStart = ymd(weekStartDate);
     const weekEnd = new Date(weekStartDate); weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
 
@@ -155,8 +160,8 @@ serve(async (req) => {
       const arr = priorByUser.get(s.user_id) ?? []; arr.push(s); priorByUser.set(s.user_id, arr);
     }
 
-    let sent = 0, skipped = 0;
-    const previews: unknown[] = [];
+    let sent = 0, skipped = 0, wouldSend = 0;
+    const tierCounts: Record<string, number> = {};
 
     for (const g of goalRows) {
       if (expiredSet.has(g.user_id) || alreadySent.has(g.user_id)) { skipped++; continue; }
@@ -194,7 +199,8 @@ serve(async (req) => {
         hoursDone, lessonsDone: a.lessons, actual, pct, tier, streakWeeks, trend, ctaUrl, unsubscribeUrl,
       });
 
-      if (dryRun) { previews.push({ user_id: g.user_id, email: profile.email, subject, tier, pct: Math.round(pct * 100) }); continue; }
+      // dryRun returns ONLY aggregate counts — never per-user emails/ids (info leak).
+      if (dryRun) { tierCounts[tier] = (tierCounts[tier] ?? 0) + 1; wouldSend++; continue; }
 
       let resendId: string | null = null, emailStatus = "skipped_no_key";
       if (resendKey) {
@@ -202,7 +208,12 @@ serve(async (req) => {
           const resp = await fetch(RESEND_API, {
             method: "POST",
             headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ from: FROM_EMAIL, to: profile.email, subject, html, ...(REPLY_TO ? { reply_to: REPLY_TO } : {}) }),
+            body: JSON.stringify({
+              from: FROM_EMAIL, to: profile.email, subject, html,
+              ...(REPLY_TO ? { reply_to: REPLY_TO } : {}),
+              // RFC 8058 one-click unsubscribe — compliant clients POST here.
+              headers: { "List-Unsubscribe": `<${unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
+            }),
           });
           emailStatus = resp.ok ? "sent" : `error_${resp.status}`;
           if (resp.ok) { resendId = (await resp.json())?.id ?? null; sent++; }
@@ -216,7 +227,7 @@ serve(async (req) => {
       });
     }
 
-    return jsonResp({ week_start: weekStart, considered: goalRows.length, sent, skipped, ...(dryRun ? { dryRun: true, previews } : {}) });
+    return jsonResp({ week_start: weekStart, considered: goalRows.length, sent, skipped, ...(dryRun ? { dryRun: true, wouldSend, tierCounts } : {}) });
   } catch (e) {
     return jsonResp({ error: "unexpected", detail: e instanceof Error ? e.message : String(e) }, 500);
   }
