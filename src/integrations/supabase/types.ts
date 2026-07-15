@@ -44,6 +44,48 @@ export type Database = {
         }
         Relationships: []
       }
+      assignment_submissions: {
+        Row: {
+          id: string
+          lesson_id: string
+          user_id: string
+          answer_text: string | null
+          audio_path: string | null
+          status: 'submitted' | 'reviewed'
+          feedback_text: string | null
+          feedback_by: string | null
+          feedback_at: string | null
+          submitted_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          lesson_id: string
+          user_id: string
+          answer_text?: string | null
+          audio_path?: string | null
+          status?: 'submitted' | 'reviewed'
+          feedback_text?: string | null
+          feedback_by?: string | null
+          feedback_at?: string | null
+          submitted_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          lesson_id?: string
+          user_id?: string
+          answer_text?: string | null
+          audio_path?: string | null
+          status?: 'submitted' | 'reviewed'
+          feedback_text?: string | null
+          feedback_by?: string | null
+          feedback_at?: string | null
+          submitted_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       access_limits: {
         Row: {
           created_at: string
