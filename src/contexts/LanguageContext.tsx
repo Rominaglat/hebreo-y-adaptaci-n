@@ -793,6 +793,7 @@ const translations: Translations = {
   'assignment.admin.feedback': { he: 'פידבק לתלמיד', en: 'Feedback to student', es: 'Comentarios al estudiante' },
   'assignment.admin.saveFeedback': { he: 'שמירת פידבק', en: 'Save feedback', es: 'Guardar comentarios' },
   'assignment.admin.saved': { he: 'הפידבק נשמר', en: 'Feedback saved', es: 'Comentarios guardados' },
+  'assignment.admin.notified': { he: 'התלמיד קיבל מייל והתראה', en: 'Student notified by email + in-app', es: 'Estudiante notificado por correo y en la app' },
   'assignment.admin.statusSubmitted': { he: 'ממתין לבדיקה', en: 'Awaiting review', es: 'En revisión' },
   'assignment.admin.statusReviewed': { he: 'נבדק', en: 'Reviewed', es: 'Revisado' },
   'announce.button': { he: 'פרסם והודע', en: 'Publish & announce', es: 'Publicar y avisar' },

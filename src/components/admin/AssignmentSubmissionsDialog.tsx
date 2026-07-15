@@ -89,9 +89,11 @@ export function AssignmentSubmissionsDialog({ open, onOpenChange, user }: Assign
       feedback_at: new Date().toISOString(),
       status: 'reviewed',
     }).eq('id', id);
+    if (error) { setSavingId(null); toast({ title: error.message, variant: 'destructive' }); return; }
+    // Notify the student — email + personal in-portal announcement (best-effort).
+    const { error: notifyErr } = await supabase.functions.invoke('notify-assignment-feedback', { body: { submissionId: id } });
     setSavingId(null);
-    if (error) { toast({ title: error.message, variant: 'destructive' }); return; }
-    toast({ title: t('assignment.admin.saved') });
+    toast({ title: t('assignment.admin.saved'), description: notifyErr ? undefined : t('assignment.admin.notified') });
     await load();
   }, [drafts, authUser, toast, t, load]);
 
