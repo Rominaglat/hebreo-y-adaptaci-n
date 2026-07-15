@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      student_goals: {
+        Row: {
+          user_id: string
+          unit: 'hours' | 'lessons'
+          target: number
+          emails_enabled: boolean
+          unsubscribe_token: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          unit: 'hours' | 'lessons'
+          target: number
+          emails_enabled?: boolean
+          unsubscribe_token?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          unit?: 'hours' | 'lessons'
+          target?: number
+          emails_enabled?: boolean
+          unsubscribe_token?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       access_limits: {
         Row: {
           created_at: string
@@ -1812,6 +1842,7 @@ export type Database = {
           background_color_dark: string | null
           created_at: string
           custom_css: string | null
+          default_lesson_minutes: number
           foreground_color: string | null
           foreground_color_dark: string | null
           id: string
