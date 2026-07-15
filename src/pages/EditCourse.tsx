@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import AnnounceContentButton from '@/components/admin/AnnounceContentButton';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
@@ -616,14 +617,17 @@ export default function EditCourse() {
               <p className="text-muted-foreground">{courseData.title}</p>
             </div>
           </div>
-          <Button 
-            type="button" 
-            disabled={loading}
-            onClick={() => formRef.current?.requestSubmit()}
-          >
-            <Save className="w-4 h-4 ml-2" />
-            {loading ? t('common.loading') : t('common.save')}
-          </Button>
+          <div className="flex items-center gap-2">
+            {id && <AnnounceContentButton courseId={id} courseName={courseData.title} />}
+            <Button
+              type="button"
+              disabled={loading}
+              onClick={() => formRef.current?.requestSubmit()}
+            >
+              <Save className="w-4 h-4 ml-2" />
+              {loading ? t('common.loading') : t('common.save')}
+            </Button>
+          </div>
         </div>
 
         {/* Sticky Save Button */}

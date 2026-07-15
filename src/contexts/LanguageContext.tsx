@@ -787,6 +787,17 @@ const translations: Translations = {
   'assignment.admin.saved': { he: 'הפידבק נשמר', en: 'Feedback saved', es: 'Comentarios guardados' },
   'assignment.admin.statusSubmitted': { he: 'ממתין לבדיקה', en: 'Awaiting review', es: 'En revisión' },
   'assignment.admin.statusReviewed': { he: 'נבדק', en: 'Reviewed', es: 'Revisado' },
+  'announce.button': { he: 'פרסם והודע', en: 'Publish & announce', es: 'Publicar y avisar' },
+  'announce.dialogTitle': { he: 'הודעה לתלמידי הקורס', en: 'Announce to course students', es: 'Avisar a los estudiantes del curso' },
+  'announce.titleLabel': { he: 'כותרת', en: 'Title', es: 'Título' },
+  'announce.messageLabel': { he: 'הודעה', en: 'Message', es: 'Mensaje' },
+  'announce.messagePlaceholder': { he: 'מה חדש בקורס?', en: "What's new in the course?", es: '¿Qué hay de nuevo en el curso?' },
+  'announce.audienceHint': { he: 'נשלח כהודעה בפורטל + מייל, רק לתלמידים עם גישה לקורס.', en: 'Sent as a portal notification + email, only to students with access to this course.', es: 'Se envía como notificación en el portal + correo, solo a estudiantes con acceso a este curso.' },
+  'announce.defaultTitlePrefix': { he: 'תוכן חדש ב־', en: 'New content in', es: 'Nuevo contenido en' },
+  'announce.send': { he: 'שליחה', en: 'Send', es: 'Enviar' },
+  'announce.sent': { he: 'ההודעה נשלחה', en: 'Announcement sent', es: 'Aviso enviado' },
+  'announce.sentDesc': { he: 'נשלחו {n} מיילים לתלמידים', en: 'Emailed {n} students', es: 'Se enviaron {n} correos a estudiantes' },
+  'announce.error': { he: 'שגיאה בשליחת ההודעה', en: 'Failed to send announcement', es: 'Error al enviar el aviso' },
 
   // Achievements
   'achievements.title': { he: 'הישגים', en: 'Achievements', es: 'Logros' },
