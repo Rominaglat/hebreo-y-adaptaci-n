@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import ExamTaker from '@/components/ExamTaker';
+import AssignmentTaker from '@/components/AssignmentTaker';
 import LessonVideoPlayer from '@/components/LessonVideoPlayer';
 import { useVideoDuration } from '@/hooks/useVideoDuration';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -909,6 +910,13 @@ export default function CourseDetail() {
               }
             }} />}
 
+                {/* Assignment - free-text answer + optional voice recording */}
+                {selectedLesson.lesson_type === 'assignment' && <AssignmentTaker
+                  lessonId={selectedLesson.id}
+                  prompt={selectedLesson.content_text}
+                  onComplete={() => { if (!selectedLesson.is_completed) { handleMarkComplete(); } }}
+                />}
+
                 {/* Embed - for Fillout and other embedded content */}
                 {selectedLesson.lesson_type === 'embed' && selectedLesson.embed_url && <Card>
                     <CardContent className="p-6">
@@ -1054,8 +1062,8 @@ export default function CourseDetail() {
                     </CardContent>
                   </Card>}
 
-                {/* Lesson Info - for non-video, non-exam lessons */}
-                {selectedLesson.lesson_type !== 'exam' && selectedLesson.lesson_type !== 'video' && <Card>
+                {/* Lesson Info - for non-video, non-exam, non-assignment lessons */}
+                {selectedLesson.lesson_type !== 'exam' && selectedLesson.lesson_type !== 'video' && selectedLesson.lesson_type !== 'assignment' && <Card>
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <div>
