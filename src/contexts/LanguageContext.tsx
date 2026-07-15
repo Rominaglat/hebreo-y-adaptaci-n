@@ -758,6 +758,8 @@ const translations: Translations = {
   'goal.widget.done':       { he: 'עמדת ביעד השבוע! 🎯', en: 'Goal reached this week! 🎯', es: '¡Meta cumplida esta semana! 🎯' },
   'goal.widget.hoursShort': { he: 'שע׳', en: 'h', es: 'h' },
   'goal.widget.lessonsShort': { he: 'שיעורים', en: 'lessons', es: 'lecciones' },
+  'goal.widget.streakWeeks': { he: '{n} שבועות ברצף ביעד', en: '{n} weeks on target', es: '{n} semanas seguidas cumpliendo' },
+  'goal.widget.lastWeeks': { he: 'שבועות אחרונים', en: 'Last weeks', es: 'Últimas semanas' },
   'goal.profile.emailLabel': { he: 'סיכום התקדמות שבועי במייל', en: 'Weekly progress email', es: 'Resumen semanal por correo' },
   'goal.profile.emailHint':  { he: 'נשלח רק אם הגדרת יעד שבועי.', en: 'Sent only if you have a weekly goal.', es: 'Se envía solo si tienes una meta semanal.' },
   'lessonForm.durationMinutes': { he: 'משך בדקות', en: 'Duration (minutes)', es: 'Duración (minutos)' },

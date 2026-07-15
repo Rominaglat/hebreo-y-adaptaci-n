@@ -9,6 +9,12 @@ verify_jwt = false
 [functions.cleanup-empty-rooms]
 verify_jwt = false
 
+[functions.send-weekly-goal-summary]
+verify_jwt = false
+
+[functions.goal-unsubscribe]
+verify_jwt = false
+
 [functions.sync-google-calendar]
 verify_jwt = false
 

@@ -86,6 +86,57 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_goal_snapshots: {
+        Row: {
+          id: string
+          user_id: string
+          week_start: string
+          unit: string
+          target: number
+          lessons_done: number
+          minutes_done: number
+          hours_done: number
+          pct: number
+          tier: string
+          sent_at: string | null
+          resend_id: string | null
+          email_status: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          week_start: string
+          unit: string
+          target: number
+          lessons_done?: number
+          minutes_done?: number
+          hours_done?: number
+          pct?: number
+          tier: string
+          sent_at?: string | null
+          resend_id?: string | null
+          email_status?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          week_start?: string
+          unit?: string
+          target?: number
+          lessons_done?: number
+          minutes_done?: number
+          hours_done?: number
+          pct?: number
+          tier?: string
+          sent_at?: string | null
+          resend_id?: string | null
+          email_status?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       access_limits: {
         Row: {
           created_at: string

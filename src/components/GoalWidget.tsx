@@ -30,7 +30,7 @@ function ProgressRing({ pct }: { pct: number }) {
 
 export default function GoalWidget() {
   const { t } = useLanguage();
-  const { goal, progress, defaultLessonMinutes, loading, saveGoal } = useWeeklyGoal();
+  const { goal, progress, defaultLessonMinutes, loading, saveGoal, snapshots, streakWeeks } = useWeeklyGoal();
   const [editing, setEditing] = useState(false);
   const [unit, setUnit] = useState<GoalUnit>('hours');
   const [target, setTarget] = useState(10);
@@ -107,6 +107,29 @@ export default function GoalWidget() {
           ? t('goal.widget.done')
           : t('goal.widget.remaining').replace('{n}', remainingLabel)}
       </p>
+
+      {streakWeeks > 0 && (
+        <div className="text-center mt-3">
+          <span className="inline-flex items-center gap-1.5 bg-secondary text-primary font-bold text-sm px-3 py-1.5 rounded-full">
+            🔥 {t('goal.widget.streakWeeks').replace('{n}', String(streakWeeks))}
+          </span>
+        </div>
+      )}
+
+      {snapshots.length > 0 && (
+        <div className="mt-4 border-t border-border/60 pt-3">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">{t('goal.widget.lastWeeks')}</p>
+          <div className="flex gap-2">
+            {[...snapshots].reverse().map((s) => (
+              <div key={s.weekStart} title={s.weekStart}
+                className={cn('w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white',
+                  s.met ? 'bg-gradient-to-br from-primary to-accent' : 'bg-transparent border-2 border-border')}>
+                {s.met ? '✓' : ''}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

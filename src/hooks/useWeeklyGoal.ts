@@ -13,12 +13,15 @@ export interface WeeklyGoalState {
   progress: Progress | null;
   defaultLessonMinutes: number;
   loading: boolean;
+  snapshots: { weekStart: string; met: boolean }[];
+  streakWeeks: number;
 }
 
 export function useWeeklyGoal() {
   const { user } = useAuth();
   const [state, setState] = useState<WeeklyGoalState>({
     goal: null, progress: null, defaultLessonMinutes: DEFAULT_LESSON_MINUTES, loading: true,
+    snapshots: [], streakWeeks: 0,
   });
 
   const reload = useCallback(async () => {
@@ -33,22 +36,33 @@ export function useWeeklyGoal() {
 
     let progress: Progress | null = null;
     let goal: GoalRow | null = null;
+    let snapshots: { weekStart: string; met: boolean }[] = [];
+    let streakWeeks = 0;
     if (goalRow) {
       goal = { unit: goalRow.unit, target: Number(goalRow.target), emailsEnabled: goalRow.emails_enabled };
       const weekStart = startOfIsoWeek(new Date());
-      const { data: completions } = await supabase
-        .from('lesson_completions')
-        .select('lesson_id, completed_at, lessons(duration_minutes)')
-        .eq('user_id', user.id)
-        .gte('completed_at', weekStart.toISOString());
+      const [{ data: completions }, { data: snaps }] = await Promise.all([
+        supabase.from('lesson_completions')
+          .select('lesson_id, completed_at, lessons(duration_minutes)')
+          .eq('user_id', user.id)
+          .gte('completed_at', weekStart.toISOString()),
+        supabase.from('weekly_goal_snapshots')
+          .select('week_start, tier')
+          .eq('user_id', user.id)
+          .order('week_start', { ascending: false })
+          .limit(8),
+      ]);
       const items = (completions ?? []).map((c) => {
         const lessons = (c as { lessons: { duration_minutes: number | null } | { duration_minutes: number | null }[] | null }).lessons;
         const dur = Array.isArray(lessons) ? lessons[0]?.duration_minutes : lessons?.duration_minutes;
         return { durationMinutes: dur ?? null };
       });
       progress = computeWeeklyProgress(items, { unit: goal.unit, target: goal.target }, defMin);
+      snapshots = ((snaps ?? []) as { week_start: string; tier: string }[])
+        .map(s => ({ weekStart: s.week_start, met: s.tier === 'met' || s.tier === 'exceeded' }));
+      for (const s of snapshots) { if (s.met) streakWeeks++; else break; }
     }
-    setState({ goal, progress, defaultLessonMinutes: defMin, loading: false });
+    setState({ goal, progress, defaultLessonMinutes: defMin, loading: false, snapshots, streakWeeks });
   }, [user]);
 
   useEffect(() => { void reload(); }, [reload]);
