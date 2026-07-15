@@ -29,7 +29,7 @@ function ProgressRing({ pct, sub }: { pct: number; sub: string }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-[28px] font-extrabold text-foreground leading-none">{Math.round(clamped * 100)}%</span>
-        <span className="text-[11px] text-muted-foreground mt-1">{sub}</span>
+        <span className="text-[11px] text-muted-foreground mt-1" dir="ltr">{sub}</span>
       </div>
     </div>
   );
@@ -65,32 +65,34 @@ export default function GoalWidget() {
           </div>
           <p className="text-sm text-muted-foreground mb-4">{t('goal.widget.setDesc')}</p>
 
-          <div className="flex flex-col sm:flex-row sm:items-stretch gap-4">
-            <div className="flex-1 space-y-3">
-              <div className="flex bg-background/60 rounded-xl p-1 max-w-xs">
+          <div className="grid gap-6 sm:grid-cols-2 sm:items-center max-w-3xl mx-auto">
+            {/* goal controls */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-black/[0.05] dark:bg-white/[0.06] p-1">
                 {(['hours', 'lessons'] as GoalUnit[]).map(u => (
                   <button key={u} type="button" onClick={() => setUnit(u)}
-                    className={cn('flex-1 py-2 rounded-lg font-bold text-sm transition',
+                    className={cn('py-2 rounded-lg font-bold text-sm transition',
                       unit === u ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
                     {t(u === 'hours' ? 'goal.unit.hours' : 'goal.unit.lessons')}
                   </button>
                 ))}
               </div>
               <div className="flex items-center gap-4">
-                <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={() => setTarget(v => Math.max(1, v - 1))}>–</Button>
-                <div className="text-center">
+                <Button type="button" variant="outline" size="icon" className="rounded-full h-10 w-10 flex-shrink-0 text-lg" onClick={() => setTarget(v => Math.max(1, v - 1))}>–</Button>
+                <div className="flex-1 text-center">
                   <div className="text-4xl font-extrabold text-foreground leading-none">{target}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-xs text-muted-foreground mt-1.5">
                     {t(unit === 'hours' ? 'goal.widget.perWeekHours' : 'goal.widget.perWeekLessons')}
                     {approx != null && <> · {t('goal.widget.approxLessons').replace('{n}', String(approx))}</>}
                   </div>
                 </div>
-                <Button type="button" variant="outline" size="icon" className="rounded-full" onClick={() => setTarget(v => v + 1)}>+</Button>
+                <Button type="button" variant="outline" size="icon" className="rounded-full h-10 w-10 flex-shrink-0 text-lg" onClick={() => setTarget(v => v + 1)}>+</Button>
               </div>
             </div>
 
-            <div className="flex flex-col justify-end gap-3 sm:w-64">
-              <label className="flex items-center gap-3 bg-background/50 rounded-lg p-3 cursor-pointer">
+            {/* email opt-in + save */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 rounded-lg bg-black/[0.04] dark:bg-white/[0.05] p-3 cursor-pointer">
                 <Checkbox checked={emails} onCheckedChange={v => setEmails(Boolean(v))} />
                 <span className="text-sm text-foreground leading-snug">{t('goal.widget.emailOptin')}</span>
               </label>
