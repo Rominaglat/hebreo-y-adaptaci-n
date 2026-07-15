@@ -17,6 +17,7 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
 import { format } from 'date-fns';
 import { he, enUS, es } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +42,7 @@ export default function Profile() {
   const { profile, role, user, refreshProfile, tenantProfile, tenantRole, refreshTenantProfile } = useAuth();
   const { currentTenant } = useTenant();
   const { t, language } = useLanguage();
+  const { goal: weeklyGoal, setEmailsEnabled: setWeeklyEmails } = useWeeklyGoal();
   const { toast } = useToast();
   const { completeStep } = useOnboarding();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -615,6 +617,24 @@ export default function Profile() {
             )}
           </CardContent>
         </Card>
+
+        {/* Preferences */}
+        {weeklyGoal && (
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium text-foreground">{t('goal.profile.emailLabel')}</p>
+                  <p className="text-sm text-muted-foreground">{t('goal.profile.emailHint')}</p>
+                </div>
+                <Switch
+                  checked={weeklyGoal.emailsEnabled}
+                  onCheckedChange={(v) => void setWeeklyEmails(v)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Contact Info (Read Only) */}
         <Card>
