@@ -740,6 +740,28 @@ const translations: Translations = {
   'streak.atRisk': { he: 'הסטריק שלך בסכנה — כדאי להיכנס היום!', en: 'Your streak is at risk — log in today!', es: 'Tu racha está en riesgo — ¡entra hoy!' },
   'streak.startToday': { he: 'להתחיל ללמוד היום כדי לצבור סטריק', en: 'Start learning today to build a streak', es: 'Empieza a aprender hoy para construir una racha' },
 
+  // Weekly goals
+  'goal.widget.setTitle':   { he: 'הגדרת יעד שבועי', en: 'Set your weekly goal', es: 'Define tu meta semanal' },
+  'goal.widget.setDesc':    { he: 'קבע יעד ואנחנו נעזור לך לעמוד בו, שבוע אחר שבוע.', en: "Set a goal and we'll help you reach it, week by week.", es: 'Ponte un objetivo y te ayudamos a cumplirlo, semana a semana.' },
+  'goal.unit.hours':        { he: 'שעות', en: 'Hours', es: 'Horas' },
+  'goal.unit.lessons':      { he: 'שיעורים', en: 'Lessons', es: 'Lecciones' },
+  'goal.widget.perWeekHours': { he: 'שעות בשבוע', en: 'hours per week', es: 'horas por semana' },
+  'goal.widget.perWeekLessons': { he: 'שיעורים בשבוע', en: 'lessons per week', es: 'lecciones por semana' },
+  'goal.widget.approxLessons': { he: '≈ {n} שיעורים', en: '≈ {n} lessons', es: '≈ {n} lecciones' },
+  'goal.widget.emailOptin': { he: '📬 שלחו לי סיכום שבועי במייל', en: '📬 Email me a weekly summary', es: '📬 Enviarme un resumen semanal por correo' },
+  'goal.widget.save':       { he: 'שמירת היעד', en: 'Save my goal', es: 'Guardar mi meta' },
+  'goal.widget.title':      { he: 'היעד השבועי שלי', en: 'My weekly goal', es: 'Mi meta semanal' },
+  'goal.widget.edit':       { he: 'עריכה', en: 'Edit', es: 'Editar' },
+  'goal.widget.ofHours':    { he: '{done} / {target} שע׳', en: '{done} / {target} h', es: '{done} / {target} h' },
+  'goal.widget.ofLessons':  { he: '{done} / {target} שיעורים', en: '{done} / {target} lessons', es: '{done} / {target} lecciones' },
+  'goal.widget.remaining':  { he: 'נותרו לך {n} להשלמת היעד 💪', en: '{n} to go to reach your goal 💪', es: 'Te faltan {n} para cumplir tu meta 💪' },
+  'goal.widget.done':       { he: 'עמדת ביעד השבוע! 🎯', en: 'Goal reached this week! 🎯', es: '¡Meta cumplida esta semana! 🎯' },
+  'goal.widget.hoursShort': { he: 'שע׳', en: 'h', es: 'h' },
+  'goal.widget.lessonsShort': { he: 'שיעורים', en: 'lessons', es: 'lecciones' },
+  'goal.profile.emailLabel': { he: 'סיכום התקדמות שבועי במייל', en: 'Weekly progress email', es: 'Resumen semanal por correo' },
+  'goal.profile.emailHint':  { he: 'נשלח רק אם הגדרת יעד שבועי.', en: 'Sent only if you have a weekly goal.', es: 'Se envía solo si tienes una meta semanal.' },
+  'lessonForm.durationMinutes': { he: 'משך בדקות', en: 'Duration (minutes)', es: 'Duración (minutos)' },
+
   // Achievements
   'achievements.title': { he: 'הישגים', en: 'Achievements', es: 'Logros' },
   'achievements.unlockedCount': { he: '{done} מתוך {total} נפתחו', en: '{done} of {total} unlocked', es: '{done} de {total} desbloqueados' },

@@ -21,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StreakIndicator } from '@/components/StreakIndicator';
+import GoalWidget from '@/components/GoalWidget';
 import { AchievementsGrid } from '@/components/AchievementBadge';
 import { RecommendedCourses } from '@/components/RecommendedCourses';
 import {
@@ -351,6 +352,8 @@ export default function Dashboard() {
   return (
 
       <div className="space-y-5 sm:space-y-6 w-full min-w-0">
+        {/* Weekly study goal */}
+        <GoalWidget />
         {/* Premium Hero Greeting */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
