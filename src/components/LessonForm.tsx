@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Trash2, Upload, Video, File, ClipboardCheck, FileInput, X, ExternalLink, FolderOpen, ChevronDown, ChevronUp, ArrowRightLeft, Sparkles, Loader2, EyeOff, FileText } from 'lucide-react';
+import { Trash2, Upload, Video, File, ClipboardCheck, FileInput, X, ExternalLink, FolderOpen, ChevronDown, ChevronUp, ArrowRightLeft, Sparkles, Loader2, EyeOff, FileText, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,7 @@ export interface ResourceItem {
 
 export interface LessonFormData {
   title: string;
-  lesson_type: 'video' | 'file' | 'exam' | 'embed';
+  lesson_type: 'video' | 'file' | 'exam' | 'embed' | 'assignment';
   video_url: string;
   file_url: string;
   exam_id: string;
@@ -28,6 +28,7 @@ export interface LessonFormData {
   embed_url: string;
   resources_url: string;
   is_hidden: boolean;
+  duration_minutes?: number | null;
 }
 
 interface Exam {
@@ -69,6 +70,7 @@ const lessonTypeIcons: Record<string, React.ReactNode> = {
   file: <File className="w-4 h-4" />,
   exam: <ClipboardCheck className="w-4 h-4" />,
   embed: <FileInput className="w-4 h-4" />,
+  assignment: <Mic className="w-4 h-4" />,
 };
 
 const lessonTypeKeys: Record<string, string> = {
@@ -76,6 +78,7 @@ const lessonTypeKeys: Record<string, string> = {
   file: 'createCourse.lessonTypeFile',
   exam: 'createCourse.lessonTypeExam',
   embed: 'lessonForm.embedSite',
+  assignment: 'createCourse.lessonTypeAssignment',
 };
 
 export default function LessonForm({
@@ -579,6 +582,12 @@ export default function LessonForm({
                     {t('lessonForm.embedSite')}
                   </div>
                 </SelectItem>
+                <SelectItem value="assignment">
+                  <div className="flex items-center gap-2">
+                    <Mic className="w-4 h-4" />
+                    {t('createCourse.lessonTypeAssignment')}
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -775,6 +784,31 @@ export default function LessonForm({
             </div>
           )}
 
+          {lesson.lesson_type === 'assignment' && (
+            <div className="space-y-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                <Mic className="w-4 h-4 text-primary" />
+                {t('lessonForm.assignmentTitle')}
+              </p>
+              <p className="text-xs text-muted-foreground">{t('lessonForm.assignmentNote')}</p>
+            </div>
+          )}
+
+          {(lesson.lesson_type === 'video' || lesson.lesson_type === 'embed') && (
+            <div className="space-y-1">
+              <Label className="text-xs">{t('lessonForm.durationMinutes')}</Label>
+              <Input
+                type="number"
+                min={1}
+                value={lesson.duration_minutes ?? ''}
+                onChange={(e) => onUpdate(moduleIndex, lessonIndex, 'duration_minutes',
+                  e.target.value === '' ? null : Number(e.target.value))}
+                placeholder="30"
+                className="w-32"
+              />
+            </div>
+          )}
+
           {/* Lesson Description - Rich Text Editor */}
           <div className="space-y-2">
             <Label className="text-xs">{t('lessonForm.lessonDescription')}</Label>
@@ -869,4 +903,5 @@ export const createEmptyLesson = (): LessonFormData => ({
   embed_url: '',
   resources_url: '',
   is_hidden: false,
+  duration_minutes: null,
 });

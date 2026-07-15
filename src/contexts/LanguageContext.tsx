@@ -761,6 +761,9 @@ const translations: Translations = {
   'goal.profile.emailLabel': { he: 'סיכום התקדמות שבועי במייל', en: 'Weekly progress email', es: 'Resumen semanal por correo' },
   'goal.profile.emailHint':  { he: 'נשלח רק אם הגדרת יעד שבועי.', en: 'Sent only if you have a weekly goal.', es: 'Se envía solo si tienes una meta semanal.' },
   'lessonForm.durationMinutes': { he: 'משך בדקות', en: 'Duration (minutes)', es: 'Duración (minutos)' },
+  'createCourse.lessonTypeAssignment': { he: 'עבודת הגשה', en: 'Submission assignment', es: 'Trabajo de entrega' },
+  'lessonForm.assignmentTitle': { he: 'עבודת הגשה', en: 'Submission assignment', es: 'Trabajo de entrega' },
+  'lessonForm.assignmentNote': { he: 'התלמידים יענו על השאלה (תיאור השיעור למטה) בטקסט חופשי + הקלטה קולית אופציונלית.', en: 'Students answer the question (the lesson description below) with free text + an optional voice recording.', es: 'Los estudiantes responden la pregunta (la descripción de la lección abajo) con texto libre + una grabación de voz opcional.' },
 
   // Achievements
   'achievements.title': { he: 'הישגים', en: 'Achievements', es: 'Logros' },

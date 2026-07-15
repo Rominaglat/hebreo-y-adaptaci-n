@@ -518,6 +518,7 @@ export default function EditCourse() {
             file_url: lesson.file_url || null,
             exam_id: lesson.exam_id || null,
             content_text: lesson.content_text || null,
+            duration_minutes: lesson.duration_minutes || null,
             embed_url: lesson.embed_url || null,
             resources_url: lesson.resources_url || null,
             is_hidden: lesson.is_hidden || false,
