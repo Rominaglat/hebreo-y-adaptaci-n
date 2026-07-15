@@ -7,6 +7,7 @@ import {
   Shield,
   Loader2,
   MoreHorizontal,
+  Mic,
   Filter,
   CheckSquare,
   Square,
@@ -94,6 +95,7 @@ import { ImportUsersDialog } from '@/components/admin/ImportUsersDialog';
 import { Progress } from '@/components/ui/progress';
 import ExcelJS from 'exceljs';
 import { StudentProgressDialog } from '@/components/admin/StudentProgressDialog';
+import { AssignmentSubmissionsDialog } from '@/components/admin/AssignmentSubmissionsDialog';
 interface UserActivity {
   id: string;
   activity_type: string;
@@ -208,6 +210,8 @@ export default function ManageUsers() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [progressDialogOpen, setProgressDialogOpen] = useState(false);
   const [progressUser, setProgressUser] = useState<UserWithRole | null>(null);
+  const [submissionsDialogOpen, setSubmissionsDialogOpen] = useState(false);
+  const [submissionsUser, setSubmissionsUser] = useState<UserWithRole | null>(null);
   const [isSyncingEmails, setIsSyncingEmails] = useState(false);
   const [editUserForm, setEditUserForm] = useState({
     email: '',
@@ -1742,6 +1746,10 @@ export default function ManageUsers() {
                                   {t('admin.viewProgress')}
                                 </DropdownMenuItem>
                               )}
+                              <DropdownMenuItem onClick={() => { setSubmissionsUser(user); setSubmissionsDialogOpen(true); }}>
+                                <Mic className="w-4 h-4 ml-2" />
+                                {t('assignment.admin.menuItem')}
+                              </DropdownMenuItem>
                               {(canEdit || (isInstructor && user.role === 'student')) && <DropdownMenuSeparator />}
                               {(canEdit || (isInstructor && user.role === 'student')) && (
                                 <DropdownMenuItem onClick={() => openResetPasswordDialog(user)}>
@@ -1853,6 +1861,10 @@ export default function ManageUsers() {
                                 {t('admin.viewProgress')}
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem onClick={() => { setSubmissionsUser(user); setSubmissionsDialogOpen(true); }}>
+                              <Mic className="w-4 h-4 ml-2" />
+                              {t('assignment.admin.menuItem')}
+                            </DropdownMenuItem>
                             {(canEdit || (isInstructor && user.role === 'student')) && <DropdownMenuSeparator />}
                             {(canEdit || (isInstructor && user.role === 'student')) && (
                               <DropdownMenuItem onClick={() => openResetPasswordDialog(user)}>
@@ -2617,6 +2629,13 @@ export default function ManageUsers() {
         open={progressDialogOpen}
         onOpenChange={setProgressDialogOpen}
         user={progressUser}
+      />
+
+      {/* Assignment Submissions Dialog */}
+      <AssignmentSubmissionsDialog
+        open={submissionsDialogOpen}
+        onOpenChange={setSubmissionsDialogOpen}
+        user={submissionsUser}
       />
     </>
   );
