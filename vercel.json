@@ -40,22 +40,6 @@
           "value": "camera=(self), microphone=(self), geolocation=(), payment=(), accelerometer=(), gyroscope=(), magnetometer=(), usb=(), interest-cohort=()"
         },
         {
-          "key": "X-XSS-Protection",
-          "value": "1; mode=block"
-        },
-        {
-          "key": "X-DNS-Prefetch-Control",
-          "value": "off"
-        },
-        {
-          "key": "X-Permitted-Cross-Domain-Policies",
-          "value": "none"
-        },
-        {
-          "key": "X-Download-Options",
-          "value": "noopen"
-        },
-        {
           "key": "Cross-Origin-Opener-Policy",
           "value": "same-origin"
         },
@@ -65,11 +49,11 @@
         },
         {
           "key": "Report-To",
-          "value": "{\"group\":\"csp-endpoint\",\"max_age\":10886400,\"endpoints\":[{\"url\":\"https://gmepopxxvgcwiqlkpuwd.supabase.co/functions/v1/csp-report\"}]}"
+          "value": "{\"group\":\"csp-endpoint\",\"max_age\":10886400,\"endpoints\":[{\"url\":\"https://your-project-ref.supabase.co/functions/v1/csp-report\"}]}"
         },
         {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.youtube.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://gmepopxxvgcwiqlkpuwd.supabase.co https://*.googleusercontent.com https://storage.googleapis.com https://*.vimeocdn.com https://i.ytimg.com; media-src 'self' blob: https://*.vimeocdn.com https://*.akamaized.net https://www.youtube.com https://gmepopxxvgcwiqlkpuwd.supabase.co; font-src 'self' data: https://*.gstatic.com; connect-src 'self' https://cloudflareinsights.com https://gmepopxxvgcwiqlkpuwd.supabase.co wss://gmepopxxvgcwiqlkpuwd.supabase.co https://hebreo-y-adaptaci-n-production.up.railway.app https://kg-api-production-01c2.up.railway.app https://vimeo.com https://player.vimeo.com https://api.vimeo.com https://*.vimeocdn.com https://www.youtube.com https://api.pwnedpasswords.com https://*.ingest.sentry.io; frame-src 'self' https://player.vimeo.com https://www.youtube.com https://www.youtube-nocookie.com https://*.supabase.co https://view.officeapps.live.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; manifest-src 'self'; upgrade-insecure-requests; report-uri https://gmepopxxvgcwiqlkpuwd.supabase.co/functions/v1/csp-report; report-to csp-endpoint"
+          "key": "Content-Security-Policy-Report-Only",
+          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://your-project-ref.supabase.co https://*.googleusercontent.com https://storage.googleapis.com https://*.vimeocdn.com https://i.ytimg.com; media-src 'self' blob: https://*.vimeocdn.com https://*.akamaized.net https://www.youtube.com https://your-project-ref.supabase.co; font-src 'self' data: https://*.gstatic.com; connect-src 'self' https://your-project-ref.supabase.co wss://your-project-ref.supabase.co https://generativelanguage.googleapis.com https://yt-dlp-service-new.onrender.com https://api.vimeo.com https://*.vimeocdn.com https://www.youtube.com https://api.pwnedpasswords.com https://kg.example.com https://*.ingest.sentry.io; frame-src 'self' https://player.vimeo.com https://www.youtube.com https://www.youtube-nocookie.com https://*.supabase.co https://view.officeapps.live.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; manifest-src 'self'; upgrade-insecure-requests; report-uri https://your-project-ref.supabase.co/functions/v1/csp-report; report-to csp-endpoint"
         }
       ]
     }
