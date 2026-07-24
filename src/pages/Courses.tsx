@@ -271,7 +271,12 @@ export default function Courses() {
             });
           }
 
-          const enrolledWithDetails = enrollments.map((e: any) => ({
+          const enrolledWithDetails = enrollments
+            // Drop enrollments whose course row couldn't be read (e.g. RLS
+            // hides it) — a null `courses` embed would otherwise spread into a
+            // title-less object and white-screen the list on `title.toLowerCase()`.
+            .filter((e: any) => e.courses)
+            .map((e: any) => ({
             ...e.courses,
             progress: Number(e.progress_percentage),
             enrolled_at: e.enrolled_at,
@@ -401,12 +406,12 @@ export default function Courses() {
   };
 
   const filteredAllCourses = allCourses.filter(course =>
-    course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (course.title ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     course.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredEnrolledCourses = enrolledCourses.filter(course =>
-    course.title.toLowerCase().includes(searchQuery.toLowerCase())
+    (course.title ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
