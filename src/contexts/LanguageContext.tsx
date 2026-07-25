@@ -800,6 +800,8 @@ const translations: Translations = {
   'nav.submissions': { he: 'הגשות', en: 'Submissions', es: 'Entregas' },
   'submissions.title': { he: 'בדיקת הגשות', en: 'Review submissions', es: 'Revisión de entregas' },
   'submissions.pendingCount': { he: 'ממתינות לבדיקה', en: 'awaiting review', es: 'en espera de revisión' },
+  'submissions.pendingCountOne': { he: 'הגשה אחת ממתינה לבדיקה', en: '1 awaiting review', es: '1 en espera de revisión' },
+  'submissions.stopBeforeSave': { he: 'עצרי את ההקלטה לפני השמירה כדי לצרף את הפידבק הקולי', en: 'Stop the recording before saving to attach the voice feedback', es: 'Detén la grabación antes de guardar para adjuntar el comentario de voz' },
   'submissions.filter.status': { he: 'סטטוס', en: 'Status', es: 'Estado' },
   'submissions.filter.pending': { he: 'ממתינות לבדיקה', en: 'Awaiting review', es: 'En espera' },
   'submissions.filter.reviewed': { he: 'נבדקו', en: 'Reviewed', es: 'Revisadas' },

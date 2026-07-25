@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Records real audio (MediaRecorder → Blob) for assignment submissions.
 // NOTE: distinct from useVoiceInput, which is speech-to-text and stores no audio.
@@ -51,12 +51,33 @@ export function useAudioRecorder() {
     if (mr && mr.state !== 'inactive') mr.stop();
   }, []);
 
+  // Fully tear down: if a recording is still in progress, stop it AND release
+  // the microphone tracks. reset() used to only clear React state, which
+  // orphaned a live MediaRecorder + MediaStream (mic indicator stayed on for
+  // the whole session) whenever a consumer reset mid-recording.
+  const teardown = useCallback(() => {
+    const mr = recorderRef.current;
+    if (mr && mr.state !== 'inactive') {
+      mr.onstop = null;          // detach so it can't race our setState below
+      mr.ondataavailable = null;
+      try { mr.stop(); } catch { /* already stopping */ }
+    }
+    recorderRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    chunksRef.current = [];
+  }, []);
+
   const reset = useCallback(() => {
+    teardown();
     setState((prev) => {
       if (prev.url) URL.revokeObjectURL(prev.url);
       return INITIAL;
     });
-  }, []);
+  }, [teardown]);
+
+  // Never leave the mic live if the component unmounts mid-recording.
+  useEffect(() => teardown, [teardown]);
 
   return { ...state, start, stop, reset };
 }

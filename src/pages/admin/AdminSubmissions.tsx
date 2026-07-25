@@ -161,14 +161,24 @@ export default function AdminSubmissions() {
 
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) ?? null, [rows, selectedId]);
 
-  // Keep a sensible selection on desktop: if the current one fell out of the
-  // filtered list (or nothing is selected yet), select the first visible row.
+  // Changing a filter or the search resets the selection to the top of the new
+  // list (a deliberate "show me the new results" jump).
   useEffect(() => {
-    if (loading) return;
-    if (selectedId && filtered.some((r) => r.id === selectedId)) return;
     setSelectedId(filtered[0]?.id ?? null);
     setMobileDetail(false);
-  }, [loading, filtered, selectedId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, courseFilter, lessonFilter, search]);
+
+  // Fallback: only re-pick when nothing is selected or the selected row no
+  // longer EXISTS (reload/delete). Keyed on `rows`, not `filtered`, so a plain
+  // Save — which drops the row out of the pending filter but keeps it in rows —
+  // does NOT yank the reviewer to another student.
+  useEffect(() => {
+    if (loading) return;
+    if (selectedId && rows.some((r) => r.id === selectedId)) return;
+    setSelectedId(filtered[0]?.id ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, rows]);
 
   // Selecting a submission resets the feedback form to that row's saved state.
   useEffect(() => {
@@ -236,7 +246,10 @@ export default function AdminSubmissions() {
         if (next) {
           setSelectedId(next.id);
         } else {
-          toast({ title: t('submissions.queueDone') });
+          // Only celebrate when the WHOLE queue is empty — not merely when the
+          // current (e.g. "reviewed") filter has no more pending rows.
+          const anyPendingLeft = rows.some((r) => r.id !== selected.id && r.status === 'submitted');
+          if (!anyPendingLeft) toast({ title: t('submissions.queueDone') });
           setMobileDetail(false);
         }
       }
@@ -245,7 +258,7 @@ export default function AdminSubmissions() {
     } finally {
       setSaving(false);
     }
-  }, [selected, recorder, draft, authUser, filtered, toast, t]);
+  }, [selected, recorder, draft, authUser, filtered, rows, toast, t]);
 
   const initials = (name: string) => name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
   const student = (id: string) => profiles[id];
@@ -264,7 +277,9 @@ export default function AdminSubmissions() {
           <ClipboardCheck className="w-5 h-5 text-primary" /> {t('submissions.title')}
         </h2>
         {pendingTotal > 0 && (
-          <Badge className="font-bold">{pendingTotal} {t('submissions.pendingCount')}</Badge>
+          <Badge className="font-bold">
+            {pendingTotal === 1 ? t('submissions.pendingCountOne') : `${pendingTotal} ${t('submissions.pendingCount')}`}
+          </Badge>
         )}
         <div className="flex flex-wrap items-center gap-2 ms-auto">
           <div className="relative">
@@ -273,7 +288,7 @@ export default function AdminSubmissions() {
               placeholder={t('submissions.searchPlaceholder')} className="ps-9 w-44 sm:w-52" />
           </div>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-40" aria-label={t('submissions.filter.status')}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="pending">{t('submissions.filter.pending')}</SelectItem>
               <SelectItem value="reviewed">{t('submissions.filter.reviewed')}</SelectItem>
@@ -281,14 +296,14 @@ export default function AdminSubmissions() {
             </SelectContent>
           </Select>
           <Select value={courseFilter} onValueChange={(v) => { setCourseFilter(v); setLessonFilter('all'); }}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-40" aria-label={t('submissions.filter.allCourses')}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('submissions.filter.allCourses')}</SelectItem>
               {courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={lessonFilter} onValueChange={setLessonFilter}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-40" aria-label={t('submissions.filter.allLessons')}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('submissions.filter.allLessons')}</SelectItem>
               {lessons.map((l) => <SelectItem key={l.id} value={l.id}>{l.title}</SelectItem>)}
@@ -304,7 +319,12 @@ export default function AdminSubmissions() {
           {filtered.length === 0 ? (
             <div className="py-16 px-6 text-center text-sm text-muted-foreground space-y-2">
               <Inbox className="w-8 h-8 mx-auto opacity-50" />
-              <p>{statusFilter === 'pending' ? t('submissions.emptyPending') : t('submissions.empty')}</p>
+              {/* Only celebrate "all caught up" when the emptiness is genuinely
+                  because nothing is pending — not because a course/lesson/search
+                  filter narrowed the list while other pending items remain. */}
+              <p>{statusFilter === 'pending' && courseFilter === 'all' && lessonFilter === 'all' && !search.trim()
+                ? t('submissions.emptyPending')
+                : t('submissions.empty')}</p>
             </div>
           ) : (
             <ul className="divide-y divide-border/60 max-h-[70vh] overflow-y-auto">
@@ -434,12 +454,15 @@ export default function AdminSubmissions() {
                   {recorder.error && <p className="text-xs text-destructive">{t('assignment.micError')}</p>}
                 </div>
 
+                {recorder.status === 'recording' && (
+                  <p className="text-xs text-muted-foreground">{t('submissions.stopBeforeSave')}</p>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button className="font-bold" disabled={saving} onClick={() => void save(true)}>
+                  <Button className="font-bold" disabled={saving || recorder.status === 'recording'} onClick={() => void save(true)}>
                     {saving ? <Loader2 className="w-4 h-4 me-2 animate-spin" /> : <SendHorizonal className="w-4 h-4 me-2 rtl:rotate-180" />}
                     {t('submissions.saveAndNext')}
                   </Button>
-                  <Button variant="outline" disabled={saving} onClick={() => void save(false)}>
+                  <Button variant="outline" disabled={saving || recorder.status === 'recording'} onClick={() => void save(false)}>
                     <Save className="w-4 h-4 me-2" /> {t('assignment.admin.saveFeedback')}
                   </Button>
                 </div>

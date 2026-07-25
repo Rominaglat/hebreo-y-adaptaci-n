@@ -24,9 +24,15 @@ BEGIN
        OR NEW.feedback_by IS DISTINCT FROM OLD.feedback_by
        OR NEW.feedback_at IS DISTINCT FROM OLD.feedback_at
        OR NEW.feedback_audio_path IS DISTINCT FROM OLD.feedback_audio_path
+       -- submitted_at drives the review-queue order and lesson_id/user_id
+       -- bind the row to a student+assignment; a non-staff owner may not touch
+       -- them (a legit resubmit keeps all three identical, so it still passes).
+       OR NEW.submitted_at IS DISTINCT FROM OLD.submitted_at
+       OR NEW.lesson_id IS DISTINCT FROM OLD.lesson_id
+       OR NEW.user_id IS DISTINCT FROM OLD.user_id
        OR (NEW.status IS DISTINCT FROM OLD.status
            AND NOT (OLD.status = 'reviewed' AND NEW.status = 'submitted')) THEN
-      RAISE EXCEPTION 'only staff may set feedback/status';
+      RAISE EXCEPTION 'only staff may set feedback/status or move a submission';
     END IF;
   END IF;
   RETURN NEW;
@@ -84,4 +90,31 @@ CREATE POLICY "assignment_audio_staff_feedback_update"
     bucket_id = 'assignment-audio'
     AND public.is_admin_or_instructor(auth.uid())
     AND name LIKE '%/feedback.webm'
+  );
+
+-- Re-scope the STUDENT write policies (from 20260713110000) to EXCLUDE the
+-- feedback file, so a student can no longer overwrite the teacher's voice
+-- feedback stored under their own prefix (staff write it via the policies
+-- above; the student keeps read access via the unchanged owner-read policy).
+-- Answer objects are '<uid>/<lessonId>/<questionUuid>.webm' — a question id is
+-- a crypto.randomUUID(), never the literal 'feedback', so this exclusion never
+-- blocks a legitimate answer upload.
+DROP POLICY IF EXISTS "assignment_audio_owner_insert" ON storage.objects;
+CREATE POLICY "assignment_audio_owner_insert"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'assignment-audio'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+    AND name NOT LIKE '%/feedback.webm'
+  );
+
+DROP POLICY IF EXISTS "assignment_audio_owner_update" ON storage.objects;
+CREATE POLICY "assignment_audio_owner_update"
+  ON storage.objects FOR UPDATE
+  USING (
+    bucket_id = 'assignment-audio'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+    AND name NOT LIKE '%/feedback.webm'
   );
