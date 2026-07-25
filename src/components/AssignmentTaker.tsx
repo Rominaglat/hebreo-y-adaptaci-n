@@ -76,6 +76,7 @@ export default function AssignmentTaker({ lessonId, questions, onComplete }: Ass
   const [audioUrls, setAudioUrls] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<'submitted' | 'reviewed' | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedbackAudioUrl, setFeedbackAudioUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const handles = useState(() => new Map<string, QuestionHandle>())[0];
@@ -85,7 +86,7 @@ export default function AssignmentTaker({ lessonId, questions, onComplete }: Ass
     setLoading(true);
     const { data } = await supabase
       .from('assignment_submissions')
-      .select('answers, status, feedback_text')
+      .select('answers, status, feedback_text, feedback_audio_path')
       .eq('lesson_id', lessonId).eq('user_id', user.id).maybeSingle();
 
     if (data) {
@@ -103,6 +104,12 @@ export default function AssignmentTaker({ lessonId, questions, onComplete }: Ass
       setAudioUrls(urls);
       setStatus(data.status as 'submitted' | 'reviewed');
       setFeedback(data.feedback_text);
+      if (data.feedback_audio_path) {
+        const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(data.feedback_audio_path, 3600);
+        setFeedbackAudioUrl(signed?.signedUrl ?? null);
+      } else {
+        setFeedbackAudioUrl(null);
+      }
     }
     setLoading(false);
   }, [user, lessonId]);
@@ -145,7 +152,7 @@ export default function AssignmentTaker({ lessonId, questions, onComplete }: Ass
   if (loading) return <Card className="p-6 animate-pulse h-40" />;
 
   const hasSubmitted = status !== null;
-  const isReviewed = status === 'reviewed' && !!feedback;
+  const isReviewed = status === 'reviewed' && (!!feedback || !!feedbackAudioUrl);
 
   return (
     <Card>
@@ -160,7 +167,13 @@ export default function AssignmentTaker({ lessonId, questions, onComplete }: Ass
             <p className="text-sm font-bold text-foreground flex items-center gap-2 mb-1">
               <MessageSquare className="w-4 h-4 text-primary" /> {t('assignment.feedbackTitle')}
             </p>
-            <p className="text-sm text-foreground whitespace-pre-wrap">{feedback}</p>
+            {feedback && <p className="text-sm text-foreground whitespace-pre-wrap">{feedback}</p>}
+            {feedbackAudioUrl && (
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-muted-foreground">{t('assignment.feedbackListen')}</p>
+                <audio controls src={feedbackAudioUrl} className="h-9 w-full" />
+              </div>
+            )}
           </div>
         )}
         {hasSubmitted && !isReviewed && (

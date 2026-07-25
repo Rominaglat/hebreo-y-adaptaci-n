@@ -56,6 +56,7 @@ export type Database = {
           feedback_text: string | null
           feedback_by: string | null
           feedback_at: string | null
+          feedback_audio_path: string | null
           submitted_at: string
           updated_at: string
         }
@@ -70,6 +71,7 @@ export type Database = {
           feedback_text?: string | null
           feedback_by?: string | null
           feedback_at?: string | null
+          feedback_audio_path?: string | null
           submitted_at?: string
           updated_at?: string
         }
@@ -84,6 +86,7 @@ export type Database = {
           feedback_text?: string | null
           feedback_by?: string | null
           feedback_at?: string | null
+          feedback_audio_path?: string | null
           submitted_at?: string
           updated_at?: string
         }

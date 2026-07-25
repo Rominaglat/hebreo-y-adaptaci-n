@@ -1,7 +1,7 @@
 import { ReactNode, Suspense, useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Home, BookOpen, Video, Calendar, User, LogOut, Menu, X, Bell, Settings, Megaphone, UserPlus, Sun, Moon, CheckCheck, Gift, UsersRound, GraduationCap, Search, Lock } from 'lucide-react';
+import { Home, BookOpen, Video, Calendar, User, LogOut, Menu, X, Bell, Settings, Megaphone, UserPlus, Sun, Moon, CheckCheck, Gift, UsersRound, GraduationCap, Search, Lock, ClipboardCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -118,7 +118,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // muted) so the surface area of the platform is visible to them as a
   // "what you'll unlock when you upgrade" tease — without actually
   // routing them into pages they shouldn't see.
-  const navItems = [
+  const navItems: { icon: typeof Home; label: string; path: string; badge?: number }[] = [
     { icon: Home, label: t('nav.dashboard'), path: '/dashboard' },
     { icon: BookOpen, label: t('nav.courses'), path: '/courses' },
     { icon: GraduationCap, label: t('nav.learningPath'), path: '/learning-path' },
@@ -133,9 +133,28 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const isInstructorInCurrentTenant = tenantRole === 'instructor' || isInstructor;
   const isInstructorOrHigherInCurrentTenant = isAdminInCurrentTenant || isInstructorInCurrentTenant;
 
+  // Staff-only: how many submissions await review (sidebar badge). Head-only
+  // count query — refreshed on navigation and when the review page saves
+  // (window 'submissions:changed' event). No realtime on purpose.
+  const [pendingSubmissions, setPendingSubmissions] = useState(0);
+  useEffect(() => {
+    if (!isInstructorOrHigherInCurrentTenant) { setPendingSubmissions(0); return; }
+    const fetchCount = async () => {
+      const { count } = await supabase
+        .from('assignment_submissions')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'submitted');
+      setPendingSubmissions(count ?? 0);
+    };
+    void fetchCount();
+    window.addEventListener('submissions:changed', fetchCount);
+    return () => window.removeEventListener('submissions:changed', fetchCount);
+  }, [isInstructorOrHigherInCurrentTenant, location.pathname]);
+
   // Items visible to instructors AND admins (read-only access for instructors).
   const instructorPlusNavItems = [
     { icon: UserPlus, label: t('nav.manageUsers'), path: '/admin/users' },
+    { icon: ClipboardCheck, label: t('nav.submissions'), path: '/admin/submissions', badge: pendingSubmissions },
   ];
 
   // Items visible only to admins/super_admins.
@@ -154,6 +173,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       '/calendar': t('nav.calendar'),
       '/announcements': t('nav.announcements'),
       '/admin/users': t('nav.manageUsers'),
+      '/admin/submissions': t('nav.submissions'),
       '/admin/settings': t('nav.settings'),
       '/profile': t('nav.profile'),
     };
@@ -267,7 +287,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     "w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110",
                     isActive ? "text-white" : ""
                   )} />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {typeof item.badge === 'number' && item.badge > 0 && (
+                    <span className="min-w-5 h-5 px-1.5 rounded-full bg-accent text-accent-foreground text-[11px] font-bold flex items-center justify-center flex-shrink-0">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
