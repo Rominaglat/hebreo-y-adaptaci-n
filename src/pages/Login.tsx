@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { Lock, Loader2, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -229,6 +229,21 @@ export default function Login() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Trust footer — organization identity, contact and legal links.
+            Present so this login page reads as a real product surface (to
+            people and to automated reputation scanners) rather than a bare
+            credential form. */}
+        <footer className="mt-6 text-center space-y-2">
+          <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-white/45">
+            <Link to="/privacy" className="hover:text-white/80 underline-offset-4 hover:underline transition-colors">{t('legal.privacy')}</Link>
+            <span aria-hidden className="text-white/20">·</span>
+            <Link to="/terms" className="hover:text-white/80 underline-offset-4 hover:underline transition-colors">{t('legal.terms')}</Link>
+            <span aria-hidden className="text-white/20">·</span>
+            <a href="mailto:soporte@rominahebreo.com" className="hover:text-white/80 underline-offset-4 hover:underline transition-colors">{t('legal.contact')}</a>
+          </nav>
+          <p className="text-xs text-white/35">© {new Date().getFullYear()} Hebreo y Adaptación — Romina Glatstein</p>
+        </footer>
       </motion.section>
     </main>
   );

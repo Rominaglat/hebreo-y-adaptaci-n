@@ -36,6 +36,8 @@ const InstallApp = lazy(() => import("./pages/InstallApp"));
 const LearningPath = lazy(() => import("./pages/LearningPath"));
 const SecuritySettings = lazy(() => import("./pages/SecuritySettings"));
 const AcceptInvite = lazy(() => import("./pages/AcceptInvite"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Terms = lazy(() => import("./pages/Terms"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +70,8 @@ const App = () => (
                     {/* Public routes */}
                     <Route path="/login" element={<Login />} />
                     <Route path="/accept-invite" element={<AcceptInvite />} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/terms" element={<Terms />} />
 
                     {/* All protected routes share DashboardLayout (stays mounted).
                         Leads (preview/sales accounts) are denied access to every
