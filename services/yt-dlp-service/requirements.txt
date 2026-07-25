@@ -2,5 +2,8 @@ flask==3.1.0
 flask-cors==5.0.1
 gunicorn==23.0.0
 requests==2.32.3
-yt-dlp==2025.3.31
-curl_cffi==0.7.4
+# yt-dlp[default] pulls a matching curl_cffi (the impersonation backend) so
+# `--impersonate chrome` works, and stays current with YouTube's frequent
+# anti-bot changes. Pinning an old yt-dlp is what left the service unable to
+# fetch videos. Kept unpinned deliberately — yt-dlp is meant to run latest.
+yt-dlp[default]

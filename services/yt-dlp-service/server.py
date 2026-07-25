@@ -544,31 +544,46 @@ def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir):
     (YT_DLP_COOKIES env var) when present for unlisted / age-restricted
     videos. Returns the local audio file path."""
     out_template = os.path.join(tmpdir, "audio.%(ext)s")
-    cmd = [
-        "yt-dlp",
+    base_flags = [
         "-f", "bestaudio/best",
         "-x", "--audio-format", "mp3",
         "--extractor-args", "youtube:player_client=web,android,ios",
-        "--impersonate", "chrome",
         "-o", out_template,
     ]
-    if COOKIES_FILE:
-        cmd += ["--cookies", COOKIES_FILE]
+    # Only pass --cookies when the file actually exists. COOKIES_FILE is a
+    # constant path string (always truthy); the file is written only when the
+    # YT_DLP_COOKIES env var is set. The old `if COOKIES_FILE:` guard therefore
+    # always added `--cookies <nonexistent>`, which made yt-dlp abort.
+    if os.path.exists(COOKIES_FILE):
+        base_flags += ["--cookies", COOKIES_FILE]
     if referer_url:
-        cmd += ["--referer", referer_url]
-    cmd.append(video_url)
+        base_flags += ["--referer", referer_url]
 
-    print(f"[{job_id}] yt-dlp cmd: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    print(f"[{job_id}] yt-dlp exit={result.returncode}")
-    if result.returncode != 0:
-        print(f"[{job_id}] yt-dlp stderr: {result.stderr[-500:]}")
-        raise RuntimeError(f"yt-dlp failed: {result.stderr.strip()[-300:]}")
-
-    files = glob.glob(os.path.join(tmpdir, "audio.*"))
-    if not files:
-        raise RuntimeError("yt-dlp produced no audio file")
-    return files[0]
+    # Try with chrome impersonation first (best evasion of YouTube's cloud-IP
+    # bot detection). If the impersonation backend (curl_cffi) isn't available
+    # in this image, yt-dlp hard-errors at init with "Impersonate target ...
+    # not available" — fall back to a plain run instead of failing the job.
+    last_err = ""
+    for impersonate in (["--impersonate", "chrome"], []):
+        cmd = ["yt-dlp"] + impersonate + base_flags + [video_url]
+        print(f"[{job_id}] yt-dlp cmd: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        print(f"[{job_id}] yt-dlp exit={result.returncode}")
+        if result.returncode == 0:
+            files = glob.glob(os.path.join(tmpdir, "audio.*"))
+            if not files:
+                raise RuntimeError("yt-dlp produced no audio file")
+            return files[0]
+        last_err = result.stderr.strip()
+        print(f"[{job_id}] yt-dlp stderr: {last_err[-500:]}")
+        # Only the impersonation-availability error is worth retrying without
+        # impersonation; any other failure (bot check, private video, network)
+        # would fail the same way plain, so stop and surface it.
+        if impersonate and "impersonate" in last_err.lower():
+            print(f"[{job_id}] impersonation unavailable — retrying without it")
+            continue
+        break
+    raise RuntimeError(f"yt-dlp failed: {last_err[-300:]}")
 
 
 def process_job(job_id, video_url, file_url, referer_url, language, user_id, transcript_text=None):
