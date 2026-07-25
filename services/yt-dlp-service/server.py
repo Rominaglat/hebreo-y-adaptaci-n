@@ -392,12 +392,21 @@ def gemini_transcribe(file_uri, mime_type, language):
         try:
             chunk = _gemini_transcribe_chunk(file_uri, mime_type, language, start, end)
         except RuntimeError as e:
-            # MAX_TOKENS on the FIRST chunk means even 15min didn't fit,
-            # which would be unusual — bubble up so the user sees it.
-            # On later chunks it's almost certainly past-end-of-video noise.
-            if i == 0 or "MAX_TOKENS" not in str(e):
+            # Nothing captured yet → this is a genuine first-chunk failure
+            # (bad media, quota, MAX_TOKENS even at 15 min). Surface it.
+            if not transcripts:
                 raise
-            print(f"[transcribe] chunk {i} ({start}-{end}s) errored after end of video: {e}")
+            # We already have transcript content. For a window that lies PAST
+            # THE END of the video, Gemini does not return a clean empty
+            # response — it returns an error, most often `500 INTERNAL`
+            # (also seen: MAX_TOKENS). Treating that as a hard failure is what
+            # broke the whole feature: the past-end chunk threw away the good
+            # transcript from the earlier chunks. Treat any later-chunk error
+            # as end-of-video and keep what we have.
+            # Trade-off: a genuinely transient 500 in the MIDDLE of a long
+            # video truncates the tail — still strictly better than failing
+            # the entire job, and 429/503 are already retried in _gemini_call.
+            print(f"[transcribe] chunk {i} ({start}-{end}s) failed past captured content — treating as end of video: {str(e)[:200]}")
             break
         if len(chunk) < 30:
             # Empty / tiny → past end of video.
@@ -405,6 +414,8 @@ def gemini_transcribe(file_uri, mime_type, language):
             break
         print(f"[transcribe] chunk {i} ({start}-{end}s): {len(chunk)} chars")
         transcripts.append(chunk)
+    if not transcripts:
+        raise RuntimeError("Gemini returned no transcript (no chunks captured)")
     return "\n\n".join(transcripts)
 
 
