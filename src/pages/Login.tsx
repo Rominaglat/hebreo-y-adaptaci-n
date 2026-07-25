@@ -240,7 +240,7 @@ export default function Login() {
             <span aria-hidden className="text-white/20">·</span>
             <Link to="/terms" className="hover:text-white/80 underline-offset-4 hover:underline transition-colors">{t('legal.terms')}</Link>
             <span aria-hidden className="text-white/20">·</span>
-            <a href="mailto:soporte@rominahebreo.com" className="hover:text-white/80 underline-offset-4 hover:underline transition-colors">{t('legal.contact')}</a>
+            <a href="mailto:almaanabella83@gmail.com" className="hover:text-white/80 underline-offset-4 hover:underline transition-colors">{t('legal.contact')}</a>
           </nav>
           <p className="text-xs text-white/35">© {new Date().getFullYear()} Hebreo y Adaptación — Romina Glatstein</p>
         </footer>

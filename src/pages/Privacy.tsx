@@ -89,8 +89,8 @@ export default function Privacy() {
             <h2 className="text-base font-semibold text-primary mb-2">Tus derechos</h2>
             <p>
               Puedes solicitar acceso, rectificación o eliminación de tus datos escribiéndonos a{' '}
-              <a href="mailto:soporte@rominahebreo.com" className="text-primary underline underline-offset-4">
-                soporte@rominahebreo.com
+              <a href="mailto:almaanabella83@gmail.com" className="text-primary underline underline-offset-4">
+                almaanabella83@gmail.com
               </a>
               .
             </p>
@@ -100,8 +100,8 @@ export default function Privacy() {
             <h2 className="text-base font-semibold text-primary mb-2">Contacto</h2>
             <p>
               Responsable: Romina Glatstein — Hebreo y Adaptación. Correo:{' '}
-              <a href="mailto:soporte@rominahebreo.com" className="text-primary underline underline-offset-4">
-                soporte@rominahebreo.com
+              <a href="mailto:almaanabella83@gmail.com" className="text-primary underline underline-offset-4">
+                almaanabella83@gmail.com
               </a>
               .
             </p>

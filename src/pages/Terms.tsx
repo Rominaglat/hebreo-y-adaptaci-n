@@ -74,8 +74,8 @@ export default function Terms() {
             <h2 className="text-base font-semibold text-primary mb-2">Contacto</h2>
             <p>
               Para cualquier duda escríbenos a{' '}
-              <a href="mailto:soporte@rominahebreo.com" className="text-primary underline underline-offset-4">
-                soporte@rominahebreo.com
+              <a href="mailto:almaanabella83@gmail.com" className="text-primary underline underline-offset-4">
+                almaanabella83@gmail.com
               </a>
               .
             </p>
