@@ -547,7 +547,12 @@ def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir):
     base_flags = [
         "-f", "bestaudio/best",
         "-x", "--audio-format", "mp3",
-        "--extractor-args", "youtube:player_client=web,android,ios",
+        # Drop the `web` client — it's what trips YouTube's "sign in to confirm
+        # you're not a bot" challenge from a datacenter IP. Lead with the tv /
+        # android_vr clients, which don't need a PO token and are the most
+        # likely to fetch without cookies. (If this still gets blocked, the
+        # only reliable fix is real YT_DLP_COOKIES.)
+        "--extractor-args", "youtube:player_client=tv,android_vr,ios",
         "-o", out_template,
     ]
     # Only pass --cookies when the file actually exists. COOKIES_FILE is a
