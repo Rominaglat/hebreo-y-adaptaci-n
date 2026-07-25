@@ -6,7 +6,7 @@ import logo from '@/assets/logo.svg';
 // signal for reputation/anti-phishing scanners.
 export default function Terms() {
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main dir="ltr" lang="es" className="min-h-screen bg-background text-foreground">
       <div className="max-w-2xl mx-auto px-5 py-10">
         <header className="flex items-center gap-3 mb-8">
           <img src={logo} alt="Hebreo y Adaptación" className="w-11 h-11 rounded-xl" />

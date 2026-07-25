@@ -7,7 +7,7 @@ import logo from '@/assets/logo.svg';
 // product to reputation/anti-phishing scanners.
 export default function Privacy() {
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main dir="ltr" lang="es" className="min-h-screen bg-background text-foreground">
       <div className="max-w-2xl mx-auto px-5 py-10">
         <header className="flex items-center gap-3 mb-8">
           <img src={logo} alt="Hebreo y Adaptación" className="w-11 h-11 rounded-xl" />
@@ -35,6 +35,8 @@ export default function Privacy() {
               <li>Datos de cuenta: nombre y correo electrónico.</li>
               <li>Actividad de aprendizaje: progreso, lecciones completadas y objetivos.</li>
               <li>Entregas de tareas: texto y, opcionalmente, grabaciones de voz que envías.</li>
+              <li>Mensajes que escribes al asistente de inteligencia artificial de la plataforma.</li>
+              <li>En las salas de estudio en directo: el audio y el vídeo de tu micrófono y cámara mientras participas.</li>
               <li>Datos técnicos mínimos necesarios para la seguridad de la sesión.</li>
             </ul>
           </section>
@@ -50,10 +52,27 @@ export default function Privacy() {
 
           <section>
             <h2 className="text-base font-semibold text-primary mb-2">Proveedores</h2>
+            <p>Nos apoyamos en proveedores que tratan datos por cuenta nuestra, cada uno limitado a su función:</p>
+            <ul className="list-disc ps-5 space-y-1 mt-2">
+              <li>Supabase — base de datos, autenticación y almacenamiento de archivos.</li>
+              <li>Resend — envío de correos electrónicos.</li>
+              <li>Vercel y Cloudflare — alojamiento y red.</li>
+              <li>
+                Google (Gemini) — cuando usas el asistente de inteligencia artificial o funciones
+                inteligentes, tu mensaje y el contenido de la lección se envían a Google para generar
+                la respuesta, la transcripción o las recomendaciones.
+              </li>
+              <li>Un servicio de grafo de conocimiento que procesa contenido de los cursos para generar recomendaciones de aprendizaje.</li>
+              <li>Sentry — registro de errores técnicos para mantener el servicio (cuando está activado).</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-base font-semibold text-primary mb-2">Salas de estudio en directo</h2>
             <p>
-              Nos apoyamos en proveedores que tratan datos por cuenta nuestra: Supabase (base de datos,
-              autenticación y almacenamiento), Resend (envío de correos), y Vercel y Cloudflare
-              (alojamiento y red). Cada uno accede solo a lo necesario para su función.
+              Las salas de estudio funcionan mediante conexión directa entre participantes (WebRTC).
+              Durante una sesión, tu audio, tu vídeo y tu dirección IP se comparten directamente con las
+              demás personas presentes en la sala para hacer posible la videollamada.
             </p>
           </section>
 
