@@ -326,7 +326,14 @@ export default function Courses() {
         .eq('id', courseId);
 
       if (error) throw error;
-      
+
+      // Publishing state decides whether a course participates in the
+      // prerequisite chain at all: an unpublished course is invisible to
+      // students, so it can never be completed and must never gate anything.
+      // Re-derive the chain so a publish/unpublish can't strand students.
+      const { error: chainError } = await supabase.rpc('admin_rebuild_course_prerequisites');
+      if (chainError) console.error('Error rebuilding prerequisite chain:', chainError);
+
       toast.success(currentStatus ? t('courses.unpublished') : t('courses.published'));
       fetchCourses();
     } catch (error) {
@@ -372,25 +379,35 @@ export default function Courses() {
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    if (!isAdmin) return;
     if (over && active.id !== over.id) {
+      const previousOrder = allCourses;
       const oldIndex = allCourses.findIndex(c => c.id === active.id);
       const newIndex = allCourses.findIndex(c => c.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
       const newOrder = arrayMove(allCourses, oldIndex, newIndex);
       setAllCourses(newOrder);
 
-      // Update order_index in database
+      // Persist through admin_reorder_courses() rather than a per-course
+      // UPDATE loop. The RPC writes order_index AND re-derives
+      // courses.prerequisite_course_id in one transaction — cross-course
+      // gating keys off the prerequisite pointer, not off order_index, so a
+      // reorder that only moved order_index used to leave students locked
+      // behind whatever course happened to precede this one before.
       try {
-        for (let i = 0; i < newOrder.length; i++) {
-          await supabase
-            .from('courses')
-            .update({ order_index: i })
-            .eq('id', newOrder[i].id);
-        }
+        const { error } = await supabase.rpc('admin_reorder_courses', {
+          p_course_ids: newOrder.map(c => c.id),
+        });
+        if (error) throw error;
         toast.success(t('coursesPage.orderSaved'));
+        // Re-read so the new prerequisite chain and lock states are reflected
+        // without a page reload.
+        fetchCourses();
       } catch (error) {
         console.error('Error saving order:', error);
         toast.error(t('common.error'));
-        fetchCourses(); // Revert on error
+        setAllCourses(previousOrder); // Revert the optimistic move
+        fetchCourses();
       }
     }
   };

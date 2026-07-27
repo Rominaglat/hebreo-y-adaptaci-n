@@ -2166,6 +2166,15 @@ export type Database = {
       }
     }
     Functions: {
+      admin_rebuild_course_prerequisites: { Args: never; Returns: number }
+      admin_reorder_courses: {
+        Args: { p_course_ids: string[] }
+        Returns: {
+          course_id: string
+          order_position: number
+          prerequisite_id: string | null
+        }[]
+      }
       check_and_increment_rate_limit: {
         Args: { p_key: string; p_limit_per_minute: number }
         Returns: boolean
@@ -2218,6 +2227,18 @@ export type Database = {
         Returns: boolean
       }
       is_admin_or_instructor: { Args: { _user_id: string }; Returns: boolean }
+      is_course_unlocked: {
+        Args: { p_course_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      is_lesson_unlocked: {
+        Args: { p_lesson_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      my_course_lock_states: {
+        Args: never
+        Returns: { course_id: string; is_unlocked: boolean }[]
+      }
       is_course_instructor: {
         Args: { _course_id: string; _user_id: string }
         Returns: boolean

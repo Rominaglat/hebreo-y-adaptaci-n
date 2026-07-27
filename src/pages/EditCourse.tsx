@@ -131,6 +131,10 @@ export default function EditCourse() {
   // candidate list for the prerequisite dropdown. Loaded once on mount,
   // self is filtered out at render time.
   const [otherCourses, setOtherCourses] = useState<{ id: string; title: string }[]>([]);
+  // Publish state as loaded, so a save can tell whether the flag actually
+  // flipped — flipping it changes which courses take part in the
+  // cross-course prerequisite chain and so requires re-deriving it.
+  const initialPublishedRef = useRef<boolean | null>(null);
 
   const [modules, setModules] = useState<ModuleForm[]>([]);
   const [collapsedModules, setCollapsedModules] = useState<Set<number>>(new Set());
@@ -232,6 +236,7 @@ export default function EditCourse() {
           lessons_in_order: (course as any).lessons_in_order !== false,
           prerequisite_course_id: (course as any).prerequisite_course_id || null,
         });
+        initialPublishedRef.current = course.is_published;
 
         // Pull the candidate list for the prerequisite dropdown.
         const { data: candidates } = await supabase
@@ -444,6 +449,19 @@ export default function EditCourse() {
         .eq('id', id);
 
       if (courseError) throw courseError;
+
+      // Unpublishing a course pulls it out of the prerequisite chain, and
+      // publishing puts it back in. Leaving the chain stale here is what
+      // locked students out of "Hebreo conversacional" behind an unpublished
+      // course they could never see, so re-derive it whenever the flag flips.
+      // Only on an actual flip — an ordinary save must not overwrite a
+      // prerequisite the admin just picked in the dropdown above.
+      if (initialPublishedRef.current !== null
+          && initialPublishedRef.current !== courseData.is_published) {
+        const { error: chainError } = await supabase.rpc('admin_rebuild_course_prerequisites');
+        if (chainError) console.error('Error rebuilding prerequisite chain:', chainError);
+        initialPublishedRef.current = courseData.is_published;
+      }
 
       // Update course instructors
       await supabase.from('course_instructors').delete().eq('course_id', id);
