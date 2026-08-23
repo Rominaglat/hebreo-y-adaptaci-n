@@ -36,3 +36,9 @@ verify_jwt = false
 
 [functions.ai-assistant]
 verify_jwt = false
+
+[functions.send-lifecycle-emails]
+verify_jwt = false
+
+[functions.lifecycle-unsubscribe]
+verify_jwt = false

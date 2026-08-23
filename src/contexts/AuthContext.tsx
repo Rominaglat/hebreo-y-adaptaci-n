@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { useActivityPing } from '@/hooks/useActivityPing';
 
 type AppRole = 'admin' | 'instructor' | 'student' | 'super_admin' | 'lead';
 
@@ -58,6 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(null);
   const [tenantProfile, setTenantProfile] = useState<TenantProfile | null>(null);
   const [tenantRole, setTenantRole] = useState<AppRole | null>(null);
+
+  // Records portal activity for the 7-day win-back email (throttled to 1/hour).
+  useActivityPing(user?.id);
 
   const logActivity = async (userId: string, activityType: string, description: string, action?: string, metadata?: object) => {
     try {

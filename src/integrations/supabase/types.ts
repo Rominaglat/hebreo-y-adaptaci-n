@@ -2265,6 +2265,7 @@ export type Database = {
         Returns: undefined
       }
       strip_html_tags: { Args: { input: string }; Returns: string }
+      touch_last_active: { Args: Record<string, never>; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "instructor" | "student" | "super_admin" | "lead"
