@@ -44,6 +44,16 @@ if YT_DLP_COOKIES:
 else:
     COOKIES_FILE = ""
 
+# Escape hatches for YouTube's ever-moving anti-bot measures. Both are
+# settable on Railway without touching this file, so the next breakage can be
+# worked around in a minute instead of a deploy cycle:
+#   YT_DLP_EXTRACTOR_ARGS — e.g. "youtube:player_client=default,tv_simply"
+#   YT_DLP_PROXY          — e.g. "http://user:pass@residential-proxy:8080"
+#                            (a residential proxy is the reliable cure for the
+#                             datacenter-IP bot challenge, cookies aside)
+YT_DLP_EXTRACTOR_ARGS = os.environ.get("YT_DLP_EXTRACTOR_ARGS", "")
+YT_DLP_PROXY = os.environ.get("YT_DLP_PROXY", "")
+
 GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_BASE = "https://generativelanguage.googleapis.com"
 
@@ -321,41 +331,54 @@ MAX_CHUNKS = 20        # 5 hours hard cap as a safety net
 
 
 def _gemini_transcribe_chunk(file_uri, mime_type, language, start_secs, end_secs):
-    """Transcribe a single [start, end] range of the video.
+    """Transcribe the media at file_uri.
+
+    With start_secs/end_secs set, only that window is transcribed. Pass None
+    for both to transcribe the whole thing in one pass — which is the ONLY
+    correct mode for a file uploaded to the Files API, because Gemini
+    silently IGNORES videoMetadata offsets on uploaded audio. Verified
+    2026-08-27 on a 1964s lesson: eight "windows" spanning 0-7200s each came
+    back re-transcribing the same recording from its first sentence
+    ("Entonces, repaso, repaso..."), 67-98% similar to one another, giving a
+    168,361-char transcript of a 32-minute class. Offsets do work for a
+    YouTube URL, so that path still chunks.
 
     Retries once with a higher temperature if Gemini's RECITATION filter
     fires — it's stochastic and a second sample with more randomness
     usually slips past the filter. Hebrew lessons that quote scripture
     or contain familiar phrasing trigger it inconsistently."""
+    whole = start_secs is None or end_secs is None
     file_data = {"fileUri": file_uri, "mimeType": _normalize_video_mime(mime_type)}
+    media_part = {"fileData": file_data}
+    if not whole:
+        # Gemini's per-part videoMetadata lets us trim to a specific time
+        # range without re-downloading. Values are seconds with an 's' suffix.
+        media_part["videoMetadata"] = {
+            "startOffset": f"{start_secs}s",
+            "endOffset": f"{end_secs}s",
+        }
     base_payload = {
         "contents": [
             {
                 "role": "user",
                 "parts": [
-                    {
-                        "fileData": file_data,
-                        # Gemini's per-part videoMetadata lets us trim to a
-                        # specific time range without re-downloading. Values
-                        # are seconds with an 's' suffix.
-                        "videoMetadata": {
-                            "startOffset": f"{start_secs}s",
-                            "endOffset": f"{end_secs}s",
-                        },
-                    },
+                    media_part,
                     {"text": transcribe_prompt_for(language)},
                 ],
             }
         ],
         "generationConfig": {
-            "maxOutputTokens": 8192,
+            # A 15-minute window fits in 8192 tokens; a whole lesson does not.
+            # gemini-2.5-flash allows 65536, and a single pass over a 2-hour
+            # class lands well inside that.
+            "maxOutputTokens": 8192 if not whole else 65536,
             # LOW res cuts video token use ~4x (~66 vs ~258 tokens/sec).
             # Transcripts ride on the audio track, so this loses nothing
             # for transcription quality.
             "mediaResolution": "MEDIA_RESOLUTION_LOW",
         },
     }
-    label = f"transcribe[{start_secs}-{end_secs}s]"
+    label = "transcribe[whole]" if whole else f"transcribe[{start_secs}-{end_secs}s]"
     # Temperatures tried in order. Temperature 0 is the most likely to
     # produce verbatim output that triggers RECITATION; nudging up
     # diversifies the sample enough to typically clear the filter.
@@ -376,7 +399,7 @@ def _gemini_transcribe_chunk(file_uri, mime_type, language, start_secs, end_secs
             raise
 
 
-def gemini_transcribe(file_uri, mime_type, language):
+def gemini_transcribe(file_uri, mime_type, language, chunked=True):
     """Pass 1: audio/video → plain-text transcript.
 
     Walks the video in CHUNK_SECS-sized windows. Each window has its own
@@ -385,6 +408,16 @@ def gemini_transcribe(file_uri, mime_type, language):
     (we passed the end of the video) or when a chunk exceeds its own
     output cap (MAX_TOKENS — surfaces as an error so the user knows to
     shorten if it ever happens at 15min)."""
+    if not chunked:
+        # Uploaded file: one pass over the whole recording. Windowing it would
+        # just transcribe the same audio N times over (see the note in
+        # _gemini_transcribe_chunk).
+        text = _gemini_transcribe_chunk(file_uri, mime_type, language, None, None)
+        if not text:
+            raise RuntimeError("Gemini returned no transcript")
+        print(f"[transcribe] whole file: {len(text)} chars")
+        return text
+
     transcripts = []
     for i in range(MAX_CHUNKS):
         start = i * CHUNK_SECS
@@ -448,11 +481,58 @@ def gemini_summarize(transcript_text, language):
     return text.strip()
 
 
-def gemini_generate(file_uri, mime_type, language):
+# A window this far in cannot exist for any real lesson (100 hours), which
+# makes it a probe rather than a transcription request.
+FABRICATION_PROBE_START = 360000
+FABRICATION_PROBE_END = 360900
+
+
+def gemini_can_read_video(file_uri, mime_type, language, job_id=""):
+    """Return True only if Gemini demonstrably holds the video's content.
+
+    Gemini's native YouTube ingestion cannot fetch unlisted videos — but
+    rather than failing, it answers the transcription prompt from general
+    knowledge and returns a fluent, wholly invented "transcript". Verified
+    2026-08-26 on a 3450s unlisted lesson: 12 chunks of confident Hebrew,
+    each opening with a fresh lesson greeting, drifting across unrelated
+    subjects (literature, then science). The summary built on top of it was
+    equally fictitious, and nothing in the pipeline noticed.
+
+    The discriminator comes from a control run: for a video Gemini really
+    holds (a public 19-second clip) a window past the end is a hard error —
+    500 INTERNAL — while the window covering real content transcribed
+    accurately. A video it cannot read has no "end" to fall off, so it keeps
+    inventing. Asking for a window 100 hours in therefore separates the two:
+    an error or silence means the content is real, prose means we are being
+    told a story.
+    """
+    try:
+        text = _gemini_transcribe_chunk(
+            file_uri, mime_type, language,
+            FABRICATION_PROBE_START, FABRICATION_PROBE_END,
+        )
+    except GeminiPermissionError as e:
+        print(f"[{job_id}] fabrication probe: access denied ({str(e)[:80]}) — native path unusable")
+        return False
+    except RuntimeError as e:
+        print(f"[{job_id}] fabrication probe: errored past the end ({str(e)[:80]}) — content is real")
+        return True
+    if len(text) < 30:
+        print(f"[{job_id}] fabrication probe: empty past the end — content is real")
+        return True
+    print(f"[{job_id}] fabrication probe: invented {len(text)} chars 100h into the video "
+          f"— native path NOT trustworthy, falling back to a real download")
+    return False
+
+
+def gemini_generate(file_uri, mime_type, language, chunked=True):
     """Two-pass transcribe + summarize. Each pass has its own output-token
     budget so the summary can never be truncated by a long transcript
-    (which was the root cause of half-summaries / empty summaries)."""
-    transcript = gemini_transcribe(file_uri, mime_type, language)
+    (which was the root cause of half-summaries / empty summaries).
+
+    chunked=False for anything uploaded to the Files API — offsets do not
+    work there, so the file is transcribed in a single pass."""
+    transcript = gemini_transcribe(file_uri, mime_type, language, chunked=chunked)
     summary = gemini_summarize(transcript, language)
     return {"transcript": transcript, "summary": summary}
 
@@ -538,56 +618,98 @@ def download_remote_file(job_id, url, tmpdir):
     return dest
 
 
-def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir):
-    """Download audio with yt-dlp. Uses curl_cffi impersonation so YouTube
-    doesn't reject us as a bot from a cloud IP, and a cookies file
-    (YT_DLP_COOKIES env var) when present for unlisted / age-restricted
-    videos. Returns the local audio file path."""
+# yt-dlp stderr fingerprints for "YouTube served us an auth wall instead of
+# the video". These are the datacenter-IP bot challenge and its cousins — a
+# raw dump of them in a toast tells an admin nothing actionable, so they get
+# translated into "use the upload button" below.
+YT_BLOCK_MARKERS = (
+    "sign in to confirm",
+    "confirm you're not a bot",
+    "--cookies-from-browser",
+    "cookies for the authentication",
+    "this video is private",
+    "video unavailable",
+)
+
+YT_BLOCKED_MESSAGE = {
+    "es": ("YouTube bloqueó la descarga de este video desde el servidor "
+           "(suele pasar con videos no listados o privados). Usá el botón "
+           "«Subir y resumir» para subir el archivo del video directamente."),
+    "he": ("YouTube חסם את ההורדה מהשרת (קורה בדרך כלל בסרטונים לא-רשומים "
+           "או פרטיים). השתמשו בכפתור \"העלאה וסיכום\" כדי להעלות את קובץ "
+           "הווידאו ישירות."),
+    "en": ("YouTube blocked the download from the server (this usually happens "
+           "with unlisted or private videos). Use the \"Upload & Summarize\" "
+           "button to upload the video file directly."),
+}
+
+
+def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir, language="he"):
+    """Download audio with yt-dlp. Returns the local audio file path.
+
+    Reached only when Gemini can't ingest the URL itself — i.e. unlisted or
+    non-YouTube videos. Tries Chrome TLS impersonation (curl_cffi) first,
+    then a plain run, and uses a cookies file / proxy when configured."""
     out_template = os.path.join(tmpdir, "audio.%(ext)s")
+    # Lesson URLs routinely carry &list=, &t=, &si=. Reduce to the bare video
+    # id so a link that happens to sit in a playlist can't make yt-dlp start
+    # downloading the whole playlist.
+    target = canonicalize_youtube_url(video_url) if is_youtube_url(video_url) else video_url
     base_flags = [
         "-f", "bestaudio/best",
         "-x", "--audio-format", "mp3",
-        # Drop the `web` client — it's what trips YouTube's "sign in to confirm
-        # you're not a bot" challenge from a datacenter IP. Lead with the tv /
-        # android_vr clients, which don't need a PO token and are the most
-        # likely to fetch without cookies. (If this still gets blocked, the
-        # only reliable fix is real YT_DLP_COOKIES.)
-        "--extractor-args", "youtube:player_client=tv,android_vr,ios",
+        "--no-playlist",
         "-o", out_template,
     ]
+    # Deliberately NO player_client override. The July 2026 pin to
+    # `tv,android_vr,ios` has since rotted: android_vr's https formats now
+    # demand a GVS PO token, ios is SABR-only, and that leaves tv offering
+    # only format 18, whose URL 403s. Verified 2026-08-26: with the override
+    # the download fails even from a residential IP; with yt-dlp's own
+    # defaults the same unlisted lesson downloads fine. yt-dlp's default
+    # client list is the part that gets maintained against YouTube's changes
+    # — let it choose, and use YT_DLP_EXTRACTOR_ARGS if a future breakage
+    # really does need one specific client.
+    if YT_DLP_EXTRACTOR_ARGS:
+        base_flags += ["--extractor-args", YT_DLP_EXTRACTOR_ARGS]
     # Only pass --cookies when the file actually exists. COOKIES_FILE is a
     # constant path string (always truthy); the file is written only when the
-    # YT_DLP_COOKIES env var is set. The old `if COOKIES_FILE:` guard therefore
-    # always added `--cookies <nonexistent>`, which made yt-dlp abort.
+    # YT_DLP_COOKIES env var is set. An `if COOKIES_FILE:` guard would
+    # therefore always add `--cookies <nonexistent>`, which makes yt-dlp abort.
     if os.path.exists(COOKIES_FILE):
         base_flags += ["--cookies", COOKIES_FILE]
-    if referer_url:
+    if YT_DLP_PROXY:
+        base_flags += ["--proxy", YT_DLP_PROXY]
+    # Referer is for the odd non-YouTube host that requires one. Never send it
+    # to YouTube: the client hardcodes 'https://example.com/', and arriving at
+    # YouTube from example.com is exactly the kind of fingerprint that invites
+    # the bot challenge.
+    if referer_url and not is_youtube_url(target):
         base_flags += ["--referer", referer_url]
 
-    # Try with chrome impersonation first (best evasion of YouTube's cloud-IP
-    # bot detection). If the impersonation backend (curl_cffi) isn't available
-    # in this image, yt-dlp hard-errors at init with "Impersonate target ...
-    # not available" — fall back to a plain run instead of failing the job.
+    # Attempt 1 uses curl_cffi's Chrome TLS fingerprint, the best defence
+    # against the cloud-IP bot check. Attempt 2 is plain — needed when the
+    # impersonation backend is missing from the image (yt-dlp then hard-errors
+    # at init, before it ever reaches YouTube), and worth trying anyway since
+    # a different fingerprint sometimes lands differently.
     last_err = ""
-    for impersonate in (["--impersonate", "chrome"], []):
-        cmd = ["yt-dlp"] + impersonate + base_flags + [video_url]
-        print(f"[{job_id}] yt-dlp cmd: {' '.join(cmd)}")
+    for label, extra in (("impersonate-chrome", ["--impersonate", "chrome"]), ("plain", [])):
+        cmd = ["yt-dlp"] + extra + base_flags + [target]
+        print(f"[{job_id}] yt-dlp [{label}]: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        print(f"[{job_id}] yt-dlp exit={result.returncode}")
+        print(f"[{job_id}] yt-dlp [{label}] exit={result.returncode}")
         if result.returncode == 0:
             files = glob.glob(os.path.join(tmpdir, "audio.*"))
             if not files:
                 raise RuntimeError("yt-dlp produced no audio file")
             return files[0]
-        last_err = result.stderr.strip()
-        print(f"[{job_id}] yt-dlp stderr: {last_err[-500:]}")
-        # Only the impersonation-availability error is worth retrying without
-        # impersonation; any other failure (bot check, private video, network)
-        # would fail the same way plain, so stop and surface it.
-        if impersonate and "impersonate" in last_err.lower():
-            print(f"[{job_id}] impersonation unavailable — retrying without it")
-            continue
-        break
+        last_err = (result.stderr or "").strip()
+        print(f"[{job_id}] yt-dlp [{label}] stderr: {last_err[-800:]}")
+
+    lowered = last_err.lower()
+    if any(marker in lowered for marker in YT_BLOCK_MARKERS):
+        print(f"[{job_id}] classified as a YouTube auth wall / bot challenge")
+        raise RuntimeError(YT_BLOCKED_MESSAGE.get(language, YT_BLOCKED_MESSAGE["en"]))
     raise RuntimeError(f"yt-dlp failed: {last_err[-300:]}")
 
 
@@ -633,7 +755,7 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id, tra
             print(f"[{job_id}] Gemini file URI: {file_uri}")
 
             job["progress"] = "transcribing"
-            out = gemini_generate(file_uri, mime, language)
+            out = gemini_generate(file_uri, mime, language, chunked=False)
 
         elif is_youtube_url(video_url):
             # ── YouTube fast path — Gemini accepts the URL natively ──
@@ -644,21 +766,27 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id, tra
             try:
                 job["progress"] = "transcribing"
                 print(f"[{job_id}] YouTube native path: {clean_url[:80]}")
-                out = gemini_generate(clean_url, "video/mp4", language)
+                # Never transcribe through the native path without first
+                # proving Gemini can actually see this video — an unlisted
+                # lesson otherwise comes back as a fluent invention.
+                if gemini_can_read_video(clean_url, "video/mp4", language, job_id):
+                    out = gemini_generate(clean_url, "video/mp4", language)
+                else:
+                    print(f"[{job_id}] skipping native path — downloading the audio instead")
             except GeminiPermissionError as e:
                 print(f"[{job_id}] Gemini denied YouTube URL, falling back to yt-dlp: {e}")
 
         if out is None:
             # ── Fallback / non-YouTube path: yt-dlp → Files API → generate ──
             job["progress"] = "downloading"
-            audio_path = download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir)
+            audio_path = download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir, language)
 
             job["progress"] = "uploading"
             file_uri = gemini_upload_file(audio_path, "audio/mp3")
             print(f"[{job_id}] Gemini file URI: {file_uri}")
 
             job["progress"] = "transcribing"
-            out = gemini_generate(file_uri, "audio/mp3", language)
+            out = gemini_generate(file_uri, "audio/mp3", language, chunked=False)
 
         transcript_text = out["transcript"]
         summary = out["summary"]

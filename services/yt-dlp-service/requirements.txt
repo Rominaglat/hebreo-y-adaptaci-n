@@ -2,8 +2,13 @@ flask==3.1.0
 flask-cors==5.0.1
 gunicorn==23.0.0
 requests==2.32.3
-# yt-dlp[default] pulls a matching curl_cffi (the impersonation backend) so
-# `--impersonate chrome` works, and stays current with YouTube's frequent
-# anti-bot changes. Pinning an old yt-dlp is what left the service unable to
-# fetch videos. Kept unpinned deliberately — yt-dlp is meant to run latest.
-yt-dlp[default]
+# The `curl-cffi` extra is what provides the impersonation backend, and it is
+# NOT part of `default` — a mistake that cost us: the July 2026 change assumed
+# `yt-dlp[default]` pulled it, so every `--impersonate chrome` run died at
+# startup with 'Impersonate target "chrome" is not available' and only the
+# plain (easily bot-detected) attempt ever reached YouTube. Verified against
+# the deployed image 2026-08-26 — curl_cffi was absent from the install list.
+# Taking it as a yt-dlp extra rather than a bare pin keeps the two versions
+# compatible. Unpinned deliberately — yt-dlp is meant to run latest, and
+# pinning an old one is what broke fetching before that.
+yt-dlp[default,curl-cffi]
