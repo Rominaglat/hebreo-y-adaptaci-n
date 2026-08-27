@@ -54,6 +54,11 @@ else:
 YT_DLP_EXTRACTOR_ARGS = os.environ.get("YT_DLP_EXTRACTOR_ARGS", "")
 YT_DLP_PROXY = os.environ.get("YT_DLP_PROXY", "")
 
+# Bumped on each deploy. /health echoes it, which is the only way to confirm
+# WHICH build is actually live when the Railway CLI session has expired —
+# a recurring problem on this project.
+SERVICE_VERSION = "2026-08-27.retry-rotation"
+
 GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_BASE = "https://generativelanguage.googleapis.com"
 
@@ -618,18 +623,37 @@ def download_remote_file(job_id, url, tmpdir):
     return dest
 
 
-# yt-dlp stderr fingerprints for "YouTube served us an auth wall instead of
-# the video". These are the datacenter-IP bot challenge and its cousins — a
-# raw dump of them in a toast tells an admin nothing actionable, so they get
-# translated into "use the upload button" below.
-YT_BLOCK_MARKERS = (
+# yt-dlp stderr fingerprints. YouTube's challenge to a datacenter IP is
+# reputation- and rate-driven, not a permanent verdict — the same lesson that
+# fails now downloaded cleanly at 11:45 today — so these are worth retrying
+# with a different TLS fingerprint and a pause. The PERMANENT set is not:
+# retrying a deleted or genuinely private video just wastes five minutes.
+YT_BOT_MARKERS = (
     "sign in to confirm",
-    "confirm you're not a bot",
+    "not a bot",
     "--cookies-from-browser",
     "cookies for the authentication",
-    "this video is private",
-    "video unavailable",
 )
+YT_PERMANENT_MARKERS = (
+    "private video",
+    "video unavailable",
+    "removed by the uploader",
+    "has been terminated",
+    "does not exist",
+)
+
+# Fingerprints to rotate through. curl_cffi ships many; these four span the
+# distinct TLS/JA3 shapes. "plain" goes last — no impersonation is the most
+# detectable, but it still works when curl_cffi is missing from the image.
+YT_DLP_FINGERPRINTS = [
+    ("chrome", ["--impersonate", "chrome"]),
+    ("firefox", ["--impersonate", "firefox"]),
+    ("safari", ["--impersonate", "safari"]),
+    ("plain", []),
+]
+# Pause before each round. A challenged IP frequently clears within a minute,
+# so the wait is doing real work — it is not politeness.
+YT_DLP_ROUND_WAITS = [0, 30, 75]
 
 YT_BLOCKED_MESSAGE = {
     "es": ("YouTube bloqueó la descarga de este video desde el servidor "
@@ -643,13 +667,34 @@ YT_BLOCKED_MESSAGE = {
            "button to upload the video file directly."),
 }
 
+YT_GONE_MESSAGE = {
+    "es": "YouTube dice que este video no está disponible (privado, eliminado o sin permisos). Revisá el enlace del video.",
+    "he": "YouTube מדווח שהסרטון אינו זמין (פרטי, נמחק או ללא הרשאות). בדקו את הקישור לסרטון.",
+    "en": "YouTube reports this video as unavailable (private, deleted, or not permitted). Check the video link.",
+}
+
+
+def _classify_ytdlp_error(stderr):
+    """bot | gone | noimp | err — drives whether a retry is worth anything."""
+    low = (stderr or "").lower()
+    if "impersonate target" in low:
+        return "noimp"
+    if any(m in low for m in YT_PERMANENT_MARKERS):
+        return "gone"
+    if any(m in low for m in YT_BOT_MARKERS):
+        return "bot"
+    return "err"
+
 
 def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir, language="he"):
     """Download audio with yt-dlp. Returns the local audio file path.
 
     Reached only when Gemini can't ingest the URL itself — i.e. unlisted or
-    non-YouTube videos. Tries Chrome TLS impersonation (curl_cffi) first,
-    then a plain run, and uses a cookies file / proxy when configured."""
+    non-YouTube videos, which is most lessons. YouTube challenges this
+    server's datacenter IP intermittently, so a single attempt with a single
+    fingerprint decides nothing: this rotates TLS fingerprints and retries
+    across spaced rounds, and gives up early only when YouTube says the video
+    is actually gone."""
     out_template = os.path.join(tmpdir, "audio.%(ext)s")
     # Lesson URLs routinely carry &list=, &t=, &si=. Reduce to the bare video
     # id so a link that happens to sit in a playlist can't make yt-dlp start
@@ -659,17 +704,20 @@ def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir, language="
         "-f", "bestaudio/best",
         "-x", "--audio-format", "mp3",
         "--no-playlist",
+        # Spacing requests out and letting the extractor retry its own
+        # transient errors both lower the burst signature that draws the
+        # challenge in the first place.
+        "--sleep-requests", "1",
+        "--extractor-retries", "3",
         "-o", out_template,
     ]
     # Deliberately NO player_client override. The July 2026 pin to
-    # `tv,android_vr,ios` has since rotted: android_vr's https formats now
-    # demand a GVS PO token, ios is SABR-only, and that leaves tv offering
-    # only format 18, whose URL 403s. Verified 2026-08-26: with the override
-    # the download fails even from a residential IP; with yt-dlp's own
-    # defaults the same unlisted lesson downloads fine. yt-dlp's default
-    # client list is the part that gets maintained against YouTube's changes
-    # — let it choose, and use YT_DLP_EXTRACTOR_ARGS if a future breakage
-    # really does need one specific client.
+    # `tv,android_vr,ios` rotted: android_vr's https formats now demand a GVS
+    # PO token, ios is SABR-only, and that left tv offering only format 18,
+    # whose URL 403s. Verified 2026-08-26: with the override the download
+    # fails even from a residential IP; with yt-dlp's own defaults the same
+    # unlisted lesson downloads fine. YT_DLP_EXTRACTOR_ARGS is the escape
+    # hatch if a future breakage really does need one specific client.
     if YT_DLP_EXTRACTOR_ARGS:
         base_flags += ["--extractor-args", YT_DLP_EXTRACTOR_ARGS]
     # Only pass --cookies when the file actually exists. COOKIES_FILE is a
@@ -683,34 +731,43 @@ def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir, language="
     # Referer is for the odd non-YouTube host that requires one. Never send it
     # to YouTube: the client hardcodes 'https://example.com/', and arriving at
     # YouTube from example.com is exactly the kind of fingerprint that invites
-    # the bot challenge.
+    # the challenge.
     if referer_url and not is_youtube_url(target):
         base_flags += ["--referer", referer_url]
 
-    # Attempt 1 uses curl_cffi's Chrome TLS fingerprint, the best defence
-    # against the cloud-IP bot check. Attempt 2 is plain — needed when the
-    # impersonation backend is missing from the image (yt-dlp then hard-errors
-    # at init, before it ever reaches YouTube), and worth trying anyway since
-    # a different fingerprint sometimes lands differently.
+    trail = []
     last_err = ""
-    for label, extra in (("impersonate-chrome", ["--impersonate", "chrome"]), ("plain", [])):
-        cmd = ["yt-dlp"] + extra + base_flags + [target]
-        print(f"[{job_id}] yt-dlp [{label}]: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        print(f"[{job_id}] yt-dlp [{label}] exit={result.returncode}")
-        if result.returncode == 0:
-            files = glob.glob(os.path.join(tmpdir, "audio.*"))
-            if not files:
-                raise RuntimeError("yt-dlp produced no audio file")
-            return files[0]
-        last_err = (result.stderr or "").strip()
-        print(f"[{job_id}] yt-dlp [{label}] stderr: {last_err[-800:]}")
+    for round_no, wait in enumerate(YT_DLP_ROUND_WAITS):
+        if wait:
+            print(f"[{job_id}] waiting {wait}s before retry round {round_no + 1}")
+            time.sleep(wait)
+        for label, extra in YT_DLP_FINGERPRINTS:
+            cmd = ["yt-dlp"] + extra + base_flags + [target]
+            print(f"[{job_id}] yt-dlp r{round_no + 1}/{label}: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            print(f"[{job_id}] yt-dlp r{round_no + 1}/{label} exit={result.returncode}")
+            if result.returncode == 0:
+                files = glob.glob(os.path.join(tmpdir, "audio.*"))
+                if not files:
+                    raise RuntimeError("yt-dlp produced no audio file")
+                print(f"[{job_id}] downloaded on round {round_no + 1} with {label}")
+                return files[0]
+            last_err = (result.stderr or "").strip()
+            kind = _classify_ytdlp_error(last_err)
+            trail.append(f"{label}:{kind}")
+            print(f"[{job_id}] yt-dlp r{round_no + 1}/{label} → {kind}: {last_err[-400:]}")
+            if kind == "gone":
+                # Rotating fingerprints cannot conjure a deleted video.
+                print(f"[{job_id}] video is gone — not retrying")
+                raise RuntimeError(YT_GONE_MESSAGE.get(language, YT_GONE_MESSAGE["en"]))
 
-    lowered = last_err.lower()
-    if any(marker in lowered for marker in YT_BLOCK_MARKERS):
-        print(f"[{job_id}] classified as a YouTube auth wall / bot challenge")
-        raise RuntimeError(YT_BLOCKED_MESSAGE.get(language, YT_BLOCKED_MESSAGE["en"]))
-    raise RuntimeError(f"yt-dlp failed: {last_err[-300:]}")
+    # Every fingerprint, every round. Put the trail in the message itself —
+    # the admin sees it in the toast, which is the only diagnostic channel
+    # that does not depend on someone holding a live Railway session.
+    summary = " ".join(trail[-8:])
+    if any(t.endswith(":bot") for t in trail):
+        raise RuntimeError(f"{YT_BLOCKED_MESSAGE.get(language, YT_BLOCKED_MESSAGE['en'])} [{summary}]")
+    raise RuntimeError(f"yt-dlp failed [{summary}]: {last_err[-200:]}")
 
 
 def process_job(job_id, video_url, file_url, referer_url, language, user_id, transcript_text=None):
@@ -834,15 +891,20 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id, tra
 
 @app.route("/health", methods=["GET"])
 def health():
-    def preview(k):
-        return f"{k[:4]}...{k[-4:]}" if len(k) > 8 else f"len={len(k)}"
+    # Report only whether each secret is present. This endpoint is public and
+    # used to leak a preview of GEMINI_API_KEY ("AIza...1JWw") — four leading
+    # and four trailing characters of a live key, handed to anyone who asked.
+    # Presence is all a health check ever needed.
     return jsonify({
         "status": "ok",
+        "version": SERVICE_VERSION,
         "env": {
             "SUPABASE_URL": bool(SUPABASE_URL),
             "SUPABASE_ANON_KEY": bool(SUPABASE_ANON_KEY),
             "SUPABASE_SERVICE_ROLE_KEY": bool(SUPABASE_SERVICE_ROLE_KEY),
-            "GEMINI_API_KEY": preview(GEMINI_API_KEY),
+            "GEMINI_API_KEY": bool(GEMINI_API_KEY),
+            "YT_DLP_COOKIES": bool(YT_DLP_COOKIES),
+            "YT_DLP_PROXY": bool(YT_DLP_PROXY),
         },
     })
 
