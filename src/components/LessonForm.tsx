@@ -310,7 +310,17 @@ export default function LessonForm({
         setSummaryProgress(progressLabels[data.progress] || data.progress);
 
         if (data.status === 'completed') break;
-        if (data.status === 'error') throw new Error(data.error || 'Transcription failed');
+        if (data.status === 'error') {
+          // Prefer the service's stable error_code over its message: the
+          // service only knows the requested summary language, so its own
+          // text can arrive in a language this admin doesn't read.
+          const codeKey: Record<string, string> = {
+            youtube_blocked: 'lessonForm.errorYoutubeBlocked',
+            youtube_unavailable: 'lessonForm.errorYoutubeUnavailable',
+          };
+          const key = codeKey[data.error_code];
+          throw new Error(key ? t(key) : (data.error || 'Transcription failed'));
+        }
       }
 
       console.log("Job completed:", job_id);

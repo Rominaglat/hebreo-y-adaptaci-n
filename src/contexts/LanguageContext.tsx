@@ -397,6 +397,8 @@ const translations: Translations = {
   'lessonForm.summarizing': { he: 'בסיכום...', en: 'Summarizing...', es: 'Resumiendo...' },
   'lessonForm.summaryReady': { he: 'הסיכום מוכן!', en: 'Summary generated!', es: '¡Resumen generado!' },
   'lessonForm.summaryError': { he: 'שגיאה ביצירת הסיכום', en: 'Failed to generate summary', es: 'Error al generar el resumen' },
+  'lessonForm.errorYoutubeBlocked': { he: 'YouTube חסם את ההורדה מהשרת. השתמשו בכפתור "העלאה וסיכום" כדי להעלות את קובץ הווידאו ישירות.', en: 'YouTube blocked the download from the server. Use the "Upload & Summarize" button to upload the video file directly.', es: 'YouTube bloqueó la descarga desde el servidor. Usá el botón «Subir y resumir» para subir el archivo del video directamente.' },
+  'lessonForm.errorYoutubeUnavailable': { he: 'YouTube מדווח שהסרטון אינו זמין (פרטי, נמחק או ללא הרשאות). בדקו את הקישור.', en: 'YouTube reports this video as unavailable (private, deleted, or not permitted). Check the link.', es: 'YouTube informa que el video no está disponible (privado, eliminado o sin permisos). Revisá el enlace.' },
   'lessonForm.summaryLanguage': { he: 'שפת הסיכום', en: 'Summary language', es: 'Idioma del resumen' },
   'lessonForm.hebrew': { he: 'עברית', en: 'Hebrew', es: 'Hebreo' },
   'lessonForm.english': { he: 'אנגלית', en: 'English', es: 'Inglés' },

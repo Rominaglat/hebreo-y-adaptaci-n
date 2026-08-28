@@ -57,7 +57,7 @@ YT_DLP_PROXY = os.environ.get("YT_DLP_PROXY", "")
 # Bumped on each deploy. /health echoes it, which is the only way to confirm
 # WHICH build is actually live when the Railway CLI session has expired —
 # a recurring problem on this project.
-SERVICE_VERSION = "2026-08-27.retry-rotation"
+SERVICE_VERSION = "2026-08-27.error-codes"
 
 GEMINI_MODEL = "gemini-2.5-flash"
 GEMINI_BASE = "https://generativelanguage.googleapis.com"
@@ -653,7 +653,7 @@ YT_DLP_FINGERPRINTS = [
 ]
 # Pause before each round. A challenged IP frequently clears within a minute,
 # so the wait is doing real work — it is not politeness.
-YT_DLP_ROUND_WAITS = [0, 30, 75]
+YT_DLP_ROUND_WAITS = [0, 30, 75, 150]
 
 YT_BLOCKED_MESSAGE = {
     "es": ("YouTube bloqueó la descarga de este video desde el servidor "
@@ -672,6 +672,16 @@ YT_GONE_MESSAGE = {
     "he": "YouTube מדווח שהסרטון אינו זמין (פרטי, נמחק או ללא הרשאות). בדקו את הקישור לסרטון.",
     "en": "YouTube reports this video as unavailable (private, deleted, or not permitted). Check the video link.",
 }
+
+
+class YouTubeBlocked(RuntimeError):
+    """YouTube served its bot challenge to this server's IP."""
+    code = "youtube_blocked"
+
+
+class YouTubeUnavailable(RuntimeError):
+    """YouTube says the video is private, deleted, or not permitted."""
+    code = "youtube_unavailable"
 
 
 def _classify_ytdlp_error(stderr):
@@ -759,15 +769,20 @@ def download_audio_with_ytdlp(job_id, video_url, referer_url, tmpdir, language="
             if kind == "gone":
                 # Rotating fingerprints cannot conjure a deleted video.
                 print(f"[{job_id}] video is gone — not retrying")
-                raise RuntimeError(YT_GONE_MESSAGE.get(language, YT_GONE_MESSAGE["en"]))
+                raise YouTubeUnavailable(YT_GONE_MESSAGE.get(language, YT_GONE_MESSAGE["en"]))
 
     # Every fingerprint, every round. Put the trail in the message itself —
     # the admin sees it in the toast, which is the only diagnostic channel
     # that does not depend on someone holding a live Railway session.
-    summary = " ".join(trail[-8:])
+    summary = " ".join(trail)
+    # The trail belongs in the log, not in the toast an admin has to read. It
+    # was appended to the message when a live Railway session could not be
+    # relied on; now that /health reports the build and this line is printed
+    # unbuffered, the admin gets a clean sentence instead of debug output.
+    print(f"[{job_id}] all download attempts failed for {target} — trail: {summary}")
     if any(t.endswith(":bot") for t in trail):
-        raise RuntimeError(f"{YT_BLOCKED_MESSAGE.get(language, YT_BLOCKED_MESSAGE['en'])} [{summary}]")
-    raise RuntimeError(f"yt-dlp failed [{summary}]: {last_err[-200:]}")
+        raise YouTubeBlocked(YT_BLOCKED_MESSAGE.get(language, YT_BLOCKED_MESSAGE["en"]))
+    raise RuntimeError(f"yt-dlp failed: {last_err[-200:]}")
 
 
 def process_job(job_id, video_url, file_url, referer_url, language, user_id, transcript_text=None):
@@ -876,7 +891,13 @@ def process_job(job_id, video_url, file_url, referer_url, language, user_id, tra
     except Exception as e:
         job["status"] = "error"
         job["error"] = str(e)
-        print(f"[{job_id}] error: {e}")
+        # A stable code lets the frontend render this in the ADMIN's UI
+        # language. The server only knows the requested SUMMARY language, so
+        # a Spanish-speaking admin generating a Hebrew summary was shown the
+        # failure in Hebrew — unreadable, and on the one screen that most
+        # needed to be understood.
+        job["error_code"] = getattr(type(e), "code", "")
+        print(f"[{job_id}] error [{job['error_code'] or 'generic'}]: {e}")
     finally:
         for f in glob.glob(os.path.join(tmpdir, "*")):
             try:
@@ -942,6 +963,7 @@ def transcribe():
         "transcript_text": "",
         "transcript_file_url": "",
         "error": "",
+        "error_code": "",
     }
 
     threading.Thread(
