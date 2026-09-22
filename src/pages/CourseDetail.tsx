@@ -28,6 +28,8 @@ import { Label } from '@/components/ui/label';
 import { NewBadge } from '@/components/NewBadge';
 import { useLessonBookmarks } from '@/hooks/useLessonBookmarks';
 import { getFilePreviewKind } from '@/lib/filePreview';
+import { computeLessonLocks, hasStartedCourse, type LessonLock } from '@/lib/lessonGating';
+import { ToastAction } from '@/components/ui/toast';
 
 interface Course {
   id: string;
@@ -212,6 +214,9 @@ export default function CourseDetail() {
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const [courseUnlocked, setCourseUnlocked] = useState<boolean>(true); // false when an earlier course isn't complete yet
   const [nextCourse, setNextCourse] = useState<{ id: string; title: string } | null>(null);
+  // The course that's actually blocking this one, so every locked message
+  // can name it instead of saying "the previous course".
+  const [prerequisiteCourse, setPrerequisiteCourse] = useState<{ id: string; title: string } | null>(null);
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState<boolean>(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem('lessonAutoAdvance') : null;
     return stored === null ? true : stored === 'true';
@@ -235,58 +240,77 @@ export default function CourseDetail() {
   const allLessonIds = useMemo(() => allLessons.map(l => l.id), [allLessons]);
   const { isBookmarked, toggleBookmark } = useLessonBookmarks(allLessonIds);
 
-  // Sequential unlock: each lesson is gated by completion of the previous
-  // one in the course (ordered by module.order_index then lesson.order_index).
-  // Cross-course gating: if the course itself is locked (an earlier-ordered
-  // enrolled course isn't finished), every lesson in this course is locked.
-  // Admins / instructors bypass entirely. Server-side mirrors live in
-  // is_lesson_unlocked() / is_course_unlocked() so completion writes can't
-  // be tampered with.
-  const lockedLessonIds = useMemo(() => {
-    const locked = new Set<string>();
-    if (isAdminOrInstructor) return locked;
-    if (!courseUnlocked) {
-      // The course gate is closed — every lesson is locked until the
-      // previous course is complete.
-      modules.forEach(m => m.lessons.forEach(l => locked.add(l.id)));
-      return locked;
-    }
-    // Open / community courses (lessons_in_order = false): every lesson
-    // is unlocked the moment the course is accessible. Used for VIVOS
-    // and Hebreo para todos.
-    if (course && course.lessons_in_order === false) {
-      return locked;
-    }
-    const ordered = [...modules]
-      .sort((a, b) => a.order_index - b.order_index)
-      .flatMap(m =>
-        [...m.lessons].sort((a, b) => a.order_index - b.order_index),
-      );
-    let prevCompleted = true; // virtual "lesson 0" is complete
-    for (const lesson of ordered) {
-      if (!prevCompleted) locked.add(lesson.id);
-      prevCompleted = lesson.is_completed;
-    }
-    return locked;
-  }, [modules, isAdminOrInstructor, courseUnlocked, course]);
+  // Every lock decision on this page comes from one place: computeLessonLocks
+  // in @/lib/lessonGating, which mirrors is_lesson_unlocked() /
+  // is_course_unlocked() in the database. The SQL is still the enforcement
+  // point (RLS checks completion writes against it); this is the same rule
+  // computed locally so the UI can explain itself without a round trip.
+  // The map also carries WHY each lesson is locked, so the message can name
+  // the blocking lesson or the blocking course instead of saying "the
+  // previous one" and leaving the student to guess.
+  const lessonLocks = useMemo(
+    () =>
+      computeLessonLocks({
+        modules,
+        lessonsInOrder: course?.lessons_in_order !== false,
+        courseUnlocked,
+        isStaff: isAdminOrInstructor,
+      }),
+    [modules, isAdminOrInstructor, courseUnlocked, course],
+  );
 
-  const isLessonLocked = (lessonId: string) => lockedLessonIds.has(lessonId);
+  const lockedLessonIds = useMemo(
+    () => new Set(lessonLocks.keys()),
+    [lessonLocks],
+  );
+
+  const isLessonLocked = (lessonId: string) => lessonLocks.has(lessonId);
+
+  // One phrasing for every surface that reports a lock (toast, tooltip).
+  const describeLock = (lock: LessonLock<Lesson> | undefined) => {
+    if (lock?.reason === 'course') {
+      return {
+        title: t('courseDetail.courseGated'),
+        desc: prerequisiteCourse
+          ? t('courseDetail.courseGatedNamedDesc').replace('{course}', prerequisiteCourse.title)
+          : t('courseDetail.courseGatedDesc'),
+      };
+    }
+    return {
+      title: t('courseDetail.lessonLocked'),
+      desc: lock?.blockedBy
+        ? t('courseDetail.lessonLockedNamedDesc').replace('{lesson}', lock.blockedBy.title)
+        : t('courseDetail.lessonLockedDesc'),
+    };
+  };
+
+  // Locked toasts get a way out: the course gate offers a jump to the course
+  // that's actually blocking, the lesson gate a jump to the lesson.
+  const toastLocked = (lock: LessonLock<Lesson> | undefined) => {
+    const { title, desc } = describeLock(lock);
+    const action =
+      lock?.reason === 'course' && prerequisiteCourse ? (
+        <ToastAction
+          altText={t('courseDetail.goToBlockingCourse')}
+          onClick={() => navigate(`/courses/${prerequisiteCourse.id}`)}
+        >
+          {t('courseDetail.goToBlockingCourse')}
+        </ToastAction>
+      ) : lock?.blockedBy ? (
+        <ToastAction
+          altText={t('courseDetail.goToBlockingLesson')}
+          onClick={() => setSelectedLesson(lock.blockedBy)}
+        >
+          {t('courseDetail.goToBlockingLesson')}
+        </ToastAction>
+      ) : undefined;
+    toast({ title, description: desc, variant: 'destructive', action });
+  };
 
   const handleSelectLesson = (lesson: Lesson, opts?: { autoplay?: boolean }) => {
-    if (isLessonLocked(lesson.id)) {
-      // Distinguish "previous lesson" (within-course gate) from "previous
-      // course" (cross-course gate) so the toast actually tells the user
-      // what to do. When courseUnlocked is false every lesson is locked
-      // for the same reason — there's an earlier course they haven't
-      // finished yet.
-      const reason = courseUnlocked
-        ? { title: t('courseDetail.lessonLocked'), desc: t('courseDetail.lessonLockedDesc') }
-        : { title: t('courseDetail.courseGated'), desc: t('courseDetail.courseGatedDesc') };
-      toast({
-        title: reason.title,
-        description: reason.desc,
-        variant: 'destructive',
-      });
+    const lock = lessonLocks.get(lesson.id);
+    if (lock) {
+      toastLocked(lock);
       return;
     }
     if (opts?.autoplay) setShouldAutoplay(true);
@@ -320,6 +344,7 @@ export default function CourseDetail() {
             .single();
           instructorName = instructorData?.full_name || t('courses.instructor');
         }
+        const prereqId: string | null = (courseData as any).prerequisite_course_id || null;
         setCourse({
           ...courseData,
           instructor_name: instructorName,
@@ -328,7 +353,7 @@ export default function CourseDetail() {
           // Default to true if the column is missing from the row (older
           // courses created before the migration land in this branch).
           lessons_in_order: (courseData as any).lessons_in_order !== false,
-          prerequisite_course_id: (courseData as any).prerequisite_course_id || null,
+          prerequisite_course_id: prereqId,
         });
         
         // Check if user has access to this course.
@@ -356,6 +381,20 @@ export default function CourseDetail() {
               });
               courseUnlockedNow = unlocked === true;
               setCourseUnlocked(courseUnlockedNow);
+              // When the gate is shut, load the blocking course so the
+              // message can name it and link straight to it. A student
+              // who is told "finish the previous course" without being
+              // told which one has nowhere to go but support.
+              if (!courseUnlockedNow && prereqId) {
+                const { data: prereq } = await supabase
+                  .from('courses')
+                  .select('id, title')
+                  .eq('id', prereqId)
+                  .single();
+                setPrerequisiteCourse(prereq ? { id: prereq.id, title: prereq.title } : null);
+              } else {
+                setPrerequisiteCourse(null);
+              }
             } else {
               courseUnlockedNow = false;
               setCourseUnlocked(false);
@@ -397,37 +436,22 @@ export default function CourseDetail() {
         const completedCount = processedModules.reduce((acc: number, m: Module) => acc + m.lessons.filter(l => l.is_completed).length, 0);
         setProgress(totalLessons > 0 ? Math.round(completedCount / totalLessons * 100) : 0);
         
-        // Compute lock state once for this fetch so initial selection
-        // (URL param, "first uncompleted", or fallback) can skip locked
-        // lessons — same rule as the lockedLessonIds memo, just inlined
-        // because the memo depends on the modules state we're about to set.
+        // The student's walk order, used below to pick which lesson to
+        // land on.
         const orderedAll = [...processedModules]
           .sort((a: Module, b: Module) => a.order_index - b.order_index)
           .flatMap((m: Module) =>
             [...m.lessons].sort((a, b) => a.order_index - b.order_index),
           );
-        // Lock set for the initial lesson auto-selection. THREE rules:
-        //   1. Admins / instructors: nothing is locked.
-        //   2. Cross-course gate (courseUnlockedNow === false): every
-        //      lesson is locked. This block was missing and caused the
-        //      first lesson to auto-play even when the previous course
-        //      wasn't finished.
-        //   3. Within-course sequential rule: locks anything after a
-        //      not-yet-completed lesson. Skipped for lessons_in_order=
-        //      false courses (Hebreo para todos, VIVOS).
-        const courseLessonsInOrder = (courseData as any)?.lessons_in_order !== false;
-        const lockedNow = new Set<string>();
-        if (!isAdminOrInstructor) {
-          if (!courseUnlockedNow) {
-            orderedAll.forEach((l: Lesson) => lockedNow.add(l.id));
-          } else if (courseLessonsInOrder) {
-            let prevDone = true;
-            for (const l of orderedAll) {
-              if (!prevDone) lockedNow.add(l.id);
-              prevDone = l.is_completed;
-            }
-          }
-        }
+        // Same rule as the lessonLocks memo, run here because the memo
+        // depends on the modules state we're about to set and React
+        // setters lag a tick. One implementation, two call sites.
+        const lockedNow = computeLessonLocks({
+          modules: processedModules,
+          lessonsInOrder: (courseData as any)?.lessons_in_order !== false,
+          courseUnlocked: courseUnlockedNow,
+          isStaff: isAdminOrInstructor,
+        });
 
         // Only auto-select lesson on initial load, not on refreshes
         if (!selectedLesson) {
@@ -492,11 +516,7 @@ export default function CourseDetail() {
       if (targetLesson && targetLesson.id !== selectedLesson?.id) {
         if (isLessonLocked(targetLesson.id)) {
           // Locked deep-link — surface a toast instead of silently swapping.
-          toast({
-            title: t('courseDetail.lessonLocked'),
-            description: t('courseDetail.lessonLockedDesc'),
-            variant: 'destructive',
-          });
+          toastLocked(lessonLocks.get(targetLesson.id));
           setSearchParams({}, { replace: true });
           return;
         }
@@ -843,12 +863,8 @@ export default function CourseDetail() {
                 disabled={!isAdminOrInstructor && lockedLessonIds.has(getNextLesson.id)}
                 onClick={() => {
                   const next = getNextLesson;
-                  if (!isAdminOrInstructor && lockedLessonIds.has(next.id)) {
-                    toast({
-                      title: t('courseDetail.lessonLocked'),
-                      description: t('courseDetail.lessonLockedDesc'),
-                      variant: 'destructive',
-                    });
+                  if (!isAdminOrInstructor && lessonLocks.has(next.id)) {
+                    toastLocked(lessonLocks.get(next.id));
                     return;
                   }
                   setShouldAutoplay(true);
@@ -1164,7 +1180,7 @@ export default function CourseDetail() {
                           key={lesson.id}
                           onClick={() => handleSelectLesson(lesson, { autoplay: true })}
                           aria-disabled={locked}
-                          title={locked ? t('courseDetail.lessonLockedTooltip') : undefined}
+                          title={locked ? describeLock(lessonLocks.get(lesson.id)).desc : undefined}
                           className={cn(
                             "w-full px-4 py-2.5 flex items-center gap-3 text-start text-sm transition-colors",
                             locked

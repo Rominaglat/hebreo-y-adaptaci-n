@@ -296,6 +296,12 @@ const translations: Translations = {
   'courseDetail.lessonLocked': { he: 'השיעור נעול', en: 'Lesson Locked', es: 'Lección bloqueada' },
   'courseDetail.lessonLockedDesc': { he: 'יש להשלים את השיעור הקודם כדי לפתוח את השיעור הזה.', en: 'Complete the previous lesson to unlock this one.', es: 'Completa la lección anterior para desbloquear esta.' },
   'courseDetail.lessonLockedTooltip': { he: 'נעול — השלימי את השיעור הקודם', en: 'Locked — complete the previous lesson', es: 'Bloqueada — completa la lección anterior' },
+  // Named variants: a lock that doesn't say WHAT is blocking sends the
+  // student to support. These are used whenever the blocker is known.
+  'courseDetail.lessonLockedNamedDesc': { he: 'כדי לפתוח את השיעור הזה יש להשלים קודם את «{lesson}».', en: 'To open this lesson, finish “{lesson}” first.', es: 'Para abrir esta lección, termina antes «{lesson}».' },
+  'courseDetail.courseGatedNamedDesc': { he: 'כדי להתחיל את הקורס הזה יש להשלים קודם את הקורס «{course}».', en: 'To start this course, finish the course “{course}” first.', es: 'Para comenzar este curso, termina antes el curso «{course}».' },
+  'courseDetail.goToBlockingLesson': { he: 'למעבר לשיעור', en: 'Go to lesson', es: 'Ir a la lección' },
+  'courseDetail.goToBlockingCourse': { he: 'למעבר לקורס', en: 'Go to course', es: 'Ir al curso' },
   'courseDetail.courseGated': { he: 'הקורס נעול', en: 'Course Locked', es: 'Curso bloqueado' },
   'courseDetail.courseGatedDesc': { he: 'יש להשלים את הקורס הקודם לפני שאפשר להתחיל את הקורס הזה.', en: 'Finish the previous course before you can start this one.', es: 'Termina el curso anterior antes de comenzar este.' },
   'courseDetail.courseGatedTooltip': { he: 'נעול — השלימי קודם את הקורס הקודם', en: 'Locked — finish the previous course first', es: 'Bloqueado — termina antes el curso anterior' },
