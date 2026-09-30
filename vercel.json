@@ -12,7 +12,8 @@
     },
     "yt-dlp-service": {
       "entrypoint": "services/yt-dlp-service",
-      "routePrefix": "/_/yt-dlp-service"
+      "routePrefix": "/_/yt-dlp-service",
+      "framework": "flask"
     }
   },
   "headers": [
