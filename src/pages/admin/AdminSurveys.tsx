@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronDown, Copy, Download, Inbox, Loader2, MessageSquareHeart, Search, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ChevronDown, Copy, Download, Inbox, Loader2, MessageCircle, MessageSquareHeart, Search, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { he, enUS, es } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,8 +20,10 @@ import {
   SURVEY_PATH,
   activeStudentIds,
   summarize,
+  summarizeWhatsappSends,
   surveyPeriod,
   type SurveyResponseRow,
+  type WhatsappSendRow,
 } from '@/lib/satisfactionSurvey';
 
 // Admin-only tab: every monthly satisfaction-survey response, grouped by month,
@@ -83,6 +85,9 @@ export default function AdminSurveys() {
   const currentPeriod = useMemo(() => surveyPeriod(), []);
   const [period, setPeriod] = useState(currentPeriod);
   const [search, setSearch] = useState('');
+  // Monthly WhatsApp reminder status (null config = table not readable → line hidden).
+  const [waConfig, setWaConfig] = useState<{ enabled: boolean; send_hour: number } | null>(null);
+  const [waSends, setWaSends] = useState<(WhatsappSendRow & { period: string })[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +114,18 @@ export default function AdminSurveys() {
       setResponses(rows);
       setProfiles(Object.fromEntries(profs.map((p) => [p.id, p])));
       setActiveIds(activeStudentIds(profs, roles));
+
+      // Best-effort: the reminder status line must never block the responses.
+      const [{ data: cfg }, sends] = await Promise.all([
+        supabase.from('survey_whatsapp_config').select('enabled, send_hour').maybeSingle(),
+        fetchAllRows<WhatsappSendRow & { period: string }>((from, to) => supabase
+          .from('survey_whatsapp_sends')
+          .select('period, status, reason')
+          .order('id')
+          .range(from, to)).catch(() => []),
+      ]);
+      setWaConfig(cfg ?? null);
+      setWaSends(sends);
     } catch (e) {
       toast({ title: t('surveys.loadError'), description: e instanceof Error ? e.message : undefined, variant: 'destructive' });
     } finally {
@@ -132,6 +149,7 @@ export default function AdminSurveys() {
 
   const monthRows = useMemo(() => responses.filter((r) => r.period === period), [responses, period]);
   const summary = useMemo(() => summarize(monthRows), [monthRows]);
+  const waSummary = useMemo(() => summarizeWhatsappSends(waSends.filter((s) => s.period === period)), [waSends, period]);
 
   const respondents = useMemo(() => new Set(monthRows.map((r) => r.user_id)), [monthRows]);
   const activeResponded = useMemo(() => [...activeIds].filter((id) => respondents.has(id)).length, [activeIds, respondents]);
@@ -251,12 +269,34 @@ export default function AdminSurveys() {
         </div>
       </div>
 
-      {/* Survey link */}
-      <Card className="p-3 flex flex-wrap items-center gap-3">
-        <code dir="ltr" className="text-sm bg-muted rounded px-2 py-1 select-all break-all">{surveyUrl}</code>
-        <Button size="sm" onClick={() => void copyLink()} className="ms-auto">
-          <Copy className="w-4 h-4 me-2" /> {t('surveys.copyLink')}
-        </Button>
+      {/* Survey link + monthly WhatsApp reminder status */}
+      <Card className="p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <code dir="ltr" className="text-sm bg-muted rounded px-2 py-1 select-all break-all">{surveyUrl}</code>
+          <Button size="sm" onClick={() => void copyLink()} className="ms-auto">
+            <Copy className="w-4 h-4 me-2" /> {t('surveys.copyLink')}
+          </Button>
+        </div>
+        {waConfig && (
+          <p className="flex items-start gap-2 text-xs text-muted-foreground">
+            <MessageCircle className="w-4 h-4 flex-shrink-0" />
+            <span>
+              {waConfig.enabled
+                ? t('surveys.wa.on').replace('{hour}', String(waConfig.send_hour).padStart(2, '0'))
+                : t('surveys.wa.off')}
+              {waSummary.total > 0 && (
+                <span className="tabular-nums">
+                  {[
+                    t('surveys.wa.sent').replace('{n}', String(waSummary.sent)),
+                    waSummary.failed > 0 && t('surveys.wa.failed').replace('{n}', String(waSummary.failed)),
+                    waSummary.pending > 0 && t('surveys.wa.pending').replace('{n}', String(waSummary.pending)),
+                    waSummary.noPhone > 0 && t('surveys.wa.noPhone').replace('{n}', String(waSummary.noPhone)),
+                  ].filter(Boolean).map((part) => ` · ${part}`).join('')}
+                </span>
+              )}
+            </span>
+          </p>
+        )}
       </Card>
 
       {/* Headline numbers */}

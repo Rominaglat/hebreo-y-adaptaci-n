@@ -207,3 +207,19 @@ export function activeStudentIds(
       .map((p) => p.id),
   );
 }
+
+// Monthly WhatsApp reminder (Lychee) — see migration 20260930120000. The admin
+// tab shows one status line per month from survey_whatsapp_sends.
+export interface WhatsappSendRow { status: string; reason: string | null }
+export interface WhatsappSendSummary { sent: number; failed: number; pending: number; noPhone: number; total: number }
+
+export function summarizeWhatsappSends(rows: WhatsappSendRow[]): WhatsappSendSummary {
+  const s: WhatsappSendSummary = { sent: 0, failed: 0, pending: 0, noPhone: 0, total: rows.length };
+  for (const r of rows) {
+    if (r.status === 'sent') s.sent += 1;
+    else if (r.status === 'failed') s.failed += 1;
+    else if (r.status === 'queued' || r.status === 'sending') s.pending += 1;
+    else if (r.status === 'skipped' && (r.reason === 'no_phone' || r.reason === 'invalid_phone')) s.noPhone += 1;
+  }
+  return s;
+}

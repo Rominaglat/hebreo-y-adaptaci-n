@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   activeStudentIds,
+  summarizeWhatsappSends,
   effectiveRole,
   emptyDraft,
   missingFields,
@@ -194,5 +195,24 @@ describe('activeStudentIds', () => {
       { user_id: 'deleted', role: 'student' },
     ];
     expect([...activeStudentIds(profiles, roles)].sort()).toEqual(['lead-then-student', 'no-role', 'student']);
+  });
+});
+
+describe('summarizeWhatsappSends', () => {
+  it('buckets the monthly send log for the admin status line', () => {
+    expect(summarizeWhatsappSends([
+      { status: 'sent', reason: null },
+      { status: 'sent', reason: null },
+      { status: 'failed', reason: 'Template not found' },
+      { status: 'queued', reason: null },
+      { status: 'sending', reason: null },
+      { status: 'skipped', reason: 'no_phone' },
+      { status: 'skipped', reason: 'invalid_phone' },
+      { status: 'skipped', reason: 'already_answered' },
+    ])).toEqual({ sent: 2, failed: 1, pending: 2, noPhone: 2, total: 8 });
+  });
+
+  it('is all zeros for a month with no sends', () => {
+    expect(summarizeWhatsappSends([])).toEqual({ sent: 0, failed: 0, pending: 0, noPhone: 0, total: 0 });
   });
 });

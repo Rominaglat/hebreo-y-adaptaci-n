@@ -1764,6 +1764,12 @@ const translations: Translations = {
   'surveys.colEmail': { he: 'מייל', en: 'Email', es: 'Correo' },
   'surveys.colDate': { he: 'תאריך', en: 'Date', es: 'Fecha' },
   'surveys.loadError': { he: 'טעינת התשובות נכשלה', en: 'Failed to load the responses', es: 'No se pudieron cargar las respuestas' },
+  'surveys.wa.off': { he: 'תזכורת וואטסאפ אוטומטית: כבויה', en: 'Automatic WhatsApp reminder: off', es: 'Recordatorio automático por WhatsApp: desactivado' },
+  'surveys.wa.on': { he: 'תזכורת וואטסאפ נשלחת אוטומטית ביום רביעי השני של כל חודש ב-{hour}:00', en: 'The WhatsApp reminder goes out automatically on the 2nd Wednesday of each month at {hour}:00', es: 'El recordatorio por WhatsApp se envía automáticamente el 2.º miércoles de cada mes a las {hour}:00' },
+  'surveys.wa.sent': { he: 'נשלחו {n}', en: '{n} sent', es: '{n} enviados' },
+  'surveys.wa.failed': { he: 'נכשלו {n}', en: '{n} failed', es: '{n} fallidos' },
+  'surveys.wa.pending': { he: 'בתור {n}', en: '{n} queued', es: '{n} en cola' },
+  'surveys.wa.noPhone': { he: 'ללא טלפון {n}', en: '{n} without a phone', es: '{n} sin teléfono' },
 };
 
 interface LanguageContextType {

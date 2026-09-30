@@ -133,6 +133,45 @@ export type Database = {
         Update: Record<string, never>
         Relationships: []
       }
+      // Admin read-only; written only by the pg_cron sender (migration 20260930120000).
+      survey_whatsapp_config: {
+        Row: {
+          id: boolean
+          enabled: boolean
+          channel_id: string | null
+          template_name: string
+          template_language: string
+          body_variables: string[]
+          survey_url: string
+          api_url: string
+          send_hour: number
+          batch_per_minute: number
+          updated_at: string
+        }
+        Insert: Record<string, never>
+        Update: Record<string, never>
+        Relationships: []
+      }
+      survey_whatsapp_sends: {
+        Row: {
+          id: string
+          period: string
+          user_id: string
+          phone: string | null
+          first_name: string | null
+          status: 'queued' | 'sending' | 'sent' | 'failed' | 'skipped'
+          reason: string | null
+          attempts: number
+          request_id: number | null
+          http_status: number | null
+          message_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Record<string, never>
+        Update: Record<string, never>
+        Relationships: []
+      }
       weekly_goal_snapshots: {
         Row: {
           id: string
