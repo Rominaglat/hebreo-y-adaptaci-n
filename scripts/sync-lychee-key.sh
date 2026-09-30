@@ -36,17 +36,19 @@ CHANNELS="$(lychee_get make-channels)"
 printf '%s' "$CHANNELS" | python3 -m json.tool --no-ensure-ascii
 
 echo "→ The survey_clients template:"
-lychee_get make-templates | python3 -c '
+# Lychee lists only Meta-APPROVED templates, and only name/language/category —
+# never the body, so the {{1}}/{{2}} order can't be checked from here.
+TEMPLATE_LANG="$(lychee_get make-templates | python3 -c '
 import sys, json
 d = json.load(sys.stdin)
 items = d if isinstance(d, list) else next((v for v in d.values() if isinstance(v, list)), [])
 hits = [t for t in items if t.get("name") == "survey_clients"]
 if hits:
-    print(json.dumps(hits, ensure_ascii=False, indent=2))
+    print(json.dumps(hits, ensure_ascii=False, indent=2), file=sys.stderr)
+    print(hits[0].get("language", ""))
 else:
-    print("NOT FOUND. Approved templates: " + ", ".join(str(t.get("name")) for t in items))
-    sys.exit(1)
-'
+    print("  NOT APPROVED YET (or named differently). Approved: " + ", ".join(str(t.get("name")) for t in items), file=sys.stderr)
+')"
 
 CHANNEL="$(val LYCHEE_CHANNEL_ID)"
 if [ -z "$CHANNEL" ]; then
@@ -59,7 +61,7 @@ print(items[0].get("id", "") if len(items) == 1 else "")
 fi
 
 echo "→ Storing the key in Supabase Vault…"
-psql "$DB" -X -q -v ON_ERROR_STOP=1 -v key="$KEY" -v channel="$CHANNEL" <<'SQL'
+psql "$DB" -X -q -v ON_ERROR_STOP=1 -v key="$KEY" -v channel="$CHANNEL" -v lang="$TEMPLATE_LANG" <<'SQL'
 DO $do$ BEGIN
   IF to_regclass('public.survey_whatsapp_config') IS NULL THEN
     RAISE EXCEPTION 'Apply migration 20260930120000_survey_whatsapp_reminder.sql first';
@@ -71,11 +73,16 @@ SELECT CASE
   ELSE vault.create_secret(:'key', 'lychee_api_key', 'Lychee WhatsApp API key — monthly survey reminder')::text
 END AS stored \gset
 UPDATE public.survey_whatsapp_config
-   SET channel_id = NULLIF(:'channel', ''), updated_at = now()
- WHERE NULLIF(:'channel', '') IS NOT NULL;
+   SET channel_id = coalesce(NULLIF(:'channel', ''), channel_id),
+       template_language = coalesce(NULLIF(:'lang', ''), template_language),   -- e.g. es_AR, not es
+       updated_at = now();
 SELECT format('  vault: lychee_api_key stored | channel_id: %s | template: %s (%s) vars=%s | enabled: %s',
               coalesce(channel_id, 'NOT SET — add LYCHEE_CHANNEL_ID'), template_name, template_language,
               body_variables, enabled)
 FROM public.survey_whatsapp_config;
 SQL
+if [ -z "$TEMPLATE_LANG" ]; then
+  echo "Key stored, but survey_clients is not approved in Lychee yet — re-run this script once it is." >&2
+  exit 2
+fi
 echo "Done. Sending is still OFF until: UPDATE public.survey_whatsapp_config SET enabled = true;"
