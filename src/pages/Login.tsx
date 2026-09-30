@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { Lock, Loader2, Mail } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { markFullAuth } from '@/lib/sessionGuard';
+import { safeRedirectPath } from '@/lib/safeRedirect';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { LanguageSelector } from '@/components/LanguageSelector';
@@ -28,6 +29,7 @@ export default function Login() {
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { signIn, user } = useAuth();
   const { t } = useLanguage();
@@ -36,9 +38,13 @@ export default function Login() {
     document.title = `${t('auth.loginTitle')} | Hebreo y Adaptación`;
   }, [t]);
 
+  // Return to the page that sent the user here (ProtectedRoute puts it in
+  // location.state.from) so a dedicated link like /encuesta survives login.
+  const redirectTo = safeRedirectPath((location.state as { from?: unknown } | null)?.from);
+
   useEffect(() => {
-    if (user) navigate('/dashboard', { replace: true });
-  }, [user, navigate]);
+    if (user) navigate(redirectTo, { replace: true });
+  }, [user, navigate, redirectTo]);
 
   const loginSchema = useMemo(
     () =>
@@ -123,7 +129,7 @@ export default function Login() {
         description: t('auth.loginSuccess'),
       });
 
-      navigate('/dashboard');
+      navigate(redirectTo, { replace: true });
     } catch {
       toast({
         title: t('common.error'),

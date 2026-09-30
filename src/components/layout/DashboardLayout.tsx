@@ -1,7 +1,7 @@
 import { ReactNode, Suspense, useState, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Home, BookOpen, Video, Calendar, User, LogOut, Menu, X, Bell, Settings, Megaphone, UserPlus, Sun, Moon, CheckCheck, Gift, UsersRound, GraduationCap, Search, Lock, ClipboardCheck } from 'lucide-react';
+import { Home, BookOpen, Video, Calendar, User, LogOut, Menu, X, Bell, Settings, Megaphone, UserPlus, Sun, Moon, CheckCheck, Gift, UsersRound, GraduationCap, Search, Lock, ClipboardCheck, MessageSquareHeart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -159,6 +159,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   // Items visible only to admins/super_admins.
   const adminOnlyNavItems = [
+    { icon: MessageSquareHeart, label: t('nav.surveys'), path: '/admin/surveys' },
     { icon: Settings, label: t('nav.settings'), path: '/admin/settings' },
   ];
 
@@ -174,6 +175,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       '/announcements': t('nav.announcements'),
       '/admin/users': t('nav.manageUsers'),
       '/admin/submissions': t('nav.submissions'),
+      '/admin/surveys': t('nav.surveys'),
+      '/encuesta': t('survey.title'),
       '/admin/settings': t('nav.settings'),
       '/profile': t('nav.profile'),
     };

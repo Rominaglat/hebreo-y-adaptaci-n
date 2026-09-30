@@ -31,6 +31,8 @@ const Profile = lazy(() => import("./pages/Profile"));
 const ManageUsers = lazy(() => import("./pages/admin/ManageUsers"));
 const AdminSubmissions = lazy(() => import("./pages/admin/AdminSubmissions"));
 const PlatformSettings = lazy(() => import("./pages/admin/PlatformSettings"));
+const AdminSurveys = lazy(() => import("./pages/admin/AdminSurveys"));
+const SatisfactionSurvey = lazy(() => import("./pages/SatisfactionSurvey"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const InstallApp = lazy(() => import("./pages/InstallApp"));
 const LearningPath = lazy(() => import("./pages/LearningPath"));
@@ -96,8 +98,12 @@ const App = () => (
                       <Route path="/settings/security" element={<SecuritySettings />} />
                       <Route path="/install" element={<InstallApp />} />
                       <Route path="/learning-path" element={<ProtectedRoute denyLead><LearningPath /></ProtectedRoute>} />
+                      {/* Monthly satisfaction survey — deliberately NOT in the nav;
+                          reachable only through the link the admins send out. */}
+                      <Route path="/encuesta" element={<ProtectedRoute denyLead><SatisfactionSurvey /></ProtectedRoute>} />
                       <Route path="/admin/users" element={<ProtectedRoute requireAdminOrInstructor>{<ManageUsers />}</ProtectedRoute>} />
                       <Route path="/admin/submissions" element={<ProtectedRoute requireAdminOrInstructor>{<AdminSubmissions />}</ProtectedRoute>} />
+                      <Route path="/admin/surveys" element={<ProtectedRoute requireAdmin><AdminSurveys /></ProtectedRoute>} />
                       <Route path="/admin/settings" element={<PlatformSettings />} />
                     </Route>
 

@@ -92,6 +92,47 @@ export type Database = {
         }
         Relationships: []
       }
+      satisfaction_survey_responses: {
+        Row: {
+          id: string
+          user_id: string
+          period: string
+          tenure: string
+          would_recommend: boolean
+          overall_satisfaction: number
+          needs_improvement: string[]
+          rating_clarity: number
+          rating_continuity: number
+          rating_lives: number
+          rating_ai: number
+          rating_feedback: number
+          contribution: string
+          suggestions: string
+          comments: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          period?: string
+          tenure: string
+          would_recommend: boolean
+          overall_satisfaction: number
+          needs_improvement: string[]
+          rating_clarity: number
+          rating_continuity: number
+          rating_lives: number
+          rating_ai: number
+          rating_feedback: number
+          contribution: string
+          suggestions: string
+          comments?: string | null
+          created_at?: string
+        }
+        // Immutable through the API (no UPDATE policy / privilege).
+        Update: Record<string, never>
+        Relationships: []
+      }
       weekly_goal_snapshots: {
         Row: {
           id: string
