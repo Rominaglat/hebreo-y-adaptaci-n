@@ -9,6 +9,7 @@
 
 BEGIN;
 \i supabase/migrations/20260930120000_survey_whatsapp_reminder.sql
+\i supabase/migrations/20260930130000_survey_whatsapp_message_id.sql
 
 CREATE FUNCTION pg_temp.expect(label text, actual anyelement, expected anyelement) RETURNS void
 LANGUAGE plpgsql AS $$
@@ -116,13 +117,14 @@ SELECT pg_temp.expect('idempotency key per student per month',
 SELECT pg_temp.expect('bearer auth header', (SELECT headers ->> 'Authorization' LIKE 'Bearer %' FROM sample), true);
 
 -- ── Reconcile: simulate Lychee's answers for the 4 in-flight requests ──────
+-- #1 uses the real success shape observed in production (camelCase messageId).
 CREATE TEMP TABLE inflight AS
   SELECT id, request_id, row_number() OVER (ORDER BY created_at) AS n
   FROM public.survey_whatsapp_sends WHERE status = 'sending';
 INSERT INTO net._http_response (id, status_code, content, timed_out, error_msg, created)
 SELECT request_id,
        CASE n WHEN 1 THEN 200 WHEN 2 THEN 429 WHEN 3 THEN 400 END,
-       CASE n WHEN 1 THEN '{"ok":true,"message_id":"msg-1"}'
+       CASE n WHEN 1 THEN '{"ok":true,"messageId":"msg-1","waId":"wamid.x"}'
               WHEN 2 THEN '{"error":"rate limited"}'
               WHEN 3 THEN '{"error":"Template not found"}' END,
        false, NULL, now()
