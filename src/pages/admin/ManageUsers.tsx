@@ -96,6 +96,9 @@ import { Progress } from '@/components/ui/progress';
 import ExcelJS from 'exceljs';
 import { StudentProgressDialog } from '@/components/admin/StudentProgressDialog';
 import { AssignmentSubmissionsDialog } from '@/components/admin/AssignmentSubmissionsDialog';
+import { SubscriptionsDashboard } from '@/components/admin/SubscriptionsDashboard';
+import { SubscriptionCell } from '@/components/admin/SubscriptionCell';
+import { useStudentSubscriptions } from '@/hooks/useStudentSubscriptions';
 interface UserActivity {
   id: string;
   activity_type: string;
@@ -150,6 +153,8 @@ export default function ManageUsers() {
   const { t, language } = useLanguage();
   const { currentTenant } = useTenant();
   const { toast } = useToast();
+  // Revenue is admin-only (RLS too); instructors never fetch it.
+  const subscriptions = useStudentSubscriptions(isAdmin);
   
   // Check if this is the main/admin tenant (no courses management needed)
   const isMainTenant = currentTenant?.slug === 'main';
@@ -1521,6 +1526,17 @@ export default function ManageUsers() {
           </div>
         </div>
 
+        {isAdmin && (
+          <SubscriptionsDashboard
+            rows={subscriptions.rows}
+            lastRun={subscriptions.lastRun}
+            loading={subscriptions.loading}
+            error={subscriptions.error}
+            syncing={subscriptions.syncing}
+            onSync={subscriptions.sync}
+          />
+        )}
+
         {/* Filters */}
         <div className="flex flex-col gap-3">
           <div className="relative w-full">
@@ -1655,6 +1671,9 @@ export default function ManageUsers() {
                       )}
                       <TableHead className="text-right">{t('admin.user')}</TableHead>
                       <TableHead className="text-right">{t('admin.role')}</TableHead>
+                      {isAdmin && (
+                        <TableHead className="text-right">{t('manageUsers.subs.column')}</TableHead>
+                      )}
                       {!isMainTenant && (
                         <TableHead className="text-right">{t('manageUsers.courses')}</TableHead>
                       )}
@@ -1704,6 +1723,11 @@ export default function ManageUsers() {
                             </Badge>
                           )}
                         </TableCell>
+                        {isAdmin && (
+                          <TableCell>
+                            <SubscriptionCell sub={subscriptions.byUserId.get(user.id)} />
+                          </TableCell>
+                        )}
                         {!isMainTenant && (
                           <TableCell>
                             <Badge variant="outline">
@@ -1916,6 +1940,11 @@ export default function ManageUsers() {
                           {format(new Date(user.join_date), language === 'he' ? 'd בMMM yyyy' : 'd MMM yyyy', { locale: language === 'he' ? he : enUS })}
                         </span>
                       </div>
+                      {isAdmin && subscriptions.byUserId.has(user.id) && (
+                        <div className="mt-2">
+                          <SubscriptionCell sub={subscriptions.byUserId.get(user.id)} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>

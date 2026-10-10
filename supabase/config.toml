@@ -42,3 +42,6 @@ verify_jwt = false
 
 [functions.lifecycle-unsubscribe]
 verify_jwt = false
+
+[functions.sync-subscriptions-sheet]
+verify_jwt = false
