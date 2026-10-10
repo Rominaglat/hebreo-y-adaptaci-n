@@ -124,8 +124,49 @@ $$;
 REVOKE ALL ON FUNCTION public.replace_student_subscriptions(jsonb) FROM public, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.replace_student_subscriptions(jsonb) TO service_role;
 
+-- ── Cron authentication ──────────────────────────────────────────────────────
+-- The edge function is public (cron has no JWT), so the cron proves itself with
+-- an x-cron-secret header. The secret is generated HERE, lives only in Vault,
+-- and never leaves the database: the cron reads it from Vault at run time and
+-- the edge function checks it through check_subscriptions_sync_secret().
+-- Nothing to configure by hand. To rotate: update the Vault secret.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'subscriptions_sync_cron_secret') THEN
+    PERFORM vault.create_secret(
+      replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''),
+      'subscriptions_sync_cron_secret',
+      'x-cron-secret for the invoke-sync-subscriptions-sheet cron job'
+    );
+  END IF;
+END$$;
+
+-- SECURITY DEFINER to read Vault; callable by service_role only. Compares
+-- digests so the comparison time says nothing about the secret's prefix.
+CREATE OR REPLACE FUNCTION public.check_subscriptions_sync_secret(_secret text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT coalesce(
+    _secret IS NOT NULL AND _secret <> '' AND
+    sha256(convert_to(_secret, 'UTF8')) = (
+      SELECT sha256(convert_to(decrypted_secret, 'UTF8'))
+      FROM vault.decrypted_secrets
+      WHERE name = 'subscriptions_sync_cron_secret'
+      LIMIT 1
+    ),
+    false
+  )
+$$;
+
+REVOKE ALL ON FUNCTION public.check_subscriptions_sync_secret(text) FROM public, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_subscriptions_sync_secret(text) TO service_role;
+
 -- ── Schedule ─────────────────────────────────────────────────────────────────
--- Hourly, at :07 to stay clear of the top-of-hour jobs. Until the Google
+-- Hourly, at :07 to stay clear of the top-of-hour jobs. Until the bridge
 -- secrets are set, each run just logs error = 'not_configured' and leaves the
 -- table as it is.
 CREATE EXTENSION IF NOT EXISTS pg_cron;
@@ -140,7 +181,7 @@ BEGIN
       'invoke-sync-subscriptions-sheet',
       '7 * * * *',
       format(
-        $cron$SELECT net.http_post(url := %L, headers := '{"Content-Type":"application/json"}'::jsonb, body := '{"trigger":"cron"}'::jsonb) AS request_id;$cron$,
+        $cron$SELECT net.http_post(url := %L, headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'subscriptions_sync_cron_secret' LIMIT 1)), body := '{}'::jsonb) AS request_id;$cron$,
         service_url
       )
     );

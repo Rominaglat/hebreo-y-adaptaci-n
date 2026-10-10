@@ -129,10 +129,13 @@ body `{"trigger":"cron"}`, same idempotent pattern as
 
 ### Edge function `sync-subscriptions-sheet`
 
-- `verify_jwt = false` (cron calls it unauthenticated, like the other sweeps). The
-  only accepted body field is `trigger`. The response carries **counts only**, never
-  PII. A run is skipped if a successful run finished less than 60 s ago, so an
-  abusive caller can at worst cause one extra read per minute.
+- `verify_jwt = false` (cron has no JWT), so the function authenticates every caller
+  itself before writing anything: the cron sends `x-cron-secret`, a random secret the
+  migration generates into Vault and checks via `check_subscriptions_sync_secret()`
+  (service_role only, digest compare); "Sync now" sends the admin's JWT, which must
+  belong to an admin / super_admin. Anyone else gets 401. The body is ignored; the
+  response carries counts and an error code only, never PII. A run is skipped while
+  another is in flight or one succeeded under 60 s ago.
 - **Google auth:** secret `GOOGLE_SERVICE_ACCOUNT_JSON`. Signs an RS256 JWT with
   WebCrypto (no new dependency), exchanges it at `oauth2.googleapis.com/token` for a
   token with scope `spreadsheets.readonly`.

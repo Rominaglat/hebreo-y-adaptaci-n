@@ -13,11 +13,16 @@
 // the sheet — no Google Cloud project or sharing needed. It answers only to
 // the shared token.
 //
-// Public (verify_jwt=false) because cron calls it unauthenticated. The only
-// accepted body field is `trigger`, the response carries counts and an error
-// CODE only — never a name, email or phone — and a run is skipped if one
-// succeeded under a minute ago, so a hostile caller can at worst cause one
-// extra sheet read per minute.
+// verify_jwt=false because cron has no JWT, so the function authenticates
+// every caller itself BEFORE touching anything:
+//   - cron: x-cron-secret header, checked against the Vault secret through
+//     check_subscriptions_sync_secret() (the secret never leaves the database);
+//   - "Sync now": the signed-in user's JWT, which must belong to an admin or
+//     super_admin.
+// Anyone else gets a 401 and no run is logged. The body is ignored. The
+// response carries counts and an error CODE only — never a name, email or
+// phone. A run is skipped while another is in flight or one succeeded under a
+// minute ago.
 //
 // Secrets: SHEET_BRIDGE_URL (the web app's /exec URL), SHEET_BRIDGE_TOKEN.
 
@@ -51,6 +56,26 @@ async function readSheet(bridgeUrl: string, token: string): Promise<string[][]> 
     throw new BridgeError(`bridge unreachable: ${(e as Error).message}`);
   }
   return parseBridgeResponse(res.status, await res.text());
+}
+
+type Caller = "cron" | "manual";
+
+/** Who is calling: the cron (Vault-backed secret) or a signed-in admin. null = nobody we trust. */
+async function identifyCaller(req: Request, admin: SupabaseClient): Promise<Caller | null> {
+  const cronSecret = req.headers.get("x-cron-secret");
+  if (cronSecret) {
+    const { data, error } = await admin.rpc("check_subscriptions_sync_secret", { _secret: cronSecret });
+    if (error) console.error("[sync-subscriptions-sheet] cron secret check failed:", error.message);
+    return data === true ? "cron" : null;
+  }
+
+  const jwt = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
+  if (!jwt) return null;
+  const { data: { user } } = await admin.auth.getUser(jwt);
+  if (!user) return null;
+  const { data: roles, error } = await admin.from("user_roles").select("role").eq("user_id", user.id);
+  if (error) throw error;
+  return (roles ?? []).some((r: { role: string }) => r.role === "admin" || r.role === "super_admin") ? "manual" : null;
 }
 
 async function loadProfiles(admin: SupabaseClient): Promise<Array<ProfileLite>> {
@@ -114,13 +139,23 @@ serve(async (req) => {
     new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const body = await req.json().catch(() => ({}));
-  const trigger = body?.trigger === "manual" ? "manual" : "cron";
 
-  const { data: lastOk } = await admin
-    .from("subscription_sync_runs").select("finished_at")
-    .eq("ok", true).order("finished_at", { ascending: false }).limit(1).maybeSingle();
-  if (lastOk?.finished_at && Date.now() - Date.parse(lastOk.finished_at) < THROTTLE_MS) {
+  let trigger: Caller | null;
+  try {
+    trigger = await identifyCaller(req, admin);
+  } catch (e) {
+    console.error("[sync-subscriptions-sheet] caller check failed:", (e as { message?: string })?.message);
+    return json({ ok: false, error: "internal_error" satisfies ErrorCode }, 500);
+  }
+  if (!trigger) return json({ ok: false, error: "unauthorized" }, 401);
+
+  // Skip while a run is in flight, or right after a good one. Failed runs do
+  // not block a retry.
+  const since = new Date(Date.now() - THROTTLE_MS).toISOString();
+  const { data: recent } = await admin
+    .from("subscription_sync_runs").select("id")
+    .gte("started_at", since).or("ok.is.null,ok.eq.true").limit(1);
+  if (recent && recent.length > 0) {
     return json({ ok: true, skipped: true });
   }
 
