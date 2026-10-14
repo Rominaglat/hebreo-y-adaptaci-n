@@ -6,9 +6,10 @@ import { Card } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronDown, Copy, Download, Inbox, Loader2, MessageCircle, MessageSquareHeart, Search, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ChevronDown, Copy, Download, Inbox, Loader2, MessageCircle, MessageSquareHeart, Search, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { he, enUS, es } from 'date-fns/locale';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -25,6 +26,8 @@ import {
   type SurveyResponseRow,
   type WhatsappSendRow,
 } from '@/lib/satisfactionSurvey';
+import { buildAiExportRows, fillAiWorkbook } from '@/lib/surveyAiExport';
+import { pickPerUser, type SubscriptionRow } from '@/lib/subscriptionMetrics';
 
 // Admin-only tab: every monthly satisfaction-survey response, grouped by month,
 // with a light summary and the list of active students who haven't answered yet.
@@ -88,6 +91,7 @@ export default function AdminSurveys() {
   // Monthly WhatsApp reminder status (null config = table not readable → line hidden).
   const [waConfig, setWaConfig] = useState<{ enabled: boolean; send_hour: number } | null>(null);
   const [waSends, setWaSends] = useState<(WhatsappSendRow & { period: string })[]>([]);
+  const [exportingAi, setExportingAi] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -235,6 +239,45 @@ export default function AdminSurveys() {
     URL.revokeObjectURL(url);
   };
 
+  // Every month in one anonymised workbook, with each student's subscription,
+  // meant to be handed to an AI for analysis (see src/lib/surveyAiExport.ts).
+  const exportForAi = async () => {
+    setExportingAi(true);
+    try {
+      // student_subscriptions predates the generated types; admin-only by RLS.
+      const { data: subRows, error: subError } = await (supabase as unknown as SupabaseClient)
+        .from('student_subscriptions')
+        .select('id, user_id, sheet_row, status, monthly_price, started_at, cancelled_at, cancelled_at_source');
+      if (subError) toast({ title: t('surveys.ai.noSubscriptions'), variant: 'destructive' });
+      const subs = pickPerUser(((subRows ?? []) as SubscriptionRow[]).map((r) => ({
+        ...r,
+        monthly_price: r.monthly_price === null ? null : Number(r.monthly_price),
+      })));
+      const rows = buildAiExportRows(responses, subs);
+
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { default: ExcelJS } = await import('exceljs');
+      const wb = new ExcelJS.Workbook();
+      fillAiWorkbook(wb, rows, t, today);
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `encuesta-ai-${today}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('AI export failed:', e);
+      toast({ title: t('surveys.ai.exportError'), variant: 'destructive' });
+    } finally {
+      setExportingAi(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
@@ -265,6 +308,15 @@ export default function AdminSurveys() {
           </Select>
           <Button variant="outline" onClick={() => void exportExcel()} disabled={filtered.length === 0}>
             <Download className="w-4 h-4 me-2" /> {t('surveys.export')}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void exportForAi()}
+            disabled={responses.length === 0 || exportingAi}
+            title={t('surveys.ai.exportHint')}
+          >
+            {exportingAi ? <Loader2 className="w-4 h-4 me-2 animate-spin" /> : <Sparkles className="w-4 h-4 me-2" />}
+            {t('surveys.ai.export')}
           </Button>
         </div>
       </div>
