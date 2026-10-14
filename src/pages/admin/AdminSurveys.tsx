@@ -291,6 +291,8 @@ export default function AdminSurveys() {
                     waSummary.failed > 0 && t('surveys.wa.failed').replace('{n}', String(waSummary.failed)),
                     waSummary.pending > 0 && t('surveys.wa.pending').replace('{n}', String(waSummary.pending)),
                     waSummary.noPhone > 0 && t('surveys.wa.noPhone').replace('{n}', String(waSummary.noPhone)),
+                    waSummary.optedOut > 0 && t('surveys.wa.optedOut').replace('{n}', String(waSummary.optedOut)),
+                    waSummary.cancelled > 0 && t('surveys.wa.cancelled').replace('{n}', String(waSummary.cancelled)),
                   ].filter(Boolean).map((part) => ` · ${part}`).join('')}
                 </span>
               )}

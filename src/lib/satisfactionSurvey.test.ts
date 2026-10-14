@@ -209,10 +209,19 @@ describe('summarizeWhatsappSends', () => {
       { status: 'skipped', reason: 'no_phone' },
       { status: 'skipped', reason: 'invalid_phone' },
       { status: 'skipped', reason: 'already_answered' },
-    ])).toEqual({ sent: 2, failed: 1, pending: 2, noPhone: 2, total: 8 });
+    ])).toEqual({ sent: 2, failed: 1, pending: 2, noPhone: 2, optedOut: 0, cancelled: 0, total: 8 });
+  });
+
+  it('counts students left out on purpose: opted out, or whose subscription is cancelled', () => {
+    expect(summarizeWhatsappSends([
+      { status: 'sent', reason: null },
+      { status: 'skipped', reason: 'opted_out' },
+      { status: 'skipped', reason: 'opted_out' },
+      { status: 'skipped', reason: 'subscription_cancelled' },
+    ])).toEqual({ sent: 1, failed: 0, pending: 0, noPhone: 0, optedOut: 2, cancelled: 1, total: 4 });
   });
 
   it('is all zeros for a month with no sends', () => {
-    expect(summarizeWhatsappSends([])).toEqual({ sent: 0, failed: 0, pending: 0, noPhone: 0, total: 0 });
+    expect(summarizeWhatsappSends([])).toEqual({ sent: 0, failed: 0, pending: 0, noPhone: 0, optedOut: 0, cancelled: 0, total: 0 });
   });
 });

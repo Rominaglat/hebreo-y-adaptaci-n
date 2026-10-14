@@ -172,6 +172,22 @@ export type Database = {
         Update: Record<string, never>
         Relationships: []
       }
+      survey_reminder_optouts: {
+        Row: {
+          user_id: string
+          source: 'self' | 'admin'
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          user_id: string
+          source: 'self' | 'admin'
+          created_by: string
+          created_at?: string
+        }
+        Update: Record<string, never>
+        Relationships: []
+      }
       weekly_goal_snapshots: {
         Row: {
           id: string

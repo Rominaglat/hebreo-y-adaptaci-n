@@ -25,7 +25,9 @@ import {
   Download,
   RefreshCw,
   BarChart3,
-  Clock
+  Clock,
+  BellOff,
+  Bell
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { he, enUS } from 'date-fns/locale';
@@ -99,6 +101,7 @@ import { AssignmentSubmissionsDialog } from '@/components/admin/AssignmentSubmis
 import { SubscriptionsDashboard } from '@/components/admin/SubscriptionsDashboard';
 import { SubscriptionCell } from '@/components/admin/SubscriptionCell';
 import { useStudentSubscriptions } from '@/hooks/useStudentSubscriptions';
+import { useSurveyOptOuts } from '@/hooks/useSurveyOptOut';
 interface UserActivity {
   id: string;
   activity_type: string;
@@ -146,7 +149,7 @@ async function readFunctionError(error: any): Promise<string> {
 }
 
 export default function ManageUsers() {
-  const { isAdmin, isSuperAdmin, isInstructor, loading: authLoading } = useAuth();
+  const { user: currentUser, isAdmin, isSuperAdmin, isInstructor, loading: authLoading } = useAuth();
   // Admin/super_admin can perform destructive actions; instructors are view-only.
   const canEdit = isAdmin;
   const canView = isAdmin || isInstructor;
@@ -155,6 +158,8 @@ export default function ManageUsers() {
   const { toast } = useToast();
   // Revenue is admin-only (RLS too); instructors never fetch it.
   const subscriptions = useStudentSubscriptions(isAdmin);
+  // Who asked not to get the monthly survey WhatsApp reminder.
+  const surveyOptOuts = useSurveyOptOuts(isAdmin, currentUser?.id);
   
   // Check if this is the main/admin tenant (no courses management needed)
   const isMainTenant = currentTenant?.slug === 'main';
@@ -1384,6 +1389,16 @@ export default function ManageUsers() {
   const bulkEligibleCount = bulkSelectedUsers.filter((u) => isTimeLimitEligible(u.role)).length;
   const bulkSkippedCount = bulkSelectedUsers.length - bulkEligibleCount;
 
+  const toggleSurveyOptOut = async (target: UserWithRole) => {
+    const optOut = !surveyOptOuts.optedOutIds.has(target.id);
+    const ok = await surveyOptOuts.setOptOut(target.id, optOut);
+    const name = target.full_name || target.email;
+    toast(ok
+      ? { title: t(optOut ? 'manageUsers.surveyOptOutDone' : 'manageUsers.surveyOptInDone').replace('{name}', name) }
+      : { title: t('manageUsers.surveyOptOutError'), variant: 'destructive' });
+  };
+  const canToggleSurvey = (target: UserWithRole) => canEdit && (target.role === 'student' || target.role === 'lead');
+
   return (
     <>
       <div className="space-y-6">
@@ -1722,6 +1737,12 @@ export default function ManageUsers() {
                               })}
                             </Badge>
                           )}
+                          {isAdmin && surveyOptOuts.optedOutIds.has(user.id) && (
+                            <Badge variant="outline" className="ms-1 gap-1 text-muted-foreground" title={t('manageUsers.surveyOptedOutTitle')}>
+                              <BellOff className="w-3 h-3" />
+                              {t('manageUsers.surveyOptedOutBadge')}
+                            </Badge>
+                          )}
                         </TableCell>
                         {isAdmin && (
                           <TableCell>
@@ -1774,6 +1795,13 @@ export default function ManageUsers() {
                                 <Mic className="w-4 h-4 ml-2" />
                                 {t('assignment.admin.menuItem')}
                               </DropdownMenuItem>
+                              {canToggleSurvey(user) && (
+                                <DropdownMenuItem onClick={() => toggleSurveyOptOut(user)}>
+                                  {surveyOptOuts.optedOutIds.has(user.id)
+                                    ? <><Bell className="w-4 h-4 ml-2" />{t('manageUsers.surveyOptIn')}</>
+                                    : <><BellOff className="w-4 h-4 ml-2" />{t('manageUsers.surveyOptOut')}</>}
+                                </DropdownMenuItem>
+                              )}
                               {(canEdit || (isInstructor && user.role === 'student')) && <DropdownMenuSeparator />}
                               {(canEdit || (isInstructor && user.role === 'student')) && (
                                 <DropdownMenuItem onClick={() => openResetPasswordDialog(user)}>
@@ -1889,6 +1917,13 @@ export default function ManageUsers() {
                               <Mic className="w-4 h-4 ml-2" />
                               {t('assignment.admin.menuItem')}
                             </DropdownMenuItem>
+                            {canToggleSurvey(user) && (
+                              <DropdownMenuItem onClick={() => toggleSurveyOptOut(user)}>
+                                {surveyOptOuts.optedOutIds.has(user.id)
+                                  ? <><Bell className="w-4 h-4 ml-2" />{t('manageUsers.surveyOptIn')}</>
+                                  : <><BellOff className="w-4 h-4 ml-2" />{t('manageUsers.surveyOptOut')}</>}
+                              </DropdownMenuItem>
+                            )}
                             {(canEdit || (isInstructor && user.role === 'student')) && <DropdownMenuSeparator />}
                             {(canEdit || (isInstructor && user.role === 'student')) && (
                               <DropdownMenuItem onClick={() => openResetPasswordDialog(user)}>
@@ -1934,6 +1969,12 @@ export default function ManageUsers() {
                             {format(new Date(user.accessExpiresAt), 'P', {
                               locale: language === 'he' ? he : enUS,
                             })}
+                          </Badge>
+                        )}
+                        {isAdmin && surveyOptOuts.optedOutIds.has(user.id) && (
+                          <Badge variant="outline" className="text-xs gap-1 text-muted-foreground">
+                            <BellOff className="w-3 h-3" />
+                            {t('manageUsers.surveyOptedOutBadge')}
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
