@@ -10,6 +10,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { loadSuppressedUserIds } from "../_shared/contact-suppression.ts";
 
 const RESEND_API = "https://api.resend.com/emails";
 const FROM_EMAIL = Deno.env.get("ANNOUNCE_FROM_EMAIL") ?? Deno.env.get("INVITE_FROM_EMAIL") ?? "Romina Hebreo <noreply@example.com>";
@@ -123,6 +124,9 @@ serve(async (req) => {
     if (goalRows.length === 0) return jsonResp({ week_start: weekStart, considered: 0, sent: 0, skipped: 0 });
 
     const userIds = goalRows.map((g) => g.user_id);
+    // The do-not-contact list overrides the goal's own email switch. Fails
+    // closed: an unreadable list throws and nobody is mailed this run.
+    const suppressed = await loadSuppressedUserIds(admin);
 
     const [{ data: expired }, { data: doneSnaps }, { data: profiles }, { data: completions }, { data: enrolls }, { data: priorSnaps }] = await Promise.all([
       admin.from("access_limits").select("user_id").lte("expires_at", now.toISOString()),
@@ -164,7 +168,7 @@ serve(async (req) => {
     const tierCounts: Record<string, number> = {};
 
     for (const g of goalRows) {
-      if (expiredSet.has(g.user_id) || alreadySent.has(g.user_id)) { skipped++; continue; }
+      if (expiredSet.has(g.user_id) || alreadySent.has(g.user_id) || suppressed.has(g.user_id)) { skipped++; continue; }
       const profile = profileById.get(g.user_id);
       if (!profile?.email) { skipped++; continue; }
 

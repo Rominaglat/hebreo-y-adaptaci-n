@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as webpush from "jsr:@negrel/webpush@0.5.0";
 import { getCorsHeaders, handlePreflight } from "../_shared/cors.ts";
+import { loadSuppressedUserIds } from "../_shared/contact-suppression.ts";
 
 
 interface PushPayload {
@@ -220,7 +221,7 @@ serve(async (req) => {
       query = query.eq("user_id", payload.userId);
     }
 
-    const { data: subscriptions, error: fetchError } = await query;
+    const { data: allSubscriptions, error: fetchError } = await query;
 
     if (fetchError) {
       console.error("[push] Error fetching subscriptions:", fetchError);
@@ -230,7 +231,21 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[push] Found ${subscriptions?.length || 0} subscriptions`);
+    // Nobody on the do-not-contact list gets a push. Fails closed: if the list
+    // can't be read, nothing is sent.
+    let suppressed: Set<string>;
+    try {
+      suppressed = await loadSuppressedUserIds(adminClient);
+    } catch (e) {
+      console.error("[push] do-not-contact list unreadable — nothing sent:", (e as Error).message);
+      return new Response(JSON.stringify({ error: "Failed to read the do-not-contact list" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const subscriptions = (allSubscriptions ?? []).filter((s) => !suppressed.has(s.user_id));
+
+    console.log(`[push] Found ${subscriptions.length} subscriptions (${(allSubscriptions?.length ?? 0) - subscriptions.length} on the do-not-contact list skipped)`);
 
     if (!subscriptions || subscriptions.length === 0) {
       return new Response(JSON.stringify({ message: "No subscriptions found", sent: 0, failed: 0 }), {

@@ -12,7 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { SurveyReminderOptOut } from '@/components/SurveyReminderOptOut';
+import { ContactOptOut } from '@/components/ContactOptOut';
 import { cn } from '@/lib/utils';
 import {
   ASPECT_LEVELS,
@@ -76,7 +76,7 @@ function Done({ title, body }: { title: string; body: string }) {
         <Link to="/dashboard">{t('survey.backHome')}</Link>
       </Button>
       <div className="pt-2">
-        <SurveyReminderOptOut />
+        <ContactOptOut />
       </div>
     </Card>
   );
@@ -357,7 +357,7 @@ export default function SatisfactionSurvey() {
         </Button>
 
         {/* Staff preview has no reminder to stop. */}
-        {!preview && <div className="pt-4"><SurveyReminderOptOut /></div>}
+        {!preview && <div className="pt-4"><ContactOptOut /></div>}
       </form>
     </div>
   );

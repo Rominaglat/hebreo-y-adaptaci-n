@@ -10,6 +10,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { loadSuppressedUserIds } from "../_shared/contact-suppression.ts";
 
 const RESEND_API = "https://api.resend.com/emails";
 const FROM_EMAIL = Deno.env.get("ANNOUNCE_FROM_EMAIL") ?? Deno.env.get("INVITE_FROM_EMAIL") ?? "Romina Hebreo <noreply@example.com>";
@@ -80,9 +81,19 @@ serve(async (req) => {
     // --- 2. email enrolled students ---
     const { data: enrolls } = await admin.from("enrollments").select("user_id").eq("course_id", courseId);
     const userIds = [...new Set((enrolls ?? []).map((e) => e.user_id as string))];
+    // The in-portal announcement above reaches everyone enrolled; the EMAIL skips
+    // the do-not-contact list. If the list can't be read, no email goes out
+    // (fail closed) — the announcement is already published either way.
+    let suppressed: Set<string> | null = null;
+    try {
+      suppressed = await loadSuppressedUserIds(admin);
+    } catch (e) {
+      console.error("[announce-course-content] do-not-contact list unreadable — emails skipped:", (e as Error).message);
+    }
+    const mailIds = suppressed ? userIds.filter((id) => !suppressed!.has(id)) : [];
     let emailed = 0;
-    if (userIds.length && resendKey) {
-      const { data: profiles } = await admin.from("profiles").select("email").in("id", userIds);
+    if (mailIds.length && resendKey) {
+      const { data: profiles } = await admin.from("profiles").select("email").in("id", mailIds);
       const emails = (profiles ?? []).map((p) => p.email as string).filter(Boolean);
       const html = buildHtml({ title, message, courseName: course?.title ?? "", siteUrl: SITE_URL });
       for (const to of emails) {
@@ -97,7 +108,12 @@ serve(async (req) => {
       }
     }
 
-    return jsonResp({ announced: true, recipients: userIds.length, emailed });
+    return jsonResp({
+      announced: true,
+      recipients: userIds.length,
+      emailed,
+      skipped_do_not_contact: suppressed ? userIds.length - mailIds.length : null,
+    });
   } catch (e) {
     return jsonResp({ error: "unexpected", detail: e instanceof Error ? e.message : String(e) }, 500);
   }

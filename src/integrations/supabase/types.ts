@@ -172,16 +172,26 @@ export type Database = {
         Update: Record<string, never>
         Relationships: []
       }
-      survey_reminder_optouts: {
+      contact_suppressions: {
         Row: {
-          user_id: string
-          source: 'self' | 'admin'
+          id: string
+          user_id: string | null
+          phone: string | null
+          phone_key: string | null
+          email: string | null
+          email_key: string | null
+          reason: string | null
+          source: 'self' | 'admin' | 'api'
           created_by: string | null
           created_at: string
         }
         Insert: {
-          user_id: string
-          source: 'self' | 'admin'
+          id?: string
+          user_id?: string | null
+          phone?: string | null
+          email?: string | null
+          reason?: string | null
+          source: 'self' | 'admin' | 'api'
           created_by: string
           created_at?: string
         }

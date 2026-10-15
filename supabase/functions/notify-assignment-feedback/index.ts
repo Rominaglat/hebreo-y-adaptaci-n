@@ -91,9 +91,14 @@ serve(async (req) => {
       content: feedback || "Tu profesor dejó comentarios en tu trabajo.",
     });
 
-    // --- 2. email the student ---
+    // --- 2. email the student — unless they are on the do-not-contact list ---
+    // (The in-portal announcement above still shows the feedback.) A failed
+    // list check counts as "listed": no email rather than an unwanted one.
+    const { data: listed, error: listErr } = await admin.rpc("is_contact_suppressed", { _user_id: studentId });
+    if (listErr) console.error("[notify-assignment-feedback] do-not-contact check failed — email skipped:", listErr.message);
+    const doNotContact = listErr ? true : listed === true;
     let emailed = false;
-    if (resendKey) {
+    if (resendKey && !doNotContact) {
       const { data: profile } = await admin.from("profiles").select("email, full_name").eq("id", studentId).maybeSingle();
       const p = profile as { email: string | null; full_name: string | null } | null;
       if (p?.email) {
@@ -113,7 +118,7 @@ serve(async (req) => {
       }
     }
 
-    return jsonResp({ notified: true, emailed });
+    return jsonResp({ notified: true, emailed, do_not_contact: doNotContact });
   } catch (e) {
     return jsonResp({ error: "unexpected", detail: e instanceof Error ? e.message : String(e) }, 500);
   }

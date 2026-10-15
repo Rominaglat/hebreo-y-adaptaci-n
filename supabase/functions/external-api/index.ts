@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { MATCH_DIGITS_MIN, isMatchableInput, matchPhone, matchQueryVariants } from "../_shared/phone-match.ts";
+import { contactEmailKey, contactPhoneKey } from "../_shared/contact-suppression.ts";
 
 
 interface ApiRequest {
@@ -27,7 +28,7 @@ function hashApiKey(apiKey: string): string {
 // "who called what, when, and did it work" — it never needs the customer's
 // phone number to do that, and users.inactivityByPhone is keyed on exactly that
 // number, so every single call would otherwise persist one.
-const REDACTED_LOG_KEYS = new Set(['password', 'phone']);
+const REDACTED_LOG_KEYS = new Set(['password', 'phone', 'email']);
 
 // The ONLY actions still allowed to log those values, and the only reason they
 // are on the list is that they already do: `users.create` writes the caller's
@@ -223,6 +224,12 @@ serve(async (req) => {
     }
 
     if (!isValidKey) {
+      // hashApiKey keeps only the key's first 8 and last 4 characters, so a
+      // wrong key can share the real key's hash. checkRateLimit counts log rows
+      // by hash: logging a failed attempt under the bare hash would let anyone
+      // who knows those 12 characters burn the real caller's per-minute budget.
+      // Failed attempts get their own bucket.
+      apiKeyHash = `invalid:${apiKeyHash}`;
       console.warn(`[API] Invalid API key attempt: ${apiKeyHash} from ${ipAddress}`);
       return await sendResponse(
         jsonResponse({ error: 'Invalid API key', code: 'UNAUTHORIZED' }, 401),
@@ -707,6 +714,25 @@ serve(async (req) => {
 
         const phoneMatch = matchPhone(phoneInput, phoneCandidates);
 
+        // Do-not-contact (contact_suppressions, 20261015100000) rides on EVERY
+        // answer, the 404s included: most numbers the WhatsApp automation checks
+        // are not portal users, and a lead who asked to be removed must be
+        // skipped too. True if the number itself is listed, or any account it
+        // matches is (by account, profile phone or profile email). A failed
+        // check throws (→ 500) rather than answering false.
+        const doNotContact = async (userIds: Array<string | null>): Promise<boolean> => {
+          for (const userId of userIds.length ? userIds : [null]) {
+            const { data: listed, error: listError } = await supabase.rpc('is_contact_suppressed', {
+              _user_id: userId,
+              _phone: String(phoneInput),
+              _email: null,
+            });
+            if (listError) throw listError;
+            if (listed === true) return true;
+          }
+          return false;
+        };
+
         if (phoneMatch.status === 'ambiguous') {
           // Terminal, never a tie-break. Four production buckets are genuinely
           // ambiguous (two are two different people sharing one handset), and
@@ -718,6 +744,8 @@ serve(async (req) => {
               error: 'That phone number matches more than one active user. Identify the right one by name or email with users.search, then call users.get with their user_id.',
               code: 'AMBIGUOUS_PHONE',
               match_count: phoneMatch.matches.length,
+              // A shared handset: if ANY of its owners asked to be removed, the number is off-limits.
+              do_not_contact: await doNotContact(phoneMatch.matches.map((m) => m.id)),
             }, 409),
             'Ambiguous phone number',
           );
@@ -726,7 +754,11 @@ serve(async (req) => {
         if (phoneMatch.status === 'matched_deleted') {
           // Distinct from NOT_FOUND on purpose: "deleted" is not "never existed".
           return await sendResponse(
-            errorResponse('That phone number belongs to a deleted user', 'PROFILE_DELETED', 404),
+            jsonResponse({
+              error: 'That phone number belongs to a deleted user',
+              code: 'PROFILE_DELETED',
+              do_not_contact: await doNotContact(phoneMatch.matches.map((m) => m.id)),
+            }, 404),
             'Phone belongs to a deleted user',
           );
         }
@@ -734,7 +766,11 @@ serve(async (req) => {
         if (phoneMatch.status !== 'matched') {
           // not_found (invalid_input is already handled by isMatchableInput above).
           return await sendResponse(
-            errorResponse('No user matches that phone number', 'NOT_FOUND', 404),
+            jsonResponse({
+              error: 'No user matches that phone number',
+              code: 'NOT_FOUND',
+              do_not_contact: await doNotContact([]),
+            }, 404),
             'No user matches that phone',
           );
         }
@@ -909,7 +945,10 @@ serve(async (req) => {
           return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
         };
 
+        const inactivityDoNotContact = await doNotContact([inactivityProfile.id]);
+
         return await sendResponse(jsonResponse({
+          do_not_contact: inactivityDoNotContact,
           user: {
             id: inactivityProfile.id,
             full_name: inactivityProfile.full_name,
@@ -938,6 +977,62 @@ serve(async (req) => {
           measured_at: measuredAt.toISOString(),
           day_count_rule: 'floor_elapsed_hours_div_24_utc',
         }));
+      }
+
+      // ===== DO-NOT-CONTACT LIST =====
+      // contact_suppressions (20261015100000): whoever is on it gets nothing from
+      // the portal, and every automation reading this API must skip them too.
+      // Keyed by phone (last 9 digits) and/or email, so it also covers people
+      // who are not portal users. Writes from the API are labelled source 'api'.
+      case 'contacts.optOut':
+      case 'contacts.optIn':
+      case 'contacts.status': {
+        const phoneKey = data?.phone != null && data.phone !== '' ? contactPhoneKey(data.phone) : null;
+        const emailKey = contactEmailKey(data?.email);
+        if (data?.phone != null && data.phone !== '' && !phoneKey) {
+          return await sendResponse(errorResponse(`phone must contain at least ${MATCH_DIGITS_MIN} digits`, 'VALIDATION_ERROR'), 'phone below minimum digit length');
+        }
+        if (emailKey && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailKey)) {
+          return await sendResponse(errorResponse('email is not a valid address', 'VALIDATION_ERROR'), 'invalid email');
+        }
+        if (!phoneKey && !emailKey) {
+          return await sendResponse(errorResponse('phone or email is required', 'VALIDATION_ERROR'), 'phone or email is required');
+        }
+
+        if (action === 'contacts.optOut') {
+          const reason = typeof data?.reason === 'string' ? data.reason.slice(0, 500) : null;
+          // One row per identifier: a phone already listed must not stop the email being added.
+          const rows: Array<Record<string, string | null>> = [
+            ...(phoneKey ? [{ phone: String(data?.phone), reason, source: 'api' }] : []),
+            ...(emailKey ? [{ email: emailKey, reason, source: 'api' }] : []),
+          ];
+          for (const row of rows) {
+            const { error: insertError } = await supabase.from('contact_suppressions').insert(row);
+            // 23505: already listed — opting out twice is a success, not an error.
+            if (insertError && insertError.code !== '23505') throw insertError;
+          }
+        } else if (action === 'contacts.optIn') {
+          // The API may only undo its OWN entries: a removal the person asked for
+          // in the portal, or that an admin recorded, is not an automation's to reverse.
+          // Two parameterised deletes, never an .or() string built from caller input.
+          for (const [column, key] of [['phone_key', phoneKey], ['email_key', emailKey]] as const) {
+            if (!key) continue;
+            const { error: deleteError } = await supabase
+              .from('contact_suppressions')
+              .delete()
+              .eq('source', 'api')
+              .eq(column, key);
+            if (deleteError) throw deleteError;
+          }
+        }
+
+        const { data: listed, error: statusError } = await supabase.rpc('is_contact_suppressed', {
+          _user_id: null,
+          _phone: phoneKey ? String(data?.phone) : null,
+          _email: emailKey,
+        });
+        if (statusError) throw statusError;
+        return await sendResponse(jsonResponse({ do_not_contact: listed === true }));
       }
 
       case 'users.delete': {

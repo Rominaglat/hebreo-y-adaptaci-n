@@ -22,6 +22,7 @@ import {
   type LifecycleKind, type LifecycleCandidate,
 } from "../_shared/lifecycle.ts";
 import { renderLifecycleEmail } from "../_shared/lifecycle-templates.ts";
+import { loadCancelledUserIds, loadSuppressedUserIds } from "../_shared/contact-suppression.ts";
 
 const RESEND_API = "https://api.resend.com/emails";
 const FROM_EMAIL = Deno.env.get("ANNOUNCE_FROM_EMAIL") ?? Deno.env.get("INVITE_FROM_EMAIL")
@@ -84,7 +85,18 @@ serve(async (req) => {
     if (rolesErr) throw rolesErr;
     const studentIds = new Set((studentRoles ?? []).map((r) => r.user_id as string));
 
-    const summary: Record<string, unknown> = { dryRun, now: now.toISOString(), kinds: {} };
+    // Nobody on the do-not-contact list, and no onboarding / win-back mail to
+    // students whose subscription is cancelled. Both loaders fail closed: an
+    // unreadable list throws and this run sends nothing.
+    const [suppressed, cancelled] = await Promise.all([
+      loadSuppressedUserIds(admin),
+      loadCancelledUserIds(admin),
+    ]);
+
+    const summary: Record<string, unknown> = {
+      dryRun, now: now.toISOString(), kinds: {},
+      excluded: { do_not_contact: suppressed.size, subscription_cancelled: cancelled.size },
+    };
     if (startAtMissing) summary.warning = "tenant_settings.lifecycle_emails_start_at is unset — onboarding mail suppressed";
 
     for (const kind of KINDS) {
@@ -102,7 +114,8 @@ serve(async (req) => {
       const { data: profileRows, error: profErr } = await q;
       if (profErr) throw profErr;
 
-      const profiles = (profileRows ?? []).filter((p) => studentIds.has(p.id) && p.email) as ProfileRow[];
+      const profiles = (profileRows ?? []).filter((p) =>
+        studentIds.has(p.id) && p.email && !suppressed.has(p.id) && !cancelled.has(p.id)) as ProfileRow[];
       const ids = profiles.map((p) => p.id);
       if (!ids.length) { (summary.kinds as Record<string, unknown>)[kind] = { eligible: 0, sent: 0 }; continue; }
 

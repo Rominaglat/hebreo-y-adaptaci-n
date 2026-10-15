@@ -101,7 +101,9 @@ import { AssignmentSubmissionsDialog } from '@/components/admin/AssignmentSubmis
 import { SubscriptionsDashboard } from '@/components/admin/SubscriptionsDashboard';
 import { SubscriptionCell } from '@/components/admin/SubscriptionCell';
 import { useStudentSubscriptions } from '@/hooks/useStudentSubscriptions';
-import { useSurveyOptOuts } from '@/hooks/useSurveyOptOut';
+import { useContactSuppressions } from '@/hooks/useContactSuppression';
+import { entriesCovering, suppressedPeople } from '@/lib/contactSuppression';
+import { ContactSuppressionsDialog } from '@/components/admin/ContactSuppressionsDialog';
 interface UserActivity {
   id: string;
   activity_type: string;
@@ -158,8 +160,9 @@ export default function ManageUsers() {
   const { toast } = useToast();
   // Revenue is admin-only (RLS too); instructors never fetch it.
   const subscriptions = useStudentSubscriptions(isAdmin);
-  // Who asked not to get the monthly survey WhatsApp reminder.
-  const surveyOptOuts = useSurveyOptOuts(isAdmin, currentUser?.id);
+  // The do-not-contact list: whoever is on it gets nothing from the portal.
+  const contactList = useContactSuppressions(isAdmin, currentUser?.id);
+  const [contactListOpen, setContactListOpen] = useState(false);
   
   // Check if this is the main/admin tenant (no courses management needed)
   const isMainTenant = currentTenant?.slug === 'main';
@@ -1389,15 +1392,23 @@ export default function ManageUsers() {
   const bulkEligibleCount = bulkSelectedUsers.filter((u) => isTimeLimitEligible(u.role)).length;
   const bulkSkippedCount = bulkSelectedUsers.length - bulkEligibleCount;
 
-  const toggleSurveyOptOut = async (target: UserWithRole) => {
-    const optOut = !surveyOptOuts.optedOutIds.has(target.id);
-    const ok = await surveyOptOuts.setOptOut(target.id, optOut);
+  // Covered by the list — by account, or by their phone / email (the same rule the senders apply).
+  // A plain computation, not useMemo: this point is past the component's early returns.
+  const doNotContactIds = suppressedPeople(contactList.entries, users);
+
+  const toggleDoNotContact = async (target: UserWithRole) => {
+    const covering = entriesCovering(contactList.entries, target);
+    const restore = covering.length > 0;
+    // Restoring removes every entry that reaches them (account, phone and email alike).
+    const ok = restore
+      ? await contactList.remove(covering.map((e) => e.id))
+      : await contactList.add({ userId: target.id });
     const name = target.full_name || target.email;
     toast(ok
-      ? { title: t(optOut ? 'manageUsers.surveyOptOutDone' : 'manageUsers.surveyOptInDone').replace('{name}', name) }
-      : { title: t('manageUsers.surveyOptOutError'), variant: 'destructive' });
+      ? { title: t(restore ? 'manageUsers.contact.restoredToast' : 'manageUsers.contact.removedToast').replace('{name}', name) }
+      : { title: t('manageUsers.contact.error'), variant: 'destructive' });
   };
-  const canToggleSurvey = (target: UserWithRole) => canEdit && (target.role === 'student' || target.role === 'lead');
+  const canToggleContact = (target: UserWithRole) => canEdit && (target.role === 'student' || target.role === 'lead');
 
   return (
     <>
@@ -1525,6 +1536,16 @@ export default function ManageUsers() {
             <Download className="w-4 h-4 mx-2" />
             {t('manageUsers.exportToFile')}
           </Button>
+          )}
+
+          {canEdit && (
+            <Button variant="outline" onClick={() => setContactListOpen(true)}>
+              <BellOff className="w-4 h-4 mx-2" />
+              {t('contacts.list.button')}
+              {contactList.entries.length > 0 && (
+                <span className="ms-1.5 tabular-nums text-muted-foreground">({contactList.entries.length})</span>
+              )}
+            </Button>
           )}
 
           {canEdit && isSuperAdmin && (
@@ -1737,10 +1758,10 @@ export default function ManageUsers() {
                               })}
                             </Badge>
                           )}
-                          {isAdmin && surveyOptOuts.optedOutIds.has(user.id) && (
-                            <Badge variant="outline" className="ms-1 gap-1 text-muted-foreground" title={t('manageUsers.surveyOptedOutTitle')}>
+                          {isAdmin && doNotContactIds.has(user.id) && (
+                            <Badge variant="outline" className="ms-1 gap-1 text-muted-foreground" title={t('manageUsers.contact.badgeTitle')}>
                               <BellOff className="w-3 h-3" />
-                              {t('manageUsers.surveyOptedOutBadge')}
+                              {t('manageUsers.contact.badge')}
                             </Badge>
                           )}
                         </TableCell>
@@ -1795,11 +1816,11 @@ export default function ManageUsers() {
                                 <Mic className="w-4 h-4 ml-2" />
                                 {t('assignment.admin.menuItem')}
                               </DropdownMenuItem>
-                              {canToggleSurvey(user) && (
-                                <DropdownMenuItem onClick={() => toggleSurveyOptOut(user)}>
-                                  {surveyOptOuts.optedOutIds.has(user.id)
-                                    ? <><Bell className="w-4 h-4 ml-2" />{t('manageUsers.surveyOptIn')}</>
-                                    : <><BellOff className="w-4 h-4 ml-2" />{t('manageUsers.surveyOptOut')}</>}
+                              {canToggleContact(user) && (
+                                <DropdownMenuItem onClick={() => toggleDoNotContact(user)}>
+                                  {doNotContactIds.has(user.id)
+                                    ? <><Bell className="w-4 h-4 ml-2" />{t('manageUsers.contact.restore')}</>
+                                    : <><BellOff className="w-4 h-4 ml-2" />{t('manageUsers.contact.remove')}</>}
                                 </DropdownMenuItem>
                               )}
                               {(canEdit || (isInstructor && user.role === 'student')) && <DropdownMenuSeparator />}
@@ -1917,11 +1938,11 @@ export default function ManageUsers() {
                               <Mic className="w-4 h-4 ml-2" />
                               {t('assignment.admin.menuItem')}
                             </DropdownMenuItem>
-                            {canToggleSurvey(user) && (
-                              <DropdownMenuItem onClick={() => toggleSurveyOptOut(user)}>
-                                {surveyOptOuts.optedOutIds.has(user.id)
-                                  ? <><Bell className="w-4 h-4 ml-2" />{t('manageUsers.surveyOptIn')}</>
-                                  : <><BellOff className="w-4 h-4 ml-2" />{t('manageUsers.surveyOptOut')}</>}
+                            {canToggleContact(user) && (
+                              <DropdownMenuItem onClick={() => toggleDoNotContact(user)}>
+                                {doNotContactIds.has(user.id)
+                                  ? <><Bell className="w-4 h-4 ml-2" />{t('manageUsers.contact.restore')}</>
+                                  : <><BellOff className="w-4 h-4 ml-2" />{t('manageUsers.contact.remove')}</>}
                               </DropdownMenuItem>
                             )}
                             {(canEdit || (isInstructor && user.role === 'student')) && <DropdownMenuSeparator />}
@@ -1971,10 +1992,10 @@ export default function ManageUsers() {
                             })}
                           </Badge>
                         )}
-                        {isAdmin && surveyOptOuts.optedOutIds.has(user.id) && (
+                        {isAdmin && doNotContactIds.has(user.id) && (
                           <Badge variant="outline" className="text-xs gap-1 text-muted-foreground">
                             <BellOff className="w-3 h-3" />
-                            {t('manageUsers.surveyOptedOutBadge')}
+                            {t('manageUsers.contact.badge')}
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
@@ -1994,6 +2015,17 @@ export default function ManageUsers() {
           )}
         </div>
       </div>
+
+      {canEdit && (
+        <ContactSuppressionsDialog
+          open={contactListOpen}
+          onOpenChange={setContactListOpen}
+          entries={contactList.entries}
+          people={users}
+          onAdd={contactList.add}
+          onRemove={contactList.remove}
+        />
+      )}
 
       {/* Single User Role Dialog */}
       <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
