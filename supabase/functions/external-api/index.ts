@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders, handlePreflight } from "../_shared/cors.ts";
+import { MATCH_DIGITS_MIN, isMatchableInput, matchPhone, matchQueryVariants } from "../_shared/phone-match.ts";
 
 
 interface ApiRequest {
@@ -20,6 +21,41 @@ function hashApiKey(apiKey: string): string {
     return `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`;
   }
   return apiKey.slice(0, 4) + '...';
+}
+
+// Keys whose VALUES must never reach api_request_logs. The log exists to answer
+// "who called what, when, and did it work" — it never needs the customer's
+// phone number to do that, and users.inactivityByPhone is keyed on exactly that
+// number, so every single call would otherwise persist one.
+const REDACTED_LOG_KEYS = new Set(['password', 'phone']);
+
+// The ONLY actions still allowed to log those values, and the only reason they
+// are on the list is that they already do: `users.create` writes the caller's
+// plaintext `password` and the customer's `phone` into api_request_logs today
+// (98 historical rows hold them), `users.updatePassword` writes the password and
+// `users.search` writes the phone fragment it searched on. Redacting them would
+// be an improvement, but it would also change what an existing, in-use action
+// logs, so it is left as a separate, larger cleanup — one that has to scrub the
+// historical rows too, which no code change can do.
+//
+// EVERYTHING ELSE FAILS CLOSED. The gate used to be the other way round — an
+// allow-list of actions to redact — which meant a caller typo ('users.inactivitybyphone'),
+// an older action name, or simply calling before this function is redeployed
+// would sail past the switch into `default:` and persist the customer's real
+// phone number. An exempt-list cannot fail that way: an unrecognised action is
+// redacted.
+const UNREDACTED_LEGACY_ACTIONS = new Set(['users.create', 'users.search', 'users.updatePassword']);
+
+function redactForLog(action: string, data: any): any {
+  if (UNREDACTED_LEGACY_ACTIONS.has(action)) return data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(data)) {
+    // Case-insensitive: a caller sending 'Phone' would not be read by any
+    // handler, but the raw value would still land in the log.
+    out[k] = REDACTED_LOG_KEYS.has(k.toLowerCase()) ? '[redacted]' : v;
+  }
+  return out;
 }
 
 // Log API request
@@ -134,11 +170,14 @@ serve(async (req) => {
     // Validate API key
     const apiKey = req.headers.get('X-API-Key');
     if (!apiKey) {
+      // Deliberately NOT through sendResponse: a request with no key at all
+      // carries nothing worth auditing (the hash is 'unknown' and the body has
+      // not been read yet), and logging it hands any anonymous host on the
+      // internet a free INSERT into api_request_logs, one row per request, with
+      // no rate limit in front of it. An *invalid* key below is still logged —
+      // that one names a hash and is a real security signal.
       console.warn(`[API] Missing API key from ${ipAddress}`);
-      return await sendResponse(
-        jsonResponse({ error: 'Missing API key', code: 'UNAUTHORIZED' }, 401),
-        'Missing API key'
-      );
+      return jsonResponse({ error: 'Missing API key', code: 'UNAUTHORIZED' }, 401);
     }
 
     apiKeyHash = hashApiKey(apiKey);
@@ -161,6 +200,15 @@ serve(async (req) => {
 
     if (tenantSettings && tenantSettings.api_key === apiKey) {
       isValidKey = true;
+      // tenant_settings has no rate-limit columns, so the throttle that the
+      // developer_settings branch below reads from the database is applied here
+      // at the file's own default. Without this, rateLimitEnabled stayed false
+      // for the only branch this deployment ever takes and checkRateLimit was
+      // dead code — every caller was unthrottled. The busiest rolling 60s window
+      // in the entire api_request_logs history is 4 calls, so 60 leaves 15x
+      // headroom; raise it here if a bulk import ever needs more.
+      rateLimitEnabled = true;
+      rateLimitPerMinute = 60;
     } else {
       // Legacy path — read from developer_settings if someone populates it.
       const { data: devSettings } = await supabase
@@ -215,7 +263,9 @@ serve(async (req) => {
     // Parse request body
     const body: ApiRequest = await req.json();
     action = body.action || 'unknown';
-    requestData = body.data;
+    // Logging-only. `data` below is the untouched body, so no handler ever sees
+    // a redacted value — see UNREDACTED_LEGACY_ACTIONS.
+    requestData = redactForLog(action, body.data);
     const data = body.data;
 
     console.log(`[API] Request: ${action} from ${apiKeyHash} (${ipAddress})`);
@@ -554,6 +604,340 @@ serve(async (req) => {
         if (error) throw error;
 
         return await sendResponse(jsonResponse({ users, total: users?.length || 0 }));
+      }
+
+      case 'users.inactivityByPhone': {
+        // "The customer gave me this phone number — how many days since they
+        // were last on the platform?"
+        //
+        // Deliberately NOT routed through users.search. That action's
+        // ilike('phone', '%…%') is a raw substring compare that cannot cross a
+        // formatting boundary: a caller's '+972501234567' never finds the
+        // stored '050-1234567', and 71 of the 104 live numbers are written in
+        // exactly that national form. See _shared/phone-match.ts for why the
+        // matcher compares digit SUFFIXES instead.
+        const phoneInput = data?.phone;
+        if (phoneInput === undefined || phoneInput === null || (typeof phoneInput === 'string' && phoneInput.trim() === '')) {
+          return await sendResponse(errorResponse('phone is required', 'VALIDATION_ERROR'), 'phone is required');
+        }
+        if (!isMatchableInput(phoneInput)) {
+          // Never put the phone in either string: the second one lands in
+          // api_request_logs.error_message, which redactForLog does not cover.
+          return await sendResponse(
+            errorResponse(`phone must contain at least ${MATCH_DIGITS_MIN} digits`, 'VALIDATION_ERROR'),
+            'phone below minimum digit length',
+          );
+        }
+
+        // ---- Candidate fetch: a SQL narrowing that cannot produce a false negative.
+        //
+        // profiles.phone is free text ('050-1234567', '+972 50 123 4567',
+        // '5491122334455'), so the matcher's "last N digits are equal" test has
+        // no indexable SQL equivalent. What CAN be pushed down is a strict
+        // SUPERSET of it: if a row's digit tail ends with the query's last 8
+        // digits, then those 8 digits appear in that row IN ORDER, separated by
+        // whatever punctuation the admin happened to type. The pattern
+        // '%5%0%1%2%3%4%5%6%' tests exactly that. 8 (MATCH_DIGITS_MIN) is used
+        // rather than 9 because the matcher's second rung compares only 8 — so
+        // one pattern covers both rungs and can never drop a real match.
+        // The digits come from toDigits(), i.e. [0-9] only, so the pattern
+        // cannot smuggle in a LIKE metacharacter (nor a ',' or ')' that would
+        // break out of the or() filter below).
+        //
+        // ONE PATTERN PER QUERY VARIANT, OR'd. matchQueryVariants() is the
+        // matcher's own list of the digit-strings it will compare — today that
+        // is the query plus, for Argentina's legacy `0 area 15 subscriber`
+        // spelling, the rewritten national number. A variant that deletes digits
+        // from the MIDDLE of the query is not reliably found by the query's own
+        // pattern, so narrowing on the query alone would let the matcher look
+        // for a row the database had already filtered out.
+        //
+        // TRADEOFF: the leading wildcard means Postgres still sequentially scans
+        // profiles — but it scans inside the database and ships back a handful
+        // of rows instead of the whole table, and the authoritative decision is
+        // still the in-memory matchPhone() pass below (O(candidates × 2 rungs)).
+        // At today's 148 profiles / ~104 phones both halves are free.
+        //
+        // AS THE TABLE GROWS: the fetch is bounded, and a truncated candidate
+        // set is treated as an error rather than answered, because truncation
+        // could silently turn a genuinely AMBIGUOUS phone into a confident and
+        // WRONG single match. Past roughly 20 000 profiles, replace this with a
+        // generated column (phone_key9 = last 9 digits of phone) plus a b-tree
+        // index and make it an equality lookup; the matcher stays as-is.
+        const PHONE_CANDIDATE_LIMIT = 500;
+        const narrowFilter = matchQueryVariants(phoneInput)
+          .map((digits) => `phone.ilike.%${digits.slice(-MATCH_DIGITS_MIN).split('').join('%')}%`)
+          .join(',');
+
+        const { data: candidateRows, error: candidateError } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, phone, join_date, created_at, deleted_at')
+          .or(narrowFilter)
+          .limit(PHONE_CANDIDATE_LIMIT);
+
+        if (candidateError) throw candidateError;
+        if ((candidateRows?.length || 0) >= PHONE_CANDIDATE_LIMIT) {
+          throw new Error(`Phone candidate set hit the ${PHONE_CANDIDATE_LIMIT}-row cap — refusing to resolve from a truncated set`);
+        }
+
+        // Soft-deleted rows are kept: the matcher needs them to tell
+        // "deleted account" apart from "never existed", and to stop a deleted
+        // duplicate from reading as ambiguous.
+        // The explicit annotation is load-bearing: supabase-js is untyped here,
+        // so `candidateRows` is `any` and matchPhone's generic would collapse to
+        // the bare PhoneCandidate, hiding full_name/email/created_at on the
+        // matched row. Naming the shape keeps them on it.
+        const phoneCandidates: Array<{
+          id: string;
+          email: string | null;
+          full_name: string | null;
+          phone: string | null;
+          join_date: string | null;
+          created_at: string | null;
+          deletedAt: string | null;
+        }> = (candidateRows || []).map((p: any) => ({
+          id: p.id,
+          email: p.email ?? null,
+          full_name: p.full_name ?? null,
+          phone: p.phone ?? null,
+          join_date: p.join_date ?? null,
+          created_at: p.created_at ?? null,
+          deletedAt: p.deleted_at ?? null,
+        }));
+
+        const phoneMatch = matchPhone(phoneInput, phoneCandidates);
+
+        if (phoneMatch.status === 'ambiguous') {
+          // Terminal, never a tie-break. Four production buckets are genuinely
+          // ambiguous (two are two different people sharing one handset), and
+          // picking one would report the wrong customer's inactivity. Only the
+          // COUNT goes back — the other profiles' names, emails and ids stay in.
+          console.warn(`[API users.inactivityByPhone] ambiguous: ${phoneMatch.matches.length} live profiles on rung ${phoneMatch.matchedOn}`);
+          return await sendResponse(
+            jsonResponse({
+              error: 'That phone number matches more than one active user. Identify the right one by name or email with users.search, then call users.get with their user_id.',
+              code: 'AMBIGUOUS_PHONE',
+              match_count: phoneMatch.matches.length,
+            }, 409),
+            'Ambiguous phone number',
+          );
+        }
+
+        if (phoneMatch.status === 'matched_deleted') {
+          // Distinct from NOT_FOUND on purpose: "deleted" is not "never existed".
+          return await sendResponse(
+            errorResponse('That phone number belongs to a deleted user', 'PROFILE_DELETED', 404),
+            'Phone belongs to a deleted user',
+          );
+        }
+
+        if (phoneMatch.status !== 'matched') {
+          // not_found (invalid_input is already handled by isMatchableInput above).
+          return await sendResponse(
+            errorResponse('No user matches that phone number', 'NOT_FOUND', 404),
+            'No user matches that phone',
+          );
+        }
+
+        const inactivityProfile = phoneMatch.matches[0];
+
+        // ---- Presence signals.
+        //
+        // The instant activity tracking began. student_activity was created and
+        // backfilled on 2026-08-23; anything at or before this instant was
+        // RECONSTRUCTED by 20260823120000_lifecycle_backfill_activity.sql, not
+        // observed — and 47 rows carry this exact timestamp because that
+        // migration's COALESCE(..., now()) branch fired for every account with
+        // no evidence at all.
+        const ACTIVITY_TRACKING_SINCE = '2026-08-23T10:14:23.422Z';
+        const DAY_MS = 86_400_000;
+        const HOUR_MS = 3_600_000;
+        const measuredAt = new Date();
+
+        const [activityRes, lessonRes, authEventRes, authUserRes] = await Promise.all([
+          supabase
+            .from('student_activity')
+            .select('last_active_at')
+            .eq('user_id', inactivityProfile.id)
+            .maybeSingle(),
+          supabase
+            .from('lesson_completions')
+            .select('completed_at')
+            .eq('user_id', inactivityProfile.id)
+            .order('completed_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('user_activities')
+            .select('created_at')
+            // password_reset rows are written by an ADMIN (admin-user-actions),
+            // not by the student. Counting them is exactly the bug that gave 3
+            // never-signed-in accounts a fake last_active_at in the backfill.
+            .neq('activity_type', 'password_reset')
+            .eq('user_id', inactivityProfile.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase.auth.admin.getUserById(inactivityProfile.id),
+        ]);
+
+        if (activityRes.error) throw activityRes.error;
+        if (lessonRes.error) throw lessonRes.error;
+        if (authEventRes.error) throw authEventRes.error;
+        if (authUserRes.error && (authUserRes.error as any)?.status !== 404) {
+          // A profile whose auth user is gone is a data inconsistency, not a
+          // server fault — fall through with no sign-in signal. Anything else
+          // is a real GoTrue failure and must not be silently downgraded,
+          // because the never-signed-in gate below depends on this answer.
+          throw authUserRes.error;
+        }
+
+        const activityPingAt = (activityRes.data?.last_active_at ?? null) as string | null;
+        const lastLessonCompletedAt = (lessonRes.data?.completed_at ?? null) as string | null;
+        const lastAuthEventAt = (authEventRes.data?.created_at ?? null) as string | null;
+        const lastSignInAt = (authUserRes.data?.user?.last_sign_in_at ?? null) as string | null;
+
+        // ---- Gate 0: has this account EVER been signed into?
+        //
+        // 52 of the 148 accounts (and 52 of the 104 that have a phone) were
+        // created by an admin and have never once been signed into — mostly one
+        // bulk import. 50 of them still carry a student_activity row from the
+        // backfill, so a naive now() - last_active_at answers a flat, fabricated
+        // number for half the population this endpoint exists to serve. A real
+        // ping written after tracking started overrides the gate; the synthetic
+        // backfill instant (which is not strictly after it) does not.
+        const trackingSinceMs = Date.parse(ACTIVITY_TRACKING_SINCE);
+        const activityPingMs = activityPingAt ? Date.parse(activityPingAt) : null;
+        const neverActive = lastSignInAt === null
+          && !(activityPingMs !== null && Number.isFinite(activityPingMs) && activityPingMs > trackingSinceMs);
+
+        // ---- Ladder: the latest instant wins, and the winner names the source.
+        // Listed in tie-break priority order, so a strict > keeps the strongest
+        // label when two signals land on the same instant.
+        // profiles.created_at is deliberately NOT a rung — a signup is not a
+        // visit. It is reported separately as days_since_signup.
+        const inactivitySources: Array<{ source: string; at: string | null }> = [
+          { source: 'activity_ping', at: activityPingAt },
+          { source: 'lesson_completion', at: lastLessonCompletedAt },
+          { source: 'auth_event', at: lastAuthEventAt },
+          { source: 'sign_in', at: lastSignInAt },
+        ];
+
+        let lastActiveAt: string | null = null;
+        let lastActiveSource = 'none';
+        let bestMs = Number.NEGATIVE_INFINITY;
+        for (const candidate of inactivitySources) {
+          if (!candidate.at) continue;
+          const t = Date.parse(candidate.at);
+          if (!Number.isFinite(t) || t <= bestMs) continue;
+          bestMs = t;
+          lastActiveAt = candidate.at;
+          lastActiveSource = candidate.source;
+        }
+
+        if (neverActive) {
+          // Not a big number — null. A caller doing `days_inactive ?? 999` must
+          // be forced to notice that "never activated" is a different population
+          // from "lapsed student".
+          lastActiveAt = null;
+          lastActiveSource = 'none';
+        }
+
+        // Floor of elapsed hours / 24. Instant arithmetic, identical in every
+        // timezone — the roster spans Israel (UTC+3) to Mexico (UTC-6) and the
+        // codebase defines no server timezone anywhere. Matches how
+        // _shared/lifecycle.ts thresholds the 7-day win-back email off the same
+        // column. Clamped at 0: a ping can legitimately land a few ms in the
+        // future under clock skew, and 0 is the right answer, not -1.
+        const elapsedMs = lastActiveAt === null
+          ? null
+          : Math.max(0, measuredAt.getTime() - Date.parse(lastActiveAt));
+        const daysInactive = elapsedMs === null ? null : Math.floor(elapsedMs / DAY_MS);
+        const hoursInactive = elapsedMs === null ? null : Math.floor(elapsedMs / HOUR_MS);
+
+        const createdAtMs = inactivityProfile.created_at ? Date.parse(inactivityProfile.created_at) : NaN;
+        const daysSinceSignup = Number.isFinite(createdAtMs)
+          ? Math.floor(Math.max(0, measuredAt.getTime() - createdAtMs) / DAY_MS)
+          : null;
+
+        // high = the winning instant is real evidence observed after tracking
+        //        started, or a certain "never" (which is a certainty, not a guess).
+        // low  = reconstructed from pre-tracking evidence.
+        //
+        // The test is on the INSTANT, not on which source label won it. A lesson
+        // completion or a login event is directly observed, exactly as
+        // trustworthy as a ping — and it routinely outranks the ping, because
+        // useActivityPing is throttled to once an hour while AuthContext writes
+        // an auth row on every sign-in. Gating on the label marked most of
+        // today's genuinely-active users 'low' with an empty caveats array,
+        // which both contradicted itself and diluted the warning that exists to
+        // flag the reconstructed answers.
+        //
+        // Strictly AFTER the tracking instant, matching gate 0: the synthetic
+        // backfill timestamp is equal to it, and it is not evidence.
+        const lastActiveMs = lastActiveAt === null ? NaN : Date.parse(lastActiveAt);
+        const observedAfterTracking = Number.isFinite(lastActiveMs) && lastActiveMs > trackingSinceMs;
+        const inactivityConfidence = neverActive || observedAfterTracking ? 'high' : 'low';
+
+        const inactivityCaveats: string[] = [];
+        if (neverActive) inactivityCaveats.push('never_signed_in');
+        if (activityPingAt === null) inactivityCaveats.push('no_activity_ping_row');
+        // Same boundary as `observedAfterTracking`, so a 'low' answer always
+        // carries a machine-readable reason and the two fields cannot disagree.
+        if (!neverActive && lastActiveAt !== null && !observedAfterTracking) {
+          inactivityCaveats.push('before_activity_tracking');
+        }
+        if (!neverActive && lastActiveSource === 'sign_in') inactivityCaveats.push('sign_in_only');
+
+        // No phone, name or email in this line — a spike in rung-8 resolutions
+        // is the early warning that 8-digit numbers are arriving in bulk.
+        console.log(`[API users.inactivityByPhone] rung=${phoneMatch.matchedOn} source=${lastActiveSource} confidence=${inactivityConfidence}`);
+
+        // One timestamp shape for the whole payload. PostgREST hands back
+        // '2026-07-28T18:55:14.72129+00:00' (5-6 fractional digits, +00:00) and
+        // GoTrue hands back 6 fractional digits with a Z, while measured_at and
+        // activity_tracking_since are '.mmmZ' — three shapes in one body, and
+        // strict ISO parsers (python's datetime.fromisoformat before 3.11
+        // among them) reject the PostgREST one outright. Normalising here, at
+        // the boundary, leaves the arithmetic above untouched: it already ran
+        // off the raw strings via Date.parse.
+        // join_date is NOT run through this — it is a DATE ('2026-06-23'), and
+        // turning it into an instant would invent a time of day.
+        const iso = (value: string | null): string | null => {
+          if (!value) return null;
+          const ms = Date.parse(value);
+          return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+        };
+
+        return await sendResponse(jsonResponse({
+          user: {
+            id: inactivityProfile.id,
+            full_name: inactivityProfile.full_name,
+            email: inactivityProfile.email,
+            // Echoed back EXACTLY as stored, never normalized, so the caller can
+            // eyeball it against what they sent before acting on it.
+            phone: inactivityProfile.phone,
+            created_at: iso(inactivityProfile.created_at),
+            join_date: inactivityProfile.join_date,
+          },
+          days_inactive: daysInactive,
+          hours_inactive: hoursInactive,
+          last_active_at: iso(lastActiveAt),
+          last_active_source: lastActiveSource,
+          never_active: neverActive,
+          days_since_signup: daysSinceSignup,
+          confidence: inactivityConfidence,
+          signals: {
+            activity_ping_at: iso(activityPingAt),
+            last_sign_in_at: iso(lastSignInAt),
+            last_lesson_completed_at: iso(lastLessonCompletedAt),
+            last_auth_event_at: iso(lastAuthEventAt),
+          },
+          caveats: inactivityCaveats,
+          activity_tracking_since: ACTIVITY_TRACKING_SINCE,
+          measured_at: measuredAt.toISOString(),
+          day_count_rule: 'floor_elapsed_hours_div_24_utc',
+        }));
       }
 
       case 'users.delete': {

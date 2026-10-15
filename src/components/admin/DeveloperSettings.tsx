@@ -438,6 +438,67 @@ Body:
                   </div>
                   <Separator />
                   <div className="space-y-2">
+                    <h4 className="font-medium">users.inactivityByPhone</h4>
+                    <p className="text-muted-foreground">{t('developerSettings.usersInactivityByPhone')}</p>
+                    <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
+{`{
+  "action": "users.inactivityByPhone",
+  "data": {
+    "phone": "+972-50-000-0000"
+  }
+}`}
+                    </pre>
+                    <div className="bg-muted/50 p-3 rounded-lg text-xs mt-2">
+                      <p className="font-medium mb-1">{t('developerSettings.parameters')}</p>
+                      <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                        <li><code>phone</code> - {t('developerSettings.paramInactivityPhone')}</li>
+                      </ul>
+                    </div>
+                    <div className="bg-muted/50 p-3 rounded-lg text-xs mt-2">
+                      <p className="font-medium mb-1">{t('developerSettings.response')}</p>
+                      <pre className="text-muted-foreground">
+{`{
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "full_name": "${t('developerSettings.sampleFullName')}",
+    "email": "user@example.com",
+    "phone": "050-0000000",
+    "created_at": "2026-06-23T09:12:04.221Z",
+    "join_date": "2026-06-23"
+  },
+  "days_inactive": 12,
+  "hours_inactive": 297,
+  "last_active_at": "2026-08-20T07:44:11.902Z",
+  "last_active_source": "activity_ping",
+  "never_active": false,
+  "days_since_signup": 70,
+  "confidence": "low",
+  "signals": {
+    "activity_ping_at": "2026-08-20T07:44:11.902Z",
+    "last_sign_in_at": "2026-08-19T18:02:55.000Z",
+    "last_lesson_completed_at": "2026-08-11T14:20:00.000Z",
+    "last_auth_event_at": "2026-08-19T18:02:56.113Z"
+  },
+  "caveats": ["before_activity_tracking"],
+  "activity_tracking_since": "2026-08-23T10:14:23.422Z",
+  "measured_at": "2026-09-01T17:08:04.512Z",
+  "day_count_rule": "floor_elapsed_hours_div_24_utc"
+}`}
+                      </pre>
+                      <p className="text-muted-foreground mt-2">{t('developerSettings.inactivityConfidenceNote')}</p>
+                    </div>
+                    <div className="bg-muted/50 p-3 rounded-lg text-xs mt-2">
+                      <p className="font-medium mb-1">{t('developerSettings.errorCodes')}</p>
+                      <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                        <li><code>400 VALIDATION_ERROR</code> - {t('developerSettings.errInactivityValidation')}</li>
+                        <li><code>404 NOT_FOUND</code> - {t('developerSettings.errInactivityNotFound')}</li>
+                        <li><code>404 PROFILE_DELETED</code> - {t('developerSettings.errInactivityDeleted')}</li>
+                        <li><code>409 AMBIGUOUS_PHONE</code> - {t('developerSettings.errInactivityAmbiguous')}</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <Separator />
+                  <div className="space-y-2">
                     <h4 className="font-medium">users.getRoles</h4>
                     <p className="text-muted-foreground">{t('developerSettings.usersGetRoles')}</p>
                     <pre className="bg-muted p-3 rounded-lg text-xs" dir="ltr">
