@@ -29,6 +29,7 @@ import { NewBadge } from '@/components/NewBadge';
 import { useLessonBookmarks } from '@/hooks/useLessonBookmarks';
 import { getFilePreviewKind } from '@/lib/filePreview';
 import { computeLessonLocks, hasStartedCourse, type LessonLock } from '@/lib/lessonGating';
+import { persistWithAuthRetry, planVideoEnd, unlockedAfterCompleting } from '@/lib/videoCompletion';
 import { ToastAction } from '@/components/ui/toast';
 
 interface Course {
@@ -563,9 +564,14 @@ export default function CourseDetail() {
     // Upsert (ignore duplicates) so a re-completion race against the
     // UNIQUE(user_id, lesson_id) constraint is a no-op rather than an error;
     // a genuine failure (e.g. RLS blocking a locked lesson) still surfaces.
-    const { error } = await supabase.from('lesson_completions').upsert(
-      { user_id: user.id, lesson_id: lessonId },
-      { onConflict: 'user_id,lesson_id', ignoreDuplicates: true },
+    // An expired session (a laptop waking from sleep) is refreshed and the
+    // write tried once more before giving up.
+    const { error } = await persistWithAuthRetry(
+      () => supabase.from('lesson_completions').upsert(
+        { user_id: user.id, lesson_id: lessonId },
+        { onConflict: 'user_id,lesson_id', ignoreDuplicates: true },
+      ),
+      () => supabase.auth.refreshSession(),
     );
     if (error) {
       console.error('Error recording lesson completion:', error);
@@ -608,9 +614,13 @@ export default function CourseDetail() {
         // isn't undone by the file auto-complete-on-open effect.
         autoCompletedRef.current.add(selectedLesson.id);
       } else {
-        const { error } = await supabase.from('lesson_completions').upsert(
-          { user_id: user.id, lesson_id: selectedLesson.id },
-          { onConflict: 'user_id,lesson_id', ignoreDuplicates: true },
+        const lessonId = selectedLesson.id;
+        const { error } = await persistWithAuthRetry(
+          () => supabase.from('lesson_completions').upsert(
+            { user_id: user.id, lesson_id: lessonId },
+            { onConflict: 'user_id,lesson_id', ignoreDuplicates: true },
+          ),
+          () => supabase.auth.refreshSession(),
         );
         if (error) {
           console.error('Error marking lesson complete:', error);
@@ -650,55 +660,56 @@ export default function CourseDetail() {
       console.error('Error updating completion:', error);
     }
   };
+  // A video watched to the end IS a finished lesson — whatever the
+  // auto-advance switch says. The switch only decides whether we then move on.
+  // See src/lib/videoCompletion.ts for the two bugs this replaced.
   const handleVideoEnded = async () => {
-    if (!autoAdvanceEnabled || !selectedLesson || !user) return;
+    if (!selectedLesson || !user) return;
 
     const lessonId = selectedLesson.id;
-    const wasCompleted = selectedLesson.is_completed;
     const next = getNextLesson;
+    const plan = planVideoEnd({
+      alreadyCompleted: selectedLesson.is_completed,
+      autoAdvance: autoAdvanceEnabled,
+      hasNext: !!next,
+    });
 
-    if (!wasCompleted) {
-      try {
-        await supabase.from('lesson_completions').insert({
-          user_id: user.id,
-          lesson_id: lessonId,
+    if (plan.record) {
+      // The same verified write as the file auto-complete: if it doesn't land,
+      // the lesson is NOT shown as completed and the student is told to retry.
+      const saved = await recordCompletion(lessonId);
+      if (!saved) {
+        toast({
+          title: t('courseDetail.autoCompleteFailed'),
+          description: t('courseDetail.autoCompleteFailedDesc'),
+          variant: 'destructive',
         });
-
-        const totalLessons = modules.reduce((acc, m) => acc + m.lessons.length, 0);
-        const otherCompletedCount = modules.reduce(
-          (acc, m) => acc + m.lessons.filter(l => l.is_completed && l.id !== lessonId).length,
-          0
-        );
-        const newCompletedCount = otherCompletedCount + 1;
-        const newProgress = totalLessons > 0 ? Math.round((newCompletedCount / totalLessons) * 100) : 0;
-
-        setModules(prev => prev.map(m => ({
-          ...m,
-          lessons: m.lessons.map(l => l.id === lessonId ? { ...l, is_completed: true } : l),
-        })));
-        setProgress(newProgress);
-        setSelectedLesson(prev => prev && prev.id === lessonId ? { ...prev, is_completed: true } : prev);
-
-        await supabase.from('enrollments').update({
-          progress_percentage: newProgress,
-        }).eq('user_id', user.id).eq('course_id', id);
-      } catch (error) {
-        console.error('Error auto-marking lesson complete:', error);
+        return;
+      }
+      if (!plan.advance) {
+        toast({ title: t('courseDetail.lessonCompleted'), description: t('courseDetail.lessonCompletedDesc') });
       }
     }
 
-    if (next) {
-      // Safety: after marking the current lesson complete the next one is
-      // unlocked, but if anything is off (admin re-ordered mid-watch,
-      // duplicate order_index, etc.) refuse to auto-jump into a locked
-      // lesson — better to stop than to send the user to a blocked page.
-      if (!isAdminOrInstructor && lockedLessonIds.has(next.id)) return;
-      setShouldAutoplay(true);
-      setSelectedLesson(next);
-      if ('moduleId' in next) {
-        const moduleId = (next as any).moduleId;
-        setOpenModules(prev => prev.includes(moduleId) ? prev : [...prev, moduleId]);
-      }
+    if (!plan.advance || !next) return;
+
+    // Safety: never auto-jump into a locked lesson (admin re-ordered mid-watch,
+    // duplicate order_index…). The page's lock map predates the completion we
+    // just wrote, so judge the next lesson as if this one is already done.
+    const nextOpen = isAdminOrInstructor || (plan.record
+      ? unlockedAfterCompleting(
+          { modules, lessonsInOrder: course?.lessons_in_order !== false, courseUnlocked, isStaff: isAdminOrInstructor },
+          lessonId,
+          next.id,
+        )
+      : !lockedLessonIds.has(next.id));
+    if (!nextOpen) return;
+
+    setShouldAutoplay(true);
+    setSelectedLesson(next);
+    if ('moduleId' in next) {
+      const moduleId = (next as any).moduleId;
+      setOpenModules(prev => prev.includes(moduleId) ? prev : [...prev, moduleId]);
     }
   };
 
