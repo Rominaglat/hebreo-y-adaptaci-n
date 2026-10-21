@@ -30,6 +30,7 @@ import { useLessonBookmarks } from '@/hooks/useLessonBookmarks';
 import { getFilePreviewKind } from '@/lib/filePreview';
 import { computeLessonLocks, hasStartedCourse, type LessonLock } from '@/lib/lessonGating';
 import { persistWithAuthRetry, planVideoEnd, unlockedAfterCompleting } from '@/lib/videoCompletion';
+import { clearChatLesson, setChatLesson } from '@/lib/aiChatContext';
 import { ToastAction } from '@/components/ui/toast';
 
 interface Course {
@@ -231,6 +232,16 @@ export default function CourseDetail() {
   useEffect(() => {
     localStorage.setItem('lessonAutoAdvance', String(autoAdvanceEnabled));
   }, [autoAdvanceEnabled]);
+
+  // Tell Romina AI which lesson is on screen, so "Resúmeme esta lección"
+  // answers about it instead of asking which one.
+  const chatLessonId = selectedLesson?.id;
+  const chatLessonTitle = selectedLesson?.title ?? '';
+  useEffect(() => {
+    if (!id || !chatLessonId) return;
+    setChatLesson({ courseId: id, lessonId: chatLessonId, lessonTitle: chatLessonTitle });
+    return () => clearChatLesson(chatLessonId);
+  }, [id, chatLessonId, chatLessonTitle]);
   // Get all video lessons for duration calculation
   const allLessons = useMemo(() => {
     return modules.flatMap(m => m.lessons);

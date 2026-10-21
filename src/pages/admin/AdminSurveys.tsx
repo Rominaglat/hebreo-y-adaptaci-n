@@ -28,6 +28,7 @@ import {
 } from '@/lib/satisfactionSurvey';
 import { buildAiExportRows, fillAiWorkbook } from '@/lib/surveyAiExport';
 import { pickPerUser, type SubscriptionRow } from '@/lib/subscriptionMetrics';
+import { AiFeedbackCard } from '@/components/admin/AiFeedbackCard';
 
 // Admin-only tab: every monthly satisfaction-survey response, grouped by month,
 // with a light summary and the list of active students who haven't answered yet.
@@ -483,6 +484,9 @@ export default function AdminSurveys() {
           </Accordion>
         )}
       </Card>
+
+      {/* How students rate Romina AI's answers (👍/👎 in the chat) */}
+      <AiFeedbackCard />
 
       {/* Active students who haven't answered this month */}
       <Collapsible>

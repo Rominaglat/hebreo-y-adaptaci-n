@@ -172,6 +172,27 @@ export type Database = {
         Update: Record<string, never>
         Relationships: []
       }
+      chat_message_feedback: {
+        Row: {
+          message_id: string
+          user_id: string
+          rating: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          message_id: string
+          user_id: string
+          rating: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          rating?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       contact_suppressions: {
         Row: {
           id: string

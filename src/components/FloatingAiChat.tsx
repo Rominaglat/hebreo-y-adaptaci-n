@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Headset, X, Send, Plus, MessageSquare, Trash2, Loader2, GripVertical, BookOpen, Mic, MicOff, Volume2, VolumeX, Bot } from 'lucide-react';
+import { Headset, X, Send, Plus, MessageSquare, Trash2, Loader2, GripVertical, BookOpen, Mic, MicOff, Volume2, VolumeX, Bot, ThumbsUp, ThumbsDown, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useAiChat, ChatMessage, Conversation } from '@/hooks/useAiChat';
+import { useAiChat, ChatMessage, Conversation, type AnswerRating } from '@/hooks/useAiChat';
+import { useChatLesson } from '@/lib/aiChatContext';
 import { VoiceWaveform, formatRecordingTime } from '@/components/VoiceWaveform';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,8 +27,9 @@ interface QuickPrompt {
   textKey: string;
 }
 
-function getContextualPrompts(pathname: string): QuickPrompt[] {
-  if (/^\/courses\/[a-f0-9-]+/.test(pathname) && !pathname.endsWith('/edit')) {
+function getContextualPrompts(pathname: string, hasLesson: boolean): QuickPrompt[] {
+  // "Resumir esta lección" only makes sense when the chat can see the lesson.
+  if (hasLesson && /^\/courses\/[a-f0-9-]+/.test(pathname) && !pathname.endsWith('/edit')) {
     return [
       { icon: '📝', textKey: 'aiChat.prompts.lesson.summarize' },
       { icon: '💡', textKey: 'aiChat.prompts.lesson.simplify' },
@@ -130,8 +132,14 @@ export function FloatingAiChat() {
   const {
     conversations, currentConversationId, messages, isLoading,
     loadConversations, loadMessages, startNewChat, deleteConversation,
-    sendMessage, cancelStream,
+    sendMessage, cancelStream, failedSend, retryLast, ratings, rateMessage,
   } = useAiChat();
+
+  // The lesson open on screen (published by CourseDetail) — sent with every
+  // question so "esta lección" means something to the assistant.
+  const chatLesson = useChatLesson();
+  const currentLesson = chatLesson && chatLesson.courseId === currentCourseId ? chatLesson : null;
+  const currentLessonId = currentLesson?.lessonId;
 
   // Voice input — appends final transcript to input field
   const voiceInput = useVoiceInput({
@@ -252,8 +260,8 @@ export function FloatingAiChat() {
     if (!inputValue.trim() || isLoading) return;
     const msg = inputValue;
     setInputValue('');
-    sendMessage(msg, currentCourseId);
-  }, [inputValue, isLoading, sendMessage, currentCourseId]);
+    sendMessage(msg, currentCourseId, currentLessonId);
+  }, [inputValue, isLoading, sendMessage, currentCourseId, currentLessonId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -479,14 +487,29 @@ export function FloatingAiChat() {
                     <p className="text-foreground font-bold text-base">{t('aiChat.greeting').replace('{name}', assistantName)} 👋</p>
                     <p className="text-muted-foreground text-xs mt-1.5 max-w-[240px]">{t('aiChat.greetingSubtitle')}</p>
 
+                    {currentLesson && (
+                      <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium px-3 py-1 max-w-[260px]">
+                        <BookOpen className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{t('aiChat.viewingLesson').replace('{title}', currentLesson.lessonTitle)}</span>
+                      </p>
+                    )}
+
+                    {/* What I can do — "No he podido entender como funciona la AI" (survey, Oct 2026) */}
+                    <ul className="mt-4 w-full px-2 space-y-1 text-start text-[11px] text-muted-foreground">
+                      <li>📚 {t('aiChat.capability.language')}</li>
+                      <li>📝 {t('aiChat.capability.lesson')}</li>
+                      <li>🎙️ {t('aiChat.capability.voice')}</li>
+                      <li>🧭 {t('aiChat.capability.platform')}</li>
+                    </ul>
+
                     {/* Quick action prompts — contextual to current page */}
                     <div className="mt-5 w-full space-y-2 px-2">
-                      {getContextualPrompts(location.pathname).map((prompt) => {
+                      {getContextualPrompts(location.pathname, !!currentLesson).map((prompt) => {
                         const promptText = t(prompt.textKey);
                         return (
                           <button
                             key={prompt.textKey}
-                            onClick={() => sendMessage(promptText, currentCourseId)}
+                            onClick={() => sendMessage(promptText, currentCourseId, currentLessonId)}
                             className="w-full flex items-center gap-2.5 text-start text-xs px-3 py-2.5 rounded-xl border border-border/60 bg-background hover:bg-primary/5 hover:border-primary/40 transition-all duration-200 group"
                           >
                             <span className="text-base flex-shrink-0">{prompt.icon}</span>
@@ -507,6 +530,8 @@ export function FloatingAiChat() {
                       message={msg}
                       onNavigate={(path) => { handleClose(); setTimeout(() => navigate(path), 400); }}
                       voiceOutput={voiceOutput}
+                      rating={msg.id ? ratings[msg.id] : undefined}
+                      onRate={msg.id && !(isLoading && i === messages.length - 1) ? (r) => rateMessage(msg.id as string, r) : undefined}
                     />
                   );
                 })}
@@ -517,6 +542,18 @@ export function FloatingAiChat() {
                       <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: '0ms' }} />
                       <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: '150ms' }} />
                       <span className="w-2 h-2 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                )}
+
+                {failedSend && !isLoading && (
+                  <div className="flex justify-start">
+                    <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 max-w-[85%] text-xs flex items-center gap-3">
+                      <span className="text-foreground">{t('aiChat.failed')}</span>
+                      <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={retryLast}>
+                        <RotateCcw className="w-3 h-3" />
+                        {t('aiChat.retry')}
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -704,11 +741,16 @@ function MessageBubble({
   messageId,
   onNavigate,
   voiceOutput,
+  rating,
+  onRate,
 }: {
   message: ChatMessage;
   messageId: string;
   onNavigate: (path: string) => void;
   voiceOutput?: VoiceOutputControls;
+  rating?: AnswerRating;
+  /** Present once the answer is saved (it has an id) and done streaming. */
+  onRate?: (rating: AnswerRating) => void;
 }) {
   const { t } = useLanguage();
   const isUser = message.role === 'user';
@@ -782,12 +824,14 @@ function MessageBubble({
         )}
       </div>
 
-      {/* Voice playback button for AI messages */}
-      {!isUser && voiceOutput?.supported && message.content && (
+      {/* Answer controls: listen, 👍 / 👎 */}
+      {!isUser && message.content && (voiceOutput?.supported || onRate) && (
+      <div className="flex items-center gap-1 mt-1.5">
+      {voiceOutput?.supported && (
         <button
           onClick={() => voiceOutput.speak(message.content, messageId)}
           className={cn(
-            "mt-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+            "inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
             isSpeaking
               ? "bg-primary/15 text-primary"
               : "text-muted-foreground hover:text-primary hover:bg-primary/5"
@@ -806,6 +850,38 @@ function MessageBubble({
             </>
           )}
         </button>
+      )}
+      {onRate && (
+        <>
+          <button
+            type="button"
+            onClick={() => onRate(1)}
+            aria-pressed={rating === 1}
+            aria-label={t('aiChat.rateUp')}
+            title={t('aiChat.rateUp')}
+            className={cn(
+              "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors",
+              rating === 1 ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-primary hover:bg-primary/5",
+            )}
+          >
+            <ThumbsUp className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onRate(-1)}
+            aria-pressed={rating === -1}
+            aria-label={t('aiChat.rateDown')}
+            title={t('aiChat.rateDown')}
+            className={cn(
+              "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors",
+              rating === -1 ? "bg-destructive/15 text-destructive" : "text-muted-foreground hover:text-destructive hover:bg-destructive/5",
+            )}
+          >
+            <ThumbsDown className="w-3.5 h-3.5" />
+          </button>
+        </>
+      )}
+      </div>
       )}
 
       {/* Source tags */}
