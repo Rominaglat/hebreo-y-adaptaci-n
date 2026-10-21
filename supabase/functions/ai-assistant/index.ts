@@ -431,12 +431,21 @@ serve(async (req: Request) => {
     }
 
     // The lesson on screen: pinned above the retrieved hits so "resúmeme esta
-    // lección" works. Only for a lesson the student may open (staff, or
-    // enrolled in its course) — anything else is silently ignored.
+    // lección" works. lesson_id comes from the client, so it is only honoured
+    // for a lesson the student could open on the page themselves:
+    //   - read with THEIR session, so RLS hides is_hidden lessons;
+    //   - enrolled in its course (or staff);
+    //   - not locked by the sequential gate (is_lesson_unlocked), which RLS on
+    //     lessons does not enforce — the AI must not summarise a lesson the
+    //     page itself keeps locked.
+    // Anything else is silently ignored.
     let currentLessonBlock = "";
     if (lesson_id) {
       try {
-        const { data: lessonRow } = await supabase
+        const supabaseAsUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          global: { headers: { Authorization: `Bearer ${token}` } },
+        });
+        const { data: lessonRow } = await supabaseAsUser
           .from("lessons")
           .select("id, title, lesson_type, content_text, file_url, modules(title, course_id, courses(title))")
           .eq("id", lesson_id)
@@ -444,7 +453,15 @@ serve(async (req: Request) => {
         // deno-lint-ignore no-explicit-any
         const l = lessonRow as any;
         const lessonCourseId: string | undefined = l?.modules?.course_id;
-        if (l && lessonCourseId && (access.isFullAccess || access.enrolledCourseIds.has(lessonCourseId))) {
+        let open = !!l && !!lessonCourseId && (access.isFullAccess || access.enrolledCourseIds.has(lessonCourseId));
+        if (open && !access.isFullAccess) {
+          const { data: unlocked, error: gateErr } = await supabaseAsUser.rpc("is_lesson_unlocked", {
+            p_lesson_id: lesson_id,
+            p_user_id: user.id,
+          });
+          open = !gateErr && unlocked === true;
+        }
+        if (open && l && lessonCourseId) {
           currentLessonBlock = buildCurrentLessonBlock({
             courseId: lessonCourseId,
             lessonId: l.id,
