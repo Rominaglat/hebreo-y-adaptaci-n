@@ -770,6 +770,11 @@ const translations: Translations = {
   'goal.widget.lessonsShort': { he: 'שיעורים', en: 'lessons', es: 'lecciones' },
   'goal.widget.streakWeeks': { he: '{n} שבועות ברצף ביעד', en: '{n} weeks on target', es: '{n} semanas seguidas cumpliendo' },
   'goal.widget.lastWeeks': { he: 'שבועות אחרונים', en: 'Last weeks', es: 'Últimas semanas' },
+  'goal.widget.minutesShort': { he: 'דק׳', en: 'min', es: 'min' },
+  'goal.widget.studyTime': { he: '⏱ {t} למידה השבוע', en: '⏱ {t} of study this week', es: '⏱ {t} de estudio esta semana' },
+  'goal.widget.reviewedOne': { he: '🔁 חזרת על שיעור אחד', en: '🔁 1 lesson reviewed', es: '🔁 1 lección repasada' },
+  'goal.widget.reviewed': { he: '🔁 חזרת על {n} שיעורים', en: '🔁 {n} lessons reviewed', es: '🔁 {n} lecciones repasadas' },
+  'goal.widget.watchTimeHint': { he: 'כל צפייה נספרת, גם צפייה חוזרת', en: 'Every view counts, rewatches too', es: 'Cada vista suma, también los repasos' },
   'goal.profile.emailLabel': { he: 'סיכום התקדמות שבועי במייל', en: 'Weekly progress email', es: 'Resumen semanal por correo' },
   'goal.profile.emailHint':  { he: 'נשלח רק אם הגדרת יעד שבועי.', en: 'Sent only if you have a weekly goal.', es: 'Se envía solo si tienes una meta semanal.' },
   'lessonForm.durationMinutes': { he: 'משך בדקות', en: 'Duration (minutes)', es: 'Duración (minutos)' },
@@ -1793,6 +1798,8 @@ const translations: Translations = {
   'importUsers.importCountPrefix': { he: 'ייבא ', en: 'Import ', es: 'Importar ' },
   'importUsers.importCountSuffix': { he: ' משתמשים', en: ' Users', es: ' usuarios' },
   'studentProgress.noLessons': { he: 'אין שיעורים בקורס זה', en: 'No lessons in this course', es: 'No hay lecciones en este curso' },
+  'studentProgress.watchTime': { he: '{t} צפייה', en: '{t} watched', es: '{t} de visualización' },
+  'studentProgress.watchTimeHint': { he: 'זמן צפייה כולל, כולל צפיות חוזרות', en: 'Total watch time, rewatches included', es: 'Tiempo total de visualización, repasos incluidos' },
 
   // Satisfaction survey — student page (/encuesta). The Spanish is Romina's original
   // Google Form wording with only typos/accents fixed.

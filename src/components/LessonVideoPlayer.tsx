@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useWatchTime, type ReadPosition } from '@/hooks/useWatchTime';
 
 interface LessonVideoPlayerProps {
   videoUrl: string;
@@ -50,6 +51,12 @@ const loadYouTubeApi = (): Promise<void> => {
 export default function LessonVideoPlayer({ videoUrl, lessonId, autoplay, onEnded }: LessonVideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onEndedRef = useRef(onEnded);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  // Set by whichever player is mounted; lets watch time skip a frozen video.
+  const positionRef = useRef<ReadPosition | null>(null);
+  const readPosition = useCallback(() => positionRef.current?.() ?? null, []);
+  // Stable callbacks: safe to call from the player events registered below.
+  const watch = useWatchTime(lessonId, readPosition);
 
   useEffect(() => {
     onEndedRef.current = onEnded;
@@ -64,6 +71,7 @@ export default function LessonVideoPlayer({ videoUrl, lessonId, autoplay, onEnde
 
     let player: any = null;
     let cancelled = false;
+    positionRef.current = null;
 
     if (source.type === 'youtube') {
       loadYouTubeApi().then(() => {
@@ -75,6 +83,7 @@ export default function LessonVideoPlayer({ videoUrl, lessonId, autoplay, onEnde
         container.appendChild(mountPoint);
 
         const w = window as any;
+        positionRef.current = () => (typeof player?.getCurrentTime === 'function' ? player.getCurrentTime() : null);
         player = new w.YT.Player(mountPoint, {
           width: '100%',
           height: '100%',
@@ -86,10 +95,14 @@ export default function LessonVideoPlayer({ videoUrl, lessonId, autoplay, onEnde
           },
           events: {
             onStateChange: (event: any) => {
+              // Buffering counts as stopped; YouTube reports PLAYING again once it resumes.
+              if (event.data === w.YT.PlayerState.PLAYING) watch.playing();
+              else watch.stopped();
               if (event.data === w.YT.PlayerState.ENDED) {
                 onEndedRef.current?.();
               }
             },
+            onError: () => watch.stopped(),
           },
         });
       });
@@ -108,6 +121,7 @@ export default function LessonVideoPlayer({ videoUrl, lessonId, autoplay, onEnde
           autoplay: !!autoplay,
           controls: true,
         });
+        positionRef.current = () => player.getCurrentTime();
         player.ready().then(() => {
           const iframe = mountPoint.querySelector('iframe');
           if (iframe) {
@@ -117,12 +131,25 @@ export default function LessonVideoPlayer({ videoUrl, lessonId, autoplay, onEnde
             iframe.style.height = '100%';
           }
         }).catch(() => {});
-        player.on('ended', () => onEndedRef.current?.());
+        player.on('play', () => watch.playing());
+        player.on('playing', () => watch.playing());
+        player.on('pause', () => watch.stopped());
+        player.on('bufferstart', () => watch.stopped());
+        player.on('bufferend', () => {
+          player.getPaused().then((paused: boolean) => { if (!paused) watch.playing(); }).catch(() => {});
+        });
+        // A playback error sends no pause; without this the clock would keep running.
+        player.on('error', () => watch.stopped());
+        player.on('ended', () => {
+          watch.stopped();
+          onEndedRef.current?.();
+        });
       });
     }
 
     return () => {
       cancelled = true;
+      positionRef.current = null;
       if (player && typeof player.destroy === 'function') {
         try {
           const result = player.destroy();
@@ -142,11 +169,22 @@ export default function LessonVideoPlayer({ videoUrl, lessonId, autoplay, onEnde
     return (
       <video
         key={lessonId}
+        ref={(el) => {
+          videoRef.current = el;
+          positionRef.current = el ? () => videoRef.current?.currentTime ?? null : null;
+        }}
         src={source.url}
         className="w-full h-full"
         controls
         autoPlay={autoplay}
-        onEnded={() => onEndedRef.current?.()}
+        onPlaying={watch.playing}
+        onPause={watch.stopped}
+        onWaiting={watch.stopped}
+        onError={watch.stopped}
+        onEnded={() => {
+          watch.stopped();
+          onEndedRef.current?.();
+        }}
       />
     );
   }

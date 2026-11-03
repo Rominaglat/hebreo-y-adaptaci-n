@@ -15,6 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
+import { formatMinutes } from '@/lib/weeklyGoal';
 
 interface StudentProgressDialogProps {
   open: boolean;
@@ -62,6 +63,8 @@ export function StudentProgressDialog({ open, onOpenChange, user }: StudentProgr
   const [selectedCourse, setSelectedCourse] = useState<Enrollment | null>(null);
   const [modules, setModules] = useState<Module[]>([]);
   const [completedLessons, setCompletedLessons] = useState<Set<string>>(new Set());
+  // Seconds of video played per lesson, all time — rewatches included.
+  const [watchSeconds, setWatchSeconds] = useState<Map<string, number>>(new Map());
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
@@ -77,6 +80,7 @@ export function StudentProgressDialog({ open, onOpenChange, user }: StudentProgr
       setSelectedCourse(null);
       setModules([]);
       setCompletedLessons(new Set());
+      setWatchSeconds(new Map());
       setExpandedModules(new Set());
     }
   }, [open]);
@@ -170,8 +174,20 @@ export function StudentProgressDialog({ open, onOpenChange, user }: StudentProgr
         if (completionsError) throw completionsError;
 
         setCompletedLessons(new Set((completionsData || []).map(c => c.lesson_id)));
+
+        // Watch time is extra detail: a failure here must not hide the completions.
+        const { data: watchData, error: watchError } = await supabase
+          .from('lesson_watch_time')
+          .select('lesson_id, seconds')
+          .eq('user_id', user.id)
+          .in('lesson_id', allLessonIds);
+        if (watchError) console.error('Error fetching watch time:', watchError);
+        const perLesson = new Map<string, number>();
+        for (const w of watchData || []) perLesson.set(w.lesson_id, (perLesson.get(w.lesson_id) ?? 0) + w.seconds);
+        setWatchSeconds(perLesson);
       } else {
         setCompletedLessons(new Set());
+        setWatchSeconds(new Map());
       }
     } catch (error) {
       console.error('Error fetching course details:', error);
@@ -189,8 +205,13 @@ export function StudentProgressDialog({ open, onOpenChange, user }: StudentProgr
     setSelectedCourse(null);
     setModules([]);
     setCompletedLessons(new Set());
+    setWatchSeconds(new Map());
     setExpandedModules(new Set());
   };
+
+  const formatWatch = (seconds: number) =>
+    formatMinutes(seconds / 60, t('goal.widget.hoursShort'), t('goal.widget.minutesShort'));
+  const totalWatchSeconds = [...watchSeconds.values()].reduce((sum, s) => sum + s, 0);
 
   const toggleModule = (moduleId: string) => {
     const newExpanded = new Set(expandedModules);
@@ -232,6 +253,7 @@ export function StudentProgressDialog({ open, onOpenChange, user }: StudentProgr
                 <DialogTitle className="truncate">{selectedCourse.course.title}</DialogTitle>
                 <DialogDescription>
                   {Math.round(selectedCourse.progress_percentage)}% {t('admin.completed')}
+                  {totalWatchSeconds >= 60 && <> · ⏱ {t('studentProgress.watchTime').replace('{t}', formatWatch(totalWatchSeconds))}</>}
                 </DialogDescription>
               </div>
             </div>
@@ -294,6 +316,11 @@ export function StudentProgressDialog({ open, onOpenChange, user }: StudentProgr
                             )}
                             <span className="shrink-0">{getLessonTypeIcon(lesson.lesson_type)}</span>
                             <span className="truncate flex-1">{lesson.title}</span>
+                            {(watchSeconds.get(lesson.id) ?? 0) >= 60 && (
+                              <span className="shrink-0 text-xs text-muted-foreground" title={t('studentProgress.watchTimeHint')}>
+                                ⏱ {formatWatch(watchSeconds.get(lesson.id)!)}
+                              </span>
+                            )}
                           </div>
                         );
                       })}

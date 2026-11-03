@@ -1380,6 +1380,38 @@ export type Database = {
           },
         ]
       }
+      lesson_watch_time: {
+        Row: {
+          lesson_id: string
+          seconds: number
+          updated_at: string
+          user_id: string
+          watched_on: string
+        }
+        Insert: {
+          lesson_id: string
+          seconds?: number
+          updated_at?: string
+          user_id: string
+          watched_on: string
+        }
+        Update: {
+          lesson_id?: string
+          seconds?: number
+          updated_at?: string
+          user_id?: string
+          watched_on?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_watch_time_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lessons: {
         Row: {
           content_text: string | null
@@ -2393,6 +2425,10 @@ export type Database = {
       }
       strip_html_tags: { Args: { input: string }; Returns: string }
       touch_last_active: { Args: Record<string, never>; Returns: undefined }
+      record_lesson_watch_time: {
+        Args: { p_lesson_id: string; p_seconds: number }
+        Returns: number
+      }
     }
     Enums: {
       app_role: "admin" | "instructor" | "student" | "super_admin" | "lead"

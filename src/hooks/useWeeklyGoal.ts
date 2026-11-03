@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  computeWeeklyProgress, startOfIsoWeek, DEFAULT_LESSON_MINUTES,
-  type GoalUnit, type Progress,
+  computeWeeklyProgress, countReviewedLessons, startOfIsoWeek, DEFAULT_LESSON_MINUTES,
+  type GoalUnit, type Progress, type WatchedLesson,
 } from '@/lib/weeklyGoal';
 
 interface GoalRow { unit: GoalUnit; target: number; emailsEnabled: boolean }
@@ -15,13 +15,14 @@ export interface WeeklyGoalState {
   loading: boolean;
   snapshots: { weekStart: string; met: boolean }[];
   streakWeeks: number;
+  reviewedLessons: number; // lessons finished before this week and watched again this week
 }
 
 export function useWeeklyGoal() {
   const { user } = useAuth();
   const [state, setState] = useState<WeeklyGoalState>({
     goal: null, progress: null, defaultLessonMinutes: DEFAULT_LESSON_MINUTES, loading: true,
-    snapshots: [], streakWeeks: 0,
+    snapshots: [], streakWeeks: 0, reviewedLessons: 0,
   });
 
   const reload = useCallback(async () => {
@@ -38,10 +39,13 @@ export function useWeeklyGoal() {
     let goal: GoalRow | null = null;
     let snapshots: { weekStart: string; met: boolean }[] = [];
     let streakWeeks = 0;
+    let reviewedLessons = 0;
     if (goalRow) {
       goal = { unit: goalRow.unit, target: Number(goalRow.target), emailsEnabled: goalRow.emails_enabled };
       const weekStart = startOfIsoWeek(new Date());
-      const [{ data: completions }, { data: snaps }] = await Promise.all([
+      // lesson_watch_time is keyed by day; this week's days start at weekStart.
+      const weekStartDay = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+      const [{ data: completions }, { data: snaps }, { data: watchRows }] = await Promise.all([
         supabase.from('lesson_completions')
           .select('lesson_id, completed_at, lessons(duration_minutes)')
           .eq('user_id', user.id)
@@ -51,18 +55,33 @@ export function useWeeklyGoal() {
           .eq('user_id', user.id)
           .order('week_start', { ascending: false })
           .limit(8),
+        supabase.from('lesson_watch_time')
+          .select('lesson_id, seconds')
+          .eq('user_id', user.id)
+          .gte('watched_on', weekStartDay),
       ]);
+      const watched: WatchedLesson[] = (watchRows ?? []).map(w => ({ lessonId: w.lesson_id, seconds: w.seconds }));
       const items = (completions ?? []).map((c) => {
         const lessons = (c as { lessons: { duration_minutes: number | null } | { duration_minutes: number | null }[] | null }).lessons;
         const dur = Array.isArray(lessons) ? lessons[0]?.duration_minutes : lessons?.duration_minutes;
-        return { durationMinutes: dur ?? null };
+        return { lessonId: c.lesson_id, durationMinutes: dur ?? null };
       });
-      progress = computeWeeklyProgress(items, { unit: goal.unit, target: goal.target }, defMin);
+      progress = computeWeeklyProgress(items, { unit: goal.unit, target: goal.target }, defMin, watched);
+
+      const watchedIds = [...new Set(watched.map(w => w.lessonId))];
+      if (watchedIds.length > 0) {
+        const { data: before } = await supabase.from('lesson_completions')
+          .select('lesson_id')
+          .eq('user_id', user.id)
+          .in('lesson_id', watchedIds)
+          .lt('completed_at', weekStart.toISOString());
+        reviewedLessons = countReviewedLessons(watched, new Set((before ?? []).map(b => b.lesson_id)));
+      }
       snapshots = ((snaps ?? []) as { week_start: string; tier: string }[])
         .map(s => ({ weekStart: s.week_start, met: s.tier === 'met' || s.tier === 'exceeded' }));
       for (const s of snapshots) { if (s.met) streakWeeks++; else break; }
     }
-    setState({ goal, progress, defaultLessonMinutes: defMin, loading: false, snapshots, streakWeeks });
+    setState({ goal, progress, defaultLessonMinutes: defMin, loading: false, snapshots, streakWeeks, reviewedLessons });
   }, [user]);
 
   useEffect(() => { void reload(); }, [reload]);

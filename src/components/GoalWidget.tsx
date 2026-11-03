@@ -5,7 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Target } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useWeeklyGoal } from '@/hooks/useWeeklyGoal';
-import { lessonsForHours, type GoalUnit } from '@/lib/weeklyGoal';
+import { formatMinutes, lessonsForHours, type GoalUnit } from '@/lib/weeklyGoal';
 import { cn } from '@/lib/utils';
 
 // Theme-aware progress ring (track + center text use CSS tokens, arc uses the
@@ -39,7 +39,7 @@ const CARD = 'relative overflow-hidden border-border/60 shadow-sm bg-gradient-to
 
 export default function GoalWidget() {
   const { t } = useLanguage();
-  const { goal, progress, defaultLessonMinutes, loading, saveGoal, snapshots, streakWeeks } = useWeeklyGoal();
+  const { goal, progress, defaultLessonMinutes, loading, saveGoal, snapshots, streakWeeks, reviewedLessons } = useWeeklyGoal();
   const [editing, setEditing] = useState(false);
   const [unit, setUnit] = useState<GoalUnit>('hours');
   const [target, setTarget] = useState(10);
@@ -115,6 +115,8 @@ export default function GoalWidget() {
   const unitLabel = t(goal!.unit === 'hours' ? 'goal.widget.hoursShort' : 'goal.widget.lessonsShort');
   const remainingAmount = Math.max(0, goal!.target - p.actual);
   const remainingLabel = `${remainingAmount % 1 ? remainingAmount.toFixed(1) : remainingAmount} ${unitLabel}`;
+  // An hours goal already leads with study time; a lessons goal shows it as a chip.
+  const showStudyTime = goal!.unit === 'lessons' && p.minutesDone > 0;
 
   return (
     <Card className={cn(CARD, 'shadow-sm hover:shadow-md transition-shadow duration-300 p-5 sm:p-6')}>
@@ -143,8 +145,20 @@ export default function GoalWidget() {
             {remainingAmount <= 0 ? t('goal.widget.done') : t('goal.widget.remaining').replace('{n}', remainingLabel)}
           </p>
 
-          {(streakWeeks > 0 || snapshots.length > 0) && (
+          {(streakWeeks > 0 || snapshots.length > 0 || showStudyTime || reviewedLessons > 0) && (
             <div className="flex items-center gap-3 mt-3 flex-wrap">
+              {showStudyTime && (
+                <span className="inline-flex items-center gap-1.5 bg-muted text-foreground font-bold text-xs px-2.5 py-1 rounded-full"
+                  title={t('goal.widget.watchTimeHint')}>
+                  {t('goal.widget.studyTime').replace('{t}', formatMinutes(p.minutesDone, t('goal.widget.hoursShort'), t('goal.widget.minutesShort')))}
+                </span>
+              )}
+              {reviewedLessons > 0 && (
+                <span className="inline-flex items-center gap-1.5 bg-muted text-foreground font-bold text-xs px-2.5 py-1 rounded-full"
+                  title={t('goal.widget.watchTimeHint')}>
+                  {reviewedLessons === 1 ? t('goal.widget.reviewedOne') : t('goal.widget.reviewed').replace('{n}', String(reviewedLessons))}
+                </span>
+              )}
               {streakWeeks > 0 && (
                 <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary font-bold text-xs px-2.5 py-1 rounded-full">
                   🔥 {t('goal.widget.streakWeeks').replace('{n}', String(streakWeeks))}

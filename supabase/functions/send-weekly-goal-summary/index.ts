@@ -11,6 +11,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { loadSuppressedUserIds } from "../_shared/contact-suppression.ts";
+import { countReviewedLessons, creditedMinutes, type CompletedLesson, type WatchedLesson } from "../_shared/study-time.ts";
 
 const RESEND_API = "https://api.resend.com/emails";
 const FROM_EMAIL = Deno.env.get("ANNOUNCE_FROM_EMAIL") ?? Deno.env.get("INVITE_FROM_EMAIL") ?? "Romina Hebreo <noreply@example.com>";
@@ -30,6 +31,27 @@ function tierFor(pct: number): Tier {
 
 function esc(s: string): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// PostgREST caps a response at 1000 rows: page through so a busy week isn't
+// silently cut short. A failed page logs and keeps what was read — a partial
+// count beats not sending the week's emails at all.
+async function fetchAll<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  const size = 1000;
+  const out: T[] = [];
+  for (let from = 0; ; from += size) {
+    const { data, error } = await page(from, from + size - 1);
+    if (error) { console.error("fetchAll page failed", error); return out; }
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < size) return out;
+  }
+}
+
+function formatMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60), m = minutes % 60;
+  if (h === 0) return `${m} min`;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
 function ymd(d: Date): string {
@@ -54,6 +76,7 @@ const TIER_COPY: Record<Tier, { subject: (n: string) => string; msg: string }> =
 
 function buildEmail(opts: {
   name: string; unit: string; target: number; hoursDone: number; lessonsDone: number;
+  minutesDone: number; reviewedLessons: number;
   actual: number; pct: number; tier: Tier; streakWeeks: number; trend: number | null;
   ctaUrl: string; unsubscribeUrl: string;
 }): { subject: string; html: string } {
@@ -65,6 +88,11 @@ function buildEmail(opts: {
   const barPct = Math.max(2, Math.min(100, Math.round(opts.pct * 100)));
   const streakRow = opts.streakWeeks > 0
     ? `<div style="font-size:14px;color:#3D2E26;margin:8px 0">🔥 <b>${opts.streakWeeks} ${opts.streakWeeks === 1 ? "semana" : "semanas"} seguidas</b> cumpliendo tu meta</div>` : "";
+  // An hours goal already leads with study time; a lessons goal gets it as a line.
+  const studyRow = (!isHours && opts.minutesDone > 0)
+    ? `<div style="font-size:14px;color:#3D2E26;margin:8px 0">⏱ <b>${esc(formatMinutes(opts.minutesDone))} de estudio</b> esta semana</div>` : "";
+  const reviewRow = opts.reviewedLessons > 0
+    ? `<div style="font-size:14px;color:#3D2E26;margin:8px 0">🔁 <b>Repasaste ${opts.reviewedLessons} ${opts.reviewedLessons === 1 ? "lección" : "lecciones"}</b> — cada repaso suma a tu tiempo de estudio</div>` : "";
   const trendRow = (opts.trend != null && opts.trend !== 0)
     ? `<div style="font-size:14px;color:#3D2E26;margin:8px 0">${opts.trend > 0 ? "↑" : "↓"} ${Math.abs(opts.trend)} ${isHours ? "h" : "lecciones"} ${opts.trend > 0 ? "más" : "menos"} que la semana pasada</div>` : "";
 
@@ -79,7 +107,7 @@ function buildEmail(opts: {
       </div>
       <div style="font-size:12px;color:#8A7A6D">${Math.round(opts.pct * 100)}% de tu meta semanal · ${opts.lessonsDone} lecciones completadas</div>
       <div style="font-size:14px;line-height:1.55;color:#3D2E26;background:#FBF7EE;border-left:3px solid #C4582A;padding:10px 12px;border-radius:8px;margin:16px 0">${copy.msg}</div>
-      ${streakRow}${trendRow}
+      ${studyRow}${reviewRow}${streakRow}${trendRow}
       <a href="${esc(opts.ctaUrl)}" style="display:inline-block;margin-top:14px;background:#C4582A;color:#fff;font-weight:800;padding:13px 22px;border-radius:12px;text-decoration:none">Continuar aprendiendo →</a>
     </div>
     <div style="text-align:center;font-size:11px;color:#9a8b7d;padding:14px;line-height:1.7">
@@ -128,11 +156,15 @@ serve(async (req) => {
     // closed: an unreadable list throws and nobody is mailed this run.
     const suppressed = await loadSuppressedUserIds(admin);
 
-    const [{ data: expired }, { data: doneSnaps }, { data: profiles }, { data: completions }, { data: enrolls }, { data: priorSnaps }] = await Promise.all([
+    type CompletionRow = { user_id: string; lesson_id: string; lessons: { duration_minutes: number | null } | { duration_minutes: number | null }[] | null };
+    type WatchRow = { user_id: string; lesson_id: string; seconds: number };
+    const [{ data: expired }, { data: doneSnaps }, { data: profiles }, completions, watchRows, { data: enrolls }, { data: priorSnaps }] = await Promise.all([
       admin.from("access_limits").select("user_id").lte("expires_at", now.toISOString()),
       admin.from("weekly_goal_snapshots").select("user_id").eq("week_start", weekStart),
       admin.from("profiles").select("id, email, full_name").in("id", userIds),
-      admin.from("lesson_completions").select("user_id, lessons(duration_minutes)").in("user_id", userIds).gte("completed_at", weekStartDate.toISOString()).lt("completed_at", weekEnd.toISOString()),
+      fetchAll<CompletionRow>((from, to) => admin.from("lesson_completions").select("user_id, lesson_id, lessons(duration_minutes)").in("user_id", userIds).gte("completed_at", weekStartDate.toISOString()).lt("completed_at", weekEnd.toISOString()).order("id").range(from, to)),
+      // watched_on is a UTC day, the same boundary as weekStart/weekEnd.
+      fetchAll<WatchRow>((from, to) => admin.from("lesson_watch_time").select("user_id, lesson_id, seconds").in("user_id", userIds).gte("watched_on", weekStart).lt("watched_on", ymd(weekEnd)).order("user_id").order("lesson_id").order("watched_on").range(from, to)),
       admin.from("enrollments").select("user_id, course_id, progress_percentage").in("user_id", userIds),
       admin.from("weekly_goal_snapshots").select("user_id, week_start, tier, hours_done, lessons_done").in("user_id", userIds).lt("week_start", weekStart).order("week_start", { ascending: false }),
     ]);
@@ -141,13 +173,30 @@ serve(async (req) => {
     const alreadySent = new Set(((doneSnaps ?? []) as { user_id: string }[]).map((r) => r.user_id));
     const profileById = new Map(((profiles ?? []) as { id: string; email: string; full_name: string }[]).map((p) => [p.id, p]));
 
-    // minutes + lesson count per user for the week
-    const agg = new Map<string, { lessons: number; minutes: number }>();
-    for (const c of (completions ?? []) as { user_id: string; lessons: { duration_minutes: number | null } | { duration_minutes: number | null }[] | null }[]) {
+    // this week's completions and watch time per user
+    const completedByUser = new Map<string, CompletedLesson[]>();
+    for (const c of completions) {
       const rel = Array.isArray(c.lessons) ? c.lessons[0] : c.lessons;
-      const dur = rel?.duration_minutes ?? defMin;
-      const cur = agg.get(c.user_id) ?? { lessons: 0, minutes: 0 };
-      cur.lessons += 1; cur.minutes += dur; agg.set(c.user_id, cur);
+      const arr = completedByUser.get(c.user_id) ?? [];
+      arr.push({ lessonId: c.lesson_id, durationMinutes: rel?.duration_minutes ?? null });
+      completedByUser.set(c.user_id, arr);
+    }
+    const watchedByUser = new Map<string, WatchedLesson[]>();
+    for (const w of watchRows) {
+      const arr = watchedByUser.get(w.user_id) ?? [];
+      arr.push({ lessonId: w.lesson_id, seconds: w.seconds });
+      watchedByUser.set(w.user_id, arr);
+    }
+
+    // lessons finished before this week, among the ones watched this week → reviews
+    const completedBefore = new Map<string, Set<string>>();
+    const watchedLessonIds = [...new Set(watchRows.map((w) => w.lesson_id))];
+    if (watchedLessonIds.length > 0) {
+      const earlier = await fetchAll<{ user_id: string; lesson_id: string }>((from, to) => admin.from("lesson_completions").select("user_id, lesson_id").in("user_id", [...watchedByUser.keys()]).in("lesson_id", watchedLessonIds).lt("completed_at", weekStartDate.toISOString()).order("id").range(from, to));
+      for (const e of earlier) {
+        const set = completedBefore.get(e.user_id) ?? new Set<string>();
+        set.add(e.lesson_id); completedBefore.set(e.user_id, set);
+      }
     }
 
     // active course (lowest progress < 100) per user, for the CTA
@@ -172,7 +221,10 @@ serve(async (req) => {
       const profile = profileById.get(g.user_id);
       if (!profile?.email) { skipped++; continue; }
 
-      const a = agg.get(g.user_id) ?? { lessons: 0, minutes: 0 };
+      const completed = completedByUser.get(g.user_id) ?? [];
+      const watched = watchedByUser.get(g.user_id) ?? [];
+      const a = { lessons: completed.length, minutes: creditedMinutes(completed, watched, defMin) };
+      const reviewedLessons = countReviewedLessons(watched, completedBefore.get(g.user_id) ?? new Set());
       const hoursDone = a.minutes / 60;
       const actual = g.unit === "hours" ? hoursDone : a.lessons;
       const pct = g.target > 0 ? actual / g.target : 0;
@@ -200,7 +252,8 @@ serve(async (req) => {
 
       const { subject, html } = buildEmail({
         name: profile.full_name?.split(" ")[0] ?? "", unit: g.unit, target: g.target,
-        hoursDone, lessonsDone: a.lessons, actual, pct, tier, streakWeeks, trend, ctaUrl, unsubscribeUrl,
+        hoursDone, lessonsDone: a.lessons, minutesDone: a.minutes, reviewedLessons,
+        actual, pct, tier, streakWeeks, trend, ctaUrl, unsubscribeUrl,
       });
 
       // dryRun returns ONLY aggregate counts — never per-user emails/ids (info leak).
