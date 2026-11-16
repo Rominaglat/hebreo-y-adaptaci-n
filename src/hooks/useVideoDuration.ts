@@ -38,7 +38,7 @@ async function getVideoDuration(url: string): Promise<string | null> {
   }
 
   // Check if it's a YouTube URL
-  const youtubeMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  const youtubeMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   if (youtubeMatch) {
     // YouTube API requires an API key - skip for now
     return null;

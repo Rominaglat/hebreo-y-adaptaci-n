@@ -93,7 +93,7 @@ const SyncedVideoPlayer = ({
   // Convert video URL to embeddable format or direct video
   const getVideoSrc = () => {
     // If it's a YouTube URL, extract video ID
-    const youtubeMatch = videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([^&\s]+)/);
+    const youtubeMatch = videoUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     if (youtubeMatch) {
       return { type: 'youtube', id: youtubeMatch[1] };
     }

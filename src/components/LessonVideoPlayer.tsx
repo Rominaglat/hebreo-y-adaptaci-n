@@ -14,7 +14,7 @@ type VideoSource =
   | { type: 'direct'; url: string };
 
 const detectSource = (url: string): VideoSource | null => {
-  const ytRegex = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const ytRegex = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|shorts\/|live\/|watch\?v=|&v=)([^#&?]*).*/;
   const ytMatch = url.match(ytRegex);
   if (ytMatch && ytMatch[2].length === 11) return { type: 'youtube', id: ytMatch[2] };
 
