@@ -462,8 +462,8 @@ serve(async (req) => {
         }
 
         // 3) Content access — when `courses` is a valid spec (an array of ids
-        // or 'all'), REPLACE the user's enrollments with exactly that set
-        // (drop existing, then insert). Anything else (absent/null/'' /invalid)
+        // or 'all'), SYNC the user's enrollments to exactly that set (keep the
+        // ones still granted, with their progress). Anything else (absent/null/'' /invalid)
         // → leave enrollments untouched, so we never wipe access by accident.
         // courseIds === null means "skip the replace entirely".
         if (data.courses === 'all' || Array.isArray(data.courses)) {
@@ -493,13 +493,34 @@ serve(async (req) => {
           }
 
           if (courseIds !== null) {
-            const { error: delEnrollErr } = await supabase.from('enrollments').delete().eq('user_id', userId);
-            if (delEnrollErr) console.error('[API users.create] enrollments delete failed:', delEnrollErr);
-            if (courseIds.length > 0) {
-              const { error: insEnrollErr } = await supabase.from('enrollments').insert(
-                courseIds.map((courseId) => ({ user_id: userId, course_id: courseId, progress_percentage: 0 })),
-              );
-              if (insEnrollErr) console.error('[API users.create] enrollments insert failed:', insEnrollErr);
+            // Sync to the desired set WITHOUT touching enrollments the user
+            // keeps: a repeat purchase / renewal used to delete and re-insert
+            // every row, resetting progress_percentage to 0 and enrolled_at.
+            // Now: remove only courses no longer granted, add only missing ones.
+            const wanted = new Set(courseIds);
+            const { data: currentRows, error: curErr } = await supabase
+              .from('enrollments').select('id, course_id').eq('user_id', userId);
+            if (curErr) {
+              console.error('[API users.create] enrollments read failed — leaving enrollments unchanged:', curErr);
+            } else {
+              const have = new Set<string>();
+              const dropIds: string[] = [];
+              for (const row of currentRows ?? []) {
+                // Duplicate rows for the same course are dropped too.
+                if (wanted.has(row.course_id) && !have.has(row.course_id)) have.add(row.course_id);
+                else dropIds.push(row.id);
+              }
+              if (dropIds.length > 0) {
+                const { error: delEnrollErr } = await supabase.from('enrollments').delete().in('id', dropIds);
+                if (delEnrollErr) console.error('[API users.create] enrollments delete failed:', delEnrollErr);
+              }
+              const missing = courseIds.filter((courseId) => !have.has(courseId));
+              if (missing.length > 0) {
+                const { error: insEnrollErr } = await supabase.from('enrollments').insert(
+                  missing.map((courseId) => ({ user_id: userId, course_id: courseId, progress_percentage: 0 })),
+                );
+                if (insEnrollErr) console.error('[API users.create] enrollments insert failed:', insEnrollErr);
+              }
             }
           }
         }
